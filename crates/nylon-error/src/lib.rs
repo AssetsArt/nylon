@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum ErrorType {
+pub enum NylonError {
     #[error("Failed to parse config: {0}")]
     ConfigError(String),
 

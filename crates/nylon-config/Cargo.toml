@@ -1,0 +1,12 @@
+[package]
+name = "nylon-config"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nylon-error = { path = "../nylon-error" }
+nylon-store = { path = "../nylon-store" }
+serde_yml = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+num_cpus = { workspace = true }
