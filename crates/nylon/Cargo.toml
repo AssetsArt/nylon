@@ -4,8 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-tracing-subscriber = { workspace = true }
-tracing = { workspace = true }
 nylon-command = { path = "../nylon-command" }
 nylon-config = { path = "../nylon-config" }
 nylon-error = { path = "../nylon-error" }
+tracing-subscriber = { workspace = true }
+tracing = { workspace = true }
+pingora = { workspace = true }
+async-trait = { workspace = true }
+openssl = { workspace = true }
+tokio = { workspace = true }

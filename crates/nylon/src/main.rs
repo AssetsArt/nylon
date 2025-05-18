@@ -1,5 +1,13 @@
+mod background_service;
+mod context;
+mod core;
+mod dynamic_certificate;
+mod runtime;
+
 use nylon_command::Commands;
+use nylon_config::runtime::RuntimeConfig;
 use nylon_error::NylonError;
+use runtime::NylonRuntime;
 
 fn main() -> Result<(), NylonError> {
     // Initialize the logger.
@@ -32,10 +40,12 @@ fn main() -> Result<(), NylonError> {
 /// * `Result<(), NylonError>` - The result of the operation
 fn handle_run(path: String) -> Result<(), NylonError> {
     tracing::debug!("[run] path: {:?}", path);
-    use nylon_config::runtime::RuntimeConfig;
     let config = RuntimeConfig::from_file(&path)?;
     config.store()?;
     // tracing::debug!("[run] config: {:#?}", config);
     tracing::debug!("[run] config: {:#?}", RuntimeConfig::get()?);
-    Ok(())
+
+    NylonRuntime::new_server()
+        .expect("Failed to create server")
+        .run_forever();
 }

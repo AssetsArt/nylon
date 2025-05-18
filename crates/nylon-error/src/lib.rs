@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum NylonError {
     #[error("Failed to parse config: {0}")]
     ConfigError(String),
