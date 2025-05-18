@@ -5,7 +5,7 @@ mod proxy;
 mod runtime;
 
 use nylon_command::Commands;
-use nylon_config::runtime::RuntimeConfig;
+use nylon_config::{proxy::ProxyConfig, runtime::RuntimeConfig};
 use nylon_error::NylonError;
 use runtime::NylonRuntime;
 
@@ -44,7 +44,9 @@ fn handle_run(path: String) -> Result<(), NylonError> {
     config.store()?;
     // tracing::debug!("[run] config: {:#?}", config);
     tracing::debug!("[run] config: {:#?}", RuntimeConfig::get()?);
-
+    let proxy_config =
+        ProxyConfig::from_dir(config.config_dir.to_string_lossy().to_string().as_str())?;
+    tracing::debug!("[run] proxy_config: {:#?}", proxy_config);
     NylonRuntime::new_server()
         .expect("Failed to create server")
         .run_forever();

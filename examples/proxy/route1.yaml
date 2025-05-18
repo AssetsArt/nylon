@@ -1,0 +1,10 @@
+routes:
+  - route:
+      type: host
+      value: localhost
+    name: http-route-1
+    paths:
+      - pathType: Prefix
+        path: /
+        service:
+          name: http-service
