@@ -138,6 +138,13 @@ impl Default for PingoraConfig {
 impl FromStr for RuntimeConfig {
     type Err = NylonError;
 
+    /// Parse the runtime config from a string
+    ///
+    /// # Arguments
+    ///
+    /// * `s` - The string to parse
+    ///
+    /// # Returns
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         serde_yml::from_str(s).map_err(|e| NylonError::ConfigError(e.to_string()))
     }
