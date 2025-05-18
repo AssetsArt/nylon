@@ -1,7 +1,7 @@
 mod background_service;
 mod context;
-mod core;
 mod dynamic_certificate;
+mod proxy;
 mod runtime;
 
 use nylon_command::Commands;
