@@ -1,0 +1,19 @@
+[workspace]
+resolver = "3"
+
+members = [
+  "crates/*",
+]
+
+[workspace.dependencies]
+thiserror = "2.0"
+clap = { version = "4.5", features = ["derive"] }
+tracing-subscriber = "0.3"
+
+[profile.release]
+overflow-checks = true
+strip = true
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
