@@ -1,34 +1,28 @@
 use crate::{
-    plugins::PluginItem,
-    route::{MiddlewareItem, RouteConfig},
-    services::{ServiceItem, ServiceType},
-    tls::TlsConfig,
+    services::{EndpointExt, HealthCheckExt},
     utils::read_dir_recursive,
 };
 use nylon_error::NylonError;
-use serde::Deserialize;
-use std::collections::HashMap;
+use nylon_types::{proxy::ProxyConfig, services::ServiceType};
 
 const MAX_DEPTH: u16 = 10;
 
-#[derive(Debug, Deserialize, Clone, Default)]
-pub struct ProxyConfig {
-    pub services: Option<Vec<ServiceItem>>,
-    pub tls: Option<Vec<TlsConfig>>,
-    pub header_selector: Option<String>,
-    pub routes: Option<Vec<RouteConfig>>,
-    pub plugins: Option<Vec<PluginItem>>,
-    pub middleware_groups: Option<HashMap<String, Vec<MiddlewareItem>>>,
+pub trait ProxyConfigExt {
+    fn merge(&mut self, other: ProxyConfig);
+    fn validate(&self) -> Result<(), NylonError>;
+    fn store(&self) -> Result<(), NylonError>;
+    fn from_file(path: &str) -> Result<ProxyConfig, NylonError>;
+    fn from_dir(dir: &str) -> Result<ProxyConfig, NylonError>;
 }
 
-impl ProxyConfig {
-    pub fn from_file(path: &str) -> Result<Self, NylonError> {
+impl ProxyConfigExt for ProxyConfig {
+    fn from_file(path: &str) -> Result<Self, NylonError> {
         let content =
             std::fs::read_to_string(path).map_err(|e| NylonError::ConfigError(e.to_string()))?;
         serde_yml::from_str(&content).map_err(|e| NylonError::ConfigError(e.to_string()))
     }
 
-    pub fn from_dir(dir: &str) -> Result<Self, NylonError> {
+    fn from_dir(dir: &str) -> Result<Self, NylonError> {
         let files = read_dir_recursive(&dir.to_string(), MAX_DEPTH)?;
         let mut config = ProxyConfig::default();
         for file in files {
@@ -40,9 +34,7 @@ impl ProxyConfig {
         }
         Ok(config)
     }
-}
 
-impl ProxyConfig {
     fn merge(&mut self, other: Self) {
         // header_selector
         if let Some(new_header_selector) = other.header_selector {
@@ -85,7 +77,7 @@ impl ProxyConfig {
         }
     }
 
-    pub fn validate(&self) -> Result<(), NylonError> {
+    fn validate(&self) -> Result<(), NylonError> {
         // check if services are unique
         let mut seen = std::collections::HashSet::new();
         for service in self.services.iter().flatten() {
@@ -178,6 +170,13 @@ impl ProxyConfig {
                 }
             }
         }
+        Ok(())
+    }
+
+    fn store(&self) -> Result<(), NylonError> {
+        // validate
+        self.validate()?;
+
         Ok(())
     }
 }

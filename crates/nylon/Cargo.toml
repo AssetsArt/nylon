@@ -7,6 +7,7 @@ edition = "2024"
 nylon-command = { path = "../nylon-command" }
 nylon-config = { path = "../nylon-config" }
 nylon-error = { path = "../nylon-error" }
+nylon-types = { path = "../nylon-types" }
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 pingora = { workspace = true }

@@ -5,8 +5,9 @@ mod proxy;
 mod runtime;
 
 use nylon_command::Commands;
-use nylon_config::{proxy::ProxyConfig, runtime::RuntimeConfig};
+use nylon_config::{proxy::ProxyConfigExt, runtime::RuntimeConfig};
 use nylon_error::NylonError;
+use nylon_types::proxy::ProxyConfig;
 use runtime::NylonRuntime;
 
 fn main() -> Result<(), NylonError> {

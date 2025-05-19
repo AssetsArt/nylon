@@ -1,3 +1,5 @@
+pub mod http_discovery;
+
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use std::any::Any;
