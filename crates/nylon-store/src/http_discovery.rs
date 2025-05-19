@@ -157,18 +157,18 @@ pub async fn store_services(services: Vec<ServiceItem>) -> Result<(), NylonError
     Ok(())
 }
 
-pub async fn get_service(name: &str) -> Result<HttpService, NylonError> {
+pub async fn get_backend(service_name: &str) -> Result<HttpService, NylonError> {
     let Some(services) = get::<HashMap<String, HttpService>>(KEY_SERVICES) else {
         return Err(NylonError::ConfigError(format!(
             "Services not found: {}",
-            name
+            service_name
         )));
     };
-    match services.get(name) {
+    match services.get(service_name) {
         Some(service) => Ok(service.clone()),
         None => Err(NylonError::ConfigError(format!(
             "Service not found: {}",
-            name
+            service_name
         ))),
     }
 }
