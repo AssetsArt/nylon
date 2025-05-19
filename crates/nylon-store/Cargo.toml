@@ -4,5 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+nylon-types = { path = "../nylon-types" }
+nylon-error = { path = "../nylon-error" }
 dashmap = { workspace = true }
 once_cell = { workspace = true }
+pingora = { workspace = true }
+fnv = { workspace = true }

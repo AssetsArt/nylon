@@ -20,6 +20,7 @@ pingora = { version="0.5", features = ["lb", "openssl"] }
 async-trait = "0.1"
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["rt"] }
+fnv = "1.0"
 
 [profile.release]
 overflow-checks = true
