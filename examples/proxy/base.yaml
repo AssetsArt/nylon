@@ -22,10 +22,10 @@ services:
         port: 3001
         weight: 1 # Optional
 
-  - name: ffi-service
-    service_type: plugin
-    plugin:
-      name: ffi-plugin
-      entry: "sdk_handle_request"
-      payload:
-        debug: true
+  # - name: ffi-service
+  #   service_type: plugin
+  #   plugin:
+  #     name: ffi-plugin
+  #     entry: "sdk_handle_request"
+  #     payload:
+  #       debug: true
