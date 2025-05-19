@@ -1,7 +1,7 @@
 use crate::{
     plugins::PluginItem,
     route::{MiddlewareItem, RouteConfig},
-    services::ServiceItem,
+    services::{ServiceItem, ServiceType},
     tls::TlsConfig,
     utils::read_dir_recursive,
 };
@@ -83,5 +83,76 @@ impl ProxyConfig {
                 self.middleware_groups = Some(new_middleware_groups);
             }
         }
+    }
+
+    pub fn validate(&self) -> Result<(), NylonError> {
+        // check if services are unique
+        let mut seen = std::collections::HashSet::new();
+        for service in self.services.iter().flatten() {
+            if !seen.insert(service.name.clone()) {
+                return Err(NylonError::ConfigError(
+                    "Service names must be unique".to_string(),
+                ));
+            }
+        }
+        // check if routes are unique
+        let mut seen = std::collections::HashSet::new();
+        for route in self.routes.iter().flatten() {
+            if !seen.insert(route.name.clone()) {
+                return Err(NylonError::ConfigError(
+                    "Route names must be unique".to_string(),
+                ));
+            }
+        }
+        // check if tls are unique
+        let mut seen = std::collections::HashSet::new();
+        for tls in self.tls.iter().flatten() {
+            if !seen.insert(tls.name.clone()) {
+                return Err(NylonError::ConfigError(
+                    "TLS names must be unique".to_string(),
+                ));
+            }
+        }
+        // check if plugins are unique
+        let mut seen = std::collections::HashSet::new();
+        for plugin in self.plugins.iter().flatten() {
+            if !seen.insert(plugin.name.clone()) {
+                return Err(NylonError::ConfigError(
+                    "Plugin names must be unique".to_string(),
+                ));
+            }
+        }
+        // check if middleware groups are unique
+        let mut seen = std::collections::HashSet::new();
+        for (name, _) in self.middleware_groups.iter().flatten() {
+            if !seen.insert(name.clone()) {
+                return Err(NylonError::ConfigError(
+                    "Middleware group names must be unique".to_string(),
+                ));
+            }
+        }
+        // validate http service
+        for service in self.services.iter().flatten() {
+            if service.service_type == ServiceType::Http {
+                // check if host is set
+                if service.endpoints.is_none() {
+                    return Err(NylonError::ConfigError(
+                        "HTTP service must have at least one endpoint".to_string(),
+                    ));
+                }
+                for endpoint in service.endpoints.iter().flatten() {
+                    endpoint.is_valid_ip()?;
+                    if endpoint.port == 0 {
+                        return Err(NylonError::ConfigError(
+                            "Endpoint port must be set".to_string(),
+                        ));
+                    }
+                }
+                if let Some(health_check) = &service.health_check {
+                    health_check.is_valid()?;
+                }
+            }
+        }
+        Ok(())
     }
 }

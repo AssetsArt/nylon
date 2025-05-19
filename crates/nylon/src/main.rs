@@ -47,6 +47,7 @@ fn handle_run(path: String) -> Result<(), NylonError> {
     let proxy_config =
         ProxyConfig::from_dir(config.config_dir.to_string_lossy().to_string().as_str())?;
     tracing::debug!("[run] proxy_config: {:#?}", proxy_config);
+    proxy_config.validate()?;
     NylonRuntime::new_server()
         .expect("Failed to create server")
         .run_forever();
