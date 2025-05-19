@@ -151,6 +151,31 @@ impl ProxyConfig {
                 if let Some(health_check) = &service.health_check {
                     health_check.is_valid()?;
                 }
+            } else if service.service_type == ServiceType::Plugin {
+                if service.plugin.is_none() {
+                    return Err(NylonError::ConfigError(
+                        "Plugin service must have a plugin".to_string(),
+                    ));
+                }
+                if let Some(plugin) = &service.plugin {
+                    if plugin.name.is_empty() {
+                        return Err(NylonError::ConfigError(
+                            "Plugin name must be set".to_string(),
+                        ));
+                    }
+                    if plugin.entry.is_empty() {
+                        return Err(NylonError::ConfigError(
+                            "Plugin entry must be set".to_string(),
+                        ));
+                    }
+                    // check if plugin exists
+                    if !self.plugins.iter().flatten().any(|p| p.name == plugin.name) {
+                        return Err(NylonError::ConfigError(format!(
+                            "Plugin {} does not exist",
+                            plugin.name
+                        )));
+                    }
+                }
             }
         }
         Ok(())
