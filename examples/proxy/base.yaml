@@ -22,6 +22,17 @@ services:
         port: 3002
         # weight: 1 # Optional
 
+  - name: http-service-2
+    service_type: http
+    algorithm: round_robin # Options: round_robin, random, consistent, weighted
+    endpoints:
+      - ip: 127.0.0.1
+        port: 3001
+      - ip: 127.0.0.1
+        port: 3002
+        weight: 3
+
+
   # - name: ffi-service
   #   service_type: plugin
   #   plugin:

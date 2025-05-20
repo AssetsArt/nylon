@@ -12,7 +12,7 @@ pub struct Route {
 
 pub fn store(routes: Vec<&RouteConfig>) -> Result<(), NylonError> {
     let mut store_route = HashMap::new();
-
+    let mut globa_routes_matchit = HashMap::new();
     for route in routes {
         match route.route.kind.as_str() {
             "host" => {
@@ -81,13 +81,9 @@ pub fn store(routes: Vec<&RouteConfig>) -> Result<(), NylonError> {
                 }
             }
         }
-
-        store::insert(
-            store::KEY_ROUTES_MATCHIT,
-            HashMap::from([(route.name.clone(), matchit_route)]),
-        );
+        globa_routes_matchit.insert(route.name.clone(), matchit_route);
     }
-
+    store::insert(store::KEY_ROUTES_MATCHIT, globa_routes_matchit);
     store::insert(store::KEY_ROUTES, store_route);
     Ok(())
 }

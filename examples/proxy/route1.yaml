@@ -12,3 +12,17 @@ routes:
         path: /
         service:
           name: http-service
+
+  - route:
+      type: header
+      value: my-svc
+    name: http-route-2
+    paths:
+      - pathType: Prefix # Exact or Prefix
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+        path: /
+        service:
+          name: http-service-2
