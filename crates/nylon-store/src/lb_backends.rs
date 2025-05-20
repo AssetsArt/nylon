@@ -1,4 +1,4 @@
-use crate::{KEY_LB_BACKENDS, get, insert};
+use crate as store;
 use fnv::FnvHasher;
 use nylon_error::NylonError;
 use nylon_types::services::{Algorithm, HealthCheck, ServiceItem, ServiceType};
@@ -56,7 +56,7 @@ pub struct HttpService {
     pub backend_type: BackendType,
 }
 
-pub async fn store_backends(services: Vec<&ServiceItem>) -> Result<(), NylonError> {
+pub async fn store(services: Vec<&ServiceItem>) -> Result<(), NylonError> {
     let services = services
         .iter()
         .filter(|s| s.service_type == ServiceType::Http);
@@ -148,12 +148,12 @@ pub async fn store_backends(services: Vec<&ServiceItem>) -> Result<(), NylonErro
             },
         );
     }
-    insert(KEY_LB_BACKENDS, store_backends);
+    store::insert(store::KEY_LB_BACKENDS, store_backends);
     Ok(())
 }
 
-pub async fn get_backend(service_name: &str) -> Result<HttpService, NylonError> {
-    let Some(services) = get::<HashMap<String, HttpService>>(KEY_LB_BACKENDS) else {
+pub async fn get(service_name: &str) -> Result<HttpService, NylonError> {
+    let Some(services) = store::get::<HashMap<String, HttpService>>(store::KEY_LB_BACKENDS) else {
         return Err(NylonError::ConfigError(format!(
             "Services not found: {}",
             service_name

@@ -1,4 +1,5 @@
-pub mod http_discovery;
+pub mod lb_backends;
+pub mod routes;
 
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
@@ -8,6 +9,9 @@ use std::any::Any;
 pub const KEY_RUNTIME_CONFIG: &str = "runtime_config";
 pub const KEY_COMMAND_SOCKET_PATH: &str = "/tmp/_nylon.sock";
 pub const KEY_LB_BACKENDS: &str = "lb_backends";
+pub const KEY_ROUTES: &str = "routes";
+pub const KEY_ROUTES_MATCHIT: &str = "routes_matchit";
+pub const KEY_HEADER_SELECTOR: &str = "header_selector";
 
 // storage for global variables
 static GLOBAL_STORE: Lazy<DashMap<String, Box<dyn Any + Send + Sync>>> = Lazy::new(DashMap::new);

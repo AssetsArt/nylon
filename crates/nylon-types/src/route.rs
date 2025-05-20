@@ -40,7 +40,7 @@ pub struct Header {
     pub value: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 pub enum PathType {
     Exact,
     Prefix,
@@ -53,6 +53,7 @@ pub struct PathConfig {
     pub path: String,
     pub service: ServiceRef,
     pub middleware: Option<Vec<MiddlewareItem>>,
+    pub methods: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

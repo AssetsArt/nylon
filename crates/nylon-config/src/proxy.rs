@@ -4,9 +4,10 @@ use crate::{
 };
 use async_trait::async_trait;
 use nylon_error::NylonError;
-use nylon_store::http_discovery::store_backends;
+use nylon_store as store;
 use nylon_types::{
     proxy::ProxyConfig,
+    route::RouteConfig,
     services::{ServiceItem, ServiceType},
 };
 
@@ -184,12 +185,19 @@ impl ProxyConfigExt for ProxyConfig {
         // validate
         self.validate()?;
 
+        // store lb backends
         let services = self
             .services
             .iter()
             .flatten()
             .collect::<Vec<&ServiceItem>>();
-        store_backends(services).await?;
+        store::lb_backends::store(services).await?;
+
+        // store routes
+        store::routes::store(self.routes.iter().flatten().collect::<Vec<&RouteConfig>>())?;
+
+        // store header selector
+        store::insert(store::KEY_HEADER_SELECTOR, self.header_selector.clone());
 
         Ok(())
     }

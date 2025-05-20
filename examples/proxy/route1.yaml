@@ -5,6 +5,8 @@ routes:
     name: http-route-1
     paths:
       - pathType: Prefix
+        methods:
+          - GET
         path: /
         service:
           name: http-service
