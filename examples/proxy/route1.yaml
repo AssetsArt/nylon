@@ -1,7 +1,7 @@
 routes:
   - route:
       type: host
-      value: localhost
+      value: localhost # domain.com|domain2.com|domain3.com
     name: http-route-1
     paths:
       - pathType: Prefix # Exact or Prefix
