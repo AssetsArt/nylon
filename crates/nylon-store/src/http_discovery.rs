@@ -1,7 +1,7 @@
 use crate::{KEY_LB_BACKENDS, get, insert};
 use fnv::FnvHasher;
 use nylon_error::NylonError;
-use nylon_types::services::{Algorithm, ServiceItem, ServiceType};
+use nylon_types::services::{Algorithm, HealthCheck, ServiceItem, ServiceType};
 use pingora::{
     lb::{
         Backend, Backends, Extensions, LoadBalancer, discovery,
@@ -80,14 +80,11 @@ pub async fn store_backends(services: Vec<&ServiceItem>) -> Result<(), NylonErro
                 weight: e.weight.unwrap_or(1) as usize,
                 ext: Extensions::new(),
             };
-            if backend
+            backend
                 .ext
-                .insert::<HttpPeer>(HttpPeer::new(endpoint, false, String::new()))
-                .is_some()
-            {
-                return Err(NylonError::ConfigError(
-                    "Unable to insert HttpPeer".to_string(),
-                ));
+                .insert::<HttpPeer>(HttpPeer::new(endpoint, false, String::new()));
+            if let Some(health_check) = &service.health_check {
+                backend.ext.insert::<HealthCheck>(health_check.clone());
             }
             backends.insert(backend);
         }
