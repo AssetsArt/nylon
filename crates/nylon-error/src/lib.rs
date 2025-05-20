@@ -11,8 +11,8 @@ pub enum NylonError {
     #[error("Service not found: {0}")]
     ServiceNotFound(String),
 
-    #[error("Failed to start proxy: {0}")]
-    ProxyError(String),
+    #[error("Failed to find route: {0}")]
+    RouteNotFound(String),
 
     #[error("Failed to generate ACME key pair: {0}")]
     AcmeKeyPairError(String),

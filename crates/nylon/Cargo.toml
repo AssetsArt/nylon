@@ -8,9 +8,12 @@ nylon-command = { path = "../nylon-command" }
 nylon-config = { path = "../nylon-config" }
 nylon-error = { path = "../nylon-error" }
 nylon-types = { path = "../nylon-types" }
+nylon-store = { path = "../nylon-store" }
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 pingora = { workspace = true }
 async-trait = { workspace = true }
 openssl = { workspace = true }
 tokio = { workspace = true }
+bytes = { workspace = true }
+serde_json = { workspace = true }

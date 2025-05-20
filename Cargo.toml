@@ -22,6 +22,7 @@ openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["rt"] }
 fnv = "1.0"
 matchit = "0.8"
+bytes = "1.7"
 
 [profile.release]
 overflow-checks = true

@@ -1,6 +1,7 @@
 use crate as store;
 use nylon_error::NylonError;
 use nylon_types::route::{PathType, RouteConfig};
+use pingora::{http::Version, proxy::Session};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -67,4 +68,57 @@ pub fn store(routes: Vec<&RouteConfig>) -> Result<(), NylonError> {
     }
     store::insert(store::KEY_ROUTES, store_route);
     Ok(())
+}
+
+pub fn find_route(session: &Session) -> Result<(Route, HashMap<String, String>), NylonError> {
+    let mut path = session.req_header().uri.path().to_string();
+
+    if session.req_header().version == Version::HTTP_2 {
+        let sessionv2 = match session.as_http2() {
+            Some(session) => session,
+            None => {
+                return Err(NylonError::RouteNotFound(
+                    "Session is not HTTP/2".to_string(),
+                ));
+            }
+        };
+        path = sessionv2.req_header().uri.path().to_string();
+    }
+    let Some(routes_matchit) =
+        store::get::<HashMap<String, matchit::Router<Route>>>(store::KEY_ROUTES_MATCHIT)
+    else {
+        return Err(NylonError::RouteNotFound("Routes are not set".to_string()));
+    };
+    let Some(header_selector) = store::get::<String>(store::KEY_HEADER_SELECTOR) else {
+        return Err(NylonError::RouteNotFound(
+            "Header selector is not set".to_string(),
+        ));
+    };
+
+    let Some(store_route) = store::get::<HashMap<String, String>>(store::KEY_ROUTES) else {
+        return Err(NylonError::RouteNotFound("Routes are not set".to_string()));
+    };
+
+    let header_selector = session.req_header().headers.get(header_selector.as_str());
+    if let Some(header_selector) = header_selector {
+        let header_selector = header_selector.to_str().unwrap_or_default().to_string();
+        let route = store_route.get::<String>(&format!("header-{}", header_selector));
+        if let Some(route_name) = route {
+            let Some(route) = routes_matchit.get(route_name) else {
+                return Err(NylonError::RouteNotFound("Route is not set".to_string()));
+            };
+            let matchit_route = route
+                .at(path.as_str())
+                .map_err(|e| NylonError::RouteNotFound(format!("{}", e)))?;
+            let route = matchit_route.value.clone();
+            let params = matchit_route.params.clone();
+            let mut params_map = HashMap::new();
+            for (key, value) in params.iter() {
+                params_map.insert(key.to_string(), value.to_string());
+            }
+            return Ok((route, params_map));
+        }
+    }
+
+    todo!("find route by header selector")
 }
