@@ -25,7 +25,12 @@ pub fn store(routes: Vec<&RouteConfig>) -> Result<(), NylonError> {
                 let key = format!("header-{}", route.route.value);
                 store_route.insert(key, route.name.clone());
             }
-            _ => {}
+            _ => {
+                return Err(NylonError::ConfigError(format!(
+                    "Invalid route kind: {}",
+                    route.route.kind
+                )));
+            }
         }
 
         let mut matchit_route = matchit::Router::<Route>::new();
@@ -48,22 +53,28 @@ pub fn store(routes: Vec<&RouteConfig>) -> Result<(), NylonError> {
 
             if let Some(methods) = methods {
                 for method in methods {
-                    let match_path_with_method = if path.path == "/" {
-                        format!("/{method}/")
-                    } else {
-                        format!("/{method}{match_path}")
-                    };
+                    let mut match_path_with_method = vec![];
+                    if path.path == "/" && path.path_type == PathType::Prefix {
+                        match_path_with_method.push(format!("/{method}/"));
+                    }
+                    match_path_with_method.push(format!("/{method}{match_path}"));
 
-                    matchit_route
-                        .insert(&match_path_with_method, service.clone())
-                        .map_err(|e| {
+                    for path in match_path_with_method {
+                        matchit_route.insert(&path, service.clone()).map_err(|e| {
                             NylonError::ConfigError(format!("Failed to register route: {e}"))
                         })?;
-                    tracing::info!("[{}] Add: {:?}", route.name, match_path_with_method);
+                        tracing::info!("[{}] Add: {:?}", route.name, path);
+                    }
                 }
             } else {
-                for p in [&path.path, &match_path] {
-                    matchit_route.insert(p, service.clone()).map_err(|e| {
+                let mut add_path = vec![];
+                if path.path == "/" && path.path_type == PathType::Prefix {
+                    add_path.push("/".to_string());
+                }
+                add_path.push(match_path);
+
+                for p in add_path {
+                    matchit_route.insert(&p, service.clone()).map_err(|e| {
                         NylonError::ConfigError(format!("Failed to register route: {e}"))
                     })?;
                     tracing::info!("[{}] Add: {:?}", route.name, p);
@@ -86,7 +97,9 @@ pub fn find_route(session: &Session) -> Result<(Route, HashMap<String, String>),
 
     let routes_matchit =
         store::get::<HashMap<String, matchit::Router<Route>>>(store::KEY_ROUTES_MATCHIT)
-            .ok_or_else(|| NylonError::ShouldNeverHappen("Route matcher not found in store".into()))?;
+            .ok_or_else(|| {
+                NylonError::ShouldNeverHappen("Route matcher not found in store".into())
+            })?;
 
     let header_selector = store::get::<String>(store::KEY_HEADER_SELECTOR)
         .ok_or_else(|| NylonError::ShouldNeverHappen("Header selector not configured".into()))?;
