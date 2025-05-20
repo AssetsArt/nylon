@@ -50,7 +50,6 @@ fn handle_run(path: String) -> Result<(), NylonError> {
     let proxy_config =
         ProxyConfig::from_dir(config.config_dir.to_string_lossy().to_string().as_str())?;
     tracing::debug!("[run] proxy_config: {:#?}", proxy_config);
-    proxy_config.validate()?;
     let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
     rt.block_on(proxy_config.store())?;
     NylonRuntime::new_server()
