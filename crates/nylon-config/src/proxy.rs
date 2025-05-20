@@ -197,7 +197,12 @@ impl ProxyConfigExt for ProxyConfig {
         store::routes::store(self.routes.iter().flatten().collect::<Vec<&RouteConfig>>())?;
 
         // store header selector
-        store::insert(store::KEY_HEADER_SELECTOR, self.header_selector.clone());
+        store::insert(
+            store::KEY_HEADER_SELECTOR,
+            self.header_selector
+                .clone()
+                .unwrap_or(store::DEFAULT_HEADER_SELECTOR.to_string()),
+        );
 
         Ok(())
     }

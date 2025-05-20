@@ -5,6 +5,9 @@ use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use std::any::Any;
 
+// default values
+pub const DEFAULT_HEADER_SELECTOR: &str = "x-nylon-proxy";
+
 // constants
 pub const KEY_RUNTIME_CONFIG: &str = "runtime_config";
 pub const KEY_COMMAND_SOCKET_PATH: &str = "/tmp/_nylon.sock";
