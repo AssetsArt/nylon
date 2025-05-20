@@ -19,10 +19,6 @@ routes:
     name: http-route-2
     paths:
       - pathType: Prefix # Exact or Prefix
-        methods:
-          - GET
-          - POST
-          - OPTIONS
         path: /
         service:
           name: http-service-2
