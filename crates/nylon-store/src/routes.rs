@@ -35,6 +35,21 @@ pub fn store(routes: Vec<&RouteConfig>) -> Result<(), NylonError> {
             }
             if let Some(methods) = path.methods {
                 for method in methods {
+                    if path.path.clone() == *"/" {
+                        let match_path_with_method = format!("/{}{}", method, path.path.clone());
+                        matchit_route
+                            .insert(
+                                match_path_with_method.clone(),
+                                Route {
+                                    service: path.service.name.clone(),
+                                    rewrite: path.service.rewrite.clone(),
+                                },
+                            )
+                            .map_err(|e| {
+                                NylonError::ConfigError(format!("Failed to insert route: {}", e))
+                            })?;
+                        tracing::info!("[{}] Add: {:?}", route.name, match_path_with_method);
+                    }
                     let match_path_with_method = format!("/{}{}", method, match_path);
                     matchit_route
                         .insert(
@@ -51,6 +66,20 @@ pub fn store(routes: Vec<&RouteConfig>) -> Result<(), NylonError> {
                     tracing::info!("[{}] Add: {:?}", route.name, match_path_with_method);
                 }
             } else {
+                if path.path.clone() == *"/" {
+                    matchit_route
+                        .insert(
+                            path.path.clone(),
+                            Route {
+                                service: path.service.name.clone(),
+                                rewrite: path.service.rewrite.clone(),
+                            },
+                        )
+                        .map_err(|e| {
+                            NylonError::ConfigError(format!("Failed to insert route: {}", e))
+                        })?;
+                    tracing::info!("[{}] Add: {:?}", route.name, path.path.clone());
+                }
                 matchit_route
                     .insert(
                         match_path.clone(),
@@ -149,8 +178,8 @@ pub fn find_route(session: &Session) -> Result<(Route, HashMap<String, String>),
             return Err(NylonError::RouteNotFound("Route is not set".to_string()));
         };
         let path_with_method = format!("/{}{}", method, path);
-        println!("path: {:?}", path);
-        println!("path_with_method: {:?}", path_with_method);
+        // println!("path: {:?}", path);
+        // println!("path_with_method: {:?}", path_with_method);
         let matchit_route = match route.at(path.as_str()) {
             Ok(route) => route,
             Err(_) => match route.at(path_with_method.as_str()) {
