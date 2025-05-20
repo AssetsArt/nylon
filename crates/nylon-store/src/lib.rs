@@ -7,7 +7,7 @@ use std::any::Any;
 // constants
 pub const KEY_RUNTIME_CONFIG: &str = "runtime_config";
 pub const KEY_COMMAND_SOCKET_PATH: &str = "/tmp/_nylon.sock";
-pub const KEY_SERVICES: &str = "services";
+pub const KEY_LB_BACKENDS: &str = "lb_backends";
 
 // storage for global variables
 static GLOBAL_STORE: Lazy<DashMap<String, Box<dyn Any + Send + Sync>>> = Lazy::new(DashMap::new);

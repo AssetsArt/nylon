@@ -11,3 +11,4 @@ serde_yml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 num_cpus = { workspace = true }
+async-trait = { workspace = true }

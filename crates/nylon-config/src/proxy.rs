@@ -2,19 +2,26 @@ use crate::{
     services::{EndpointExt, HealthCheckExt},
     utils::read_dir_recursive,
 };
+use async_trait::async_trait;
 use nylon_error::NylonError;
-use nylon_types::{proxy::ProxyConfig, services::ServiceType};
+use nylon_store::http_discovery::store_backends;
+use nylon_types::{
+    proxy::ProxyConfig,
+    services::{ServiceItem, ServiceType},
+};
 
 const MAX_DEPTH: u16 = 10;
 
+#[async_trait]
 pub trait ProxyConfigExt {
     fn merge(&mut self, other: ProxyConfig);
     fn validate(&self) -> Result<(), NylonError>;
-    fn store(&self) -> Result<(), NylonError>;
+    async fn store(&self) -> Result<(), NylonError>;
     fn from_file(path: &str) -> Result<ProxyConfig, NylonError>;
     fn from_dir(dir: &str) -> Result<ProxyConfig, NylonError>;
 }
 
+#[async_trait]
 impl ProxyConfigExt for ProxyConfig {
     fn from_file(path: &str) -> Result<Self, NylonError> {
         let content =
@@ -173,9 +180,16 @@ impl ProxyConfigExt for ProxyConfig {
         Ok(())
     }
 
-    fn store(&self) -> Result<(), NylonError> {
+    async fn store(&self) -> Result<(), NylonError> {
         // validate
         self.validate()?;
+
+        let services = self
+            .services
+            .iter()
+            .flatten()
+            .collect::<Vec<&ServiceItem>>();
+        store_backends(services).await?;
 
         Ok(())
     }

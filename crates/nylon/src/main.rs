@@ -10,7 +10,7 @@ use nylon_error::NylonError;
 use nylon_types::proxy::ProxyConfig;
 use runtime::NylonRuntime;
 
-fn main() -> Result<(), NylonError> {
+fn main() {
     // Initialize the logger.
     tracing_subscriber::fmt::init();
 
@@ -22,12 +22,14 @@ fn main() -> Result<(), NylonError> {
         Commands::Service(service) => {
             tracing::debug!("service: {:?}", service);
         }
-        Commands::Run { config } => {
-            handle_run(config)?;
-        }
+        Commands::Run { config } => match handle_run(config) {
+            Ok(_) => (),
+            Err(e) => {
+                tracing::error!("{}", e);
+                std::process::exit(1);
+            }
+        },
     }
-
-    Ok(())
 }
 
 /// Handle the run command
@@ -49,6 +51,8 @@ fn handle_run(path: String) -> Result<(), NylonError> {
         ProxyConfig::from_dir(config.config_dir.to_string_lossy().to_string().as_str())?;
     tracing::debug!("[run] proxy_config: {:#?}", proxy_config);
     proxy_config.validate()?;
+    let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+    rt.block_on(proxy_config.store())?;
     NylonRuntime::new_server()
         .expect("Failed to create server")
         .run_forever();

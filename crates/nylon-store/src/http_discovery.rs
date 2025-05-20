@@ -1,3 +1,4 @@
+use crate::{KEY_LB_BACKENDS, get, insert};
 use fnv::FnvHasher;
 use nylon_error::NylonError;
 use nylon_types::services::{Algorithm, ServiceItem, ServiceType};
@@ -17,7 +18,6 @@ use std::{
     collections::{BTreeSet, HashMap},
     sync::Arc,
 };
-use crate::{KEY_SERVICES, get, insert};
 
 #[derive(Clone)]
 pub enum BackendType {
@@ -56,13 +56,12 @@ pub struct HttpService {
     pub backend_type: BackendType,
 }
 
-pub async fn store_services(services: Vec<ServiceItem>) -> Result<(), NylonError> {
+pub async fn store_backends(services: Vec<&ServiceItem>) -> Result<(), NylonError> {
     let services = services
         .iter()
-        .filter(|s| s.service_type == ServiceType::Http)
-        .collect::<Vec<&ServiceItem>>();
+        .filter(|s| s.service_type == ServiceType::Http);
 
-    let mut store_services = HashMap::new();
+    let mut store_backends = HashMap::new();
     for service in services {
         let mut backends: BTreeSet<Backend> = BTreeSet::new();
         for e in service.endpoints.iter().flatten() {
@@ -144,7 +143,7 @@ pub async fn store_services(services: Vec<ServiceItem>) -> Result<(), NylonError
                 )));
             }
         };
-        store_services.insert(
+        store_backends.insert(
             service.name.clone(),
             HttpService {
                 name: service.name.clone(),
@@ -152,12 +151,12 @@ pub async fn store_services(services: Vec<ServiceItem>) -> Result<(), NylonError
             },
         );
     }
-    insert(KEY_SERVICES, store_services);
+    insert(KEY_LB_BACKENDS, store_backends);
     Ok(())
 }
 
 pub async fn get_backend(service_name: &str) -> Result<HttpService, NylonError> {
-    let Some(services) = get::<HashMap<String, HttpService>>(KEY_SERVICES) else {
+    let Some(services) = get::<HashMap<String, HttpService>>(KEY_LB_BACKENDS) else {
         return Err(NylonError::ConfigError(format!(
             "Services not found: {}",
             service_name
