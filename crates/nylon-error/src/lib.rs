@@ -2,30 +2,35 @@ use thiserror::Error;
 
 #[derive(Error, Debug, Clone)]
 pub enum NylonError {
-    #[error("Failed to parse config: {0}")]
+    #[error("Failed to parse configuration: {0}")]
     ConfigError(String),
 
-    #[error("Failed to start pingora: {0}")]
+    #[error("Could not start the Pingora server: {0}")]
     PingoraError(String),
 
-    #[error("Service not found: {0}")]
+    #[error("Requested service is unavailable: {0}")]
     ServiceNotFound(String),
 
-    #[error("Failed to find route: {0}")]
+    #[error("No route matched the request: {0}")]
     RouteNotFound(String),
 
-    #[error("Failed to generate ACME key pair: {0}")]
+    #[error("Unable to generate ACME key pair: {0}")]
     AcmeKeyPairError(String),
 
-    #[error("Failed to send ACME HTTP request: {0}")]
+    #[error("ACME HTTP request encountered an error: {0}")]
     AcmeHttpClientError(String),
 
-    #[error("Failed to sign ACME JWS: {0}")]
+    #[error("ACME JWS signing failed: {0}")]
     AcmeJWSError(String),
 
-    #[error("Failed to send ACME client request: {0}")]
+    #[error("ACME client encountered an error: {0}")]
     AcmeClientError(String),
 
-    #[error("Internal server error: {0}")]
+    #[error("An unexpected internal server error occurred: {0}")]
     InternalServerError(String),
+
+    #[error(
+        "[BUG] This should never happen. Please report it at https://github.com/AssetsArt/nylon: {0}"
+    )]
+    ShouldNeverHappen(String),
 }

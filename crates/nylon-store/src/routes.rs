@@ -1,7 +1,7 @@
 use crate as store;
 use nylon_error::NylonError;
 use nylon_types::route::{PathType, RouteConfig};
-use pingora::{http::Version, proxy::Session};
+use pingora::proxy::Session;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -11,191 +11,161 @@ pub struct Route {
 }
 
 pub fn store(routes: Vec<&RouteConfig>) -> Result<(), NylonError> {
-    let mut store_route: HashMap<String, String> = HashMap::new();
+    let mut store_route = HashMap::new();
+
     for route in routes {
-        if route.route.kind == "host" {
-            let hosts: Vec<&str> = route.route.value.split('|').collect();
-            for host in hosts {
-                let key = format!("{}-{}", route.route.kind, host);
+        match route.route.kind.as_str() {
+            "host" => {
+                for host in route.route.value.split('|') {
+                    let key = format!("host-{}", host);
+                    store_route.insert(key, route.name.clone());
+                }
+            }
+            "header" => {
+                let key = format!("header-{}", route.route.value);
                 store_route.insert(key, route.name.clone());
             }
-        } else if route.route.kind == "header" {
-            let key = format!("{}-{}", route.route.kind, route.route.value);
-            store_route.insert(key, route.name.clone());
+            _ => {}
         }
 
         let mut matchit_route = matchit::Router::<Route>::new();
-        for path in route.paths.clone() {
+
+        for path in &route.paths {
             let mut match_path = path.path.clone();
             if path.path_type == PathType::Prefix {
-                match_path = format!("{}/{{*p}}", path.path.clone());
-                if path.path.clone() == *"/" {
-                    match_path = "/{*p}".to_string();
-                }
+                match_path = if path.path == "/" {
+                    "/{*p}".to_string()
+                } else {
+                    format!("{}/{{*p}}", path.path)
+                };
             }
-            if let Some(methods) = path.methods {
-                for method in methods {
-                    if path.path.clone() == *"/" {
-                        let match_path_with_method = format!("/{}{}", method, path.path.clone());
-                        matchit_route
-                            .insert(
-                                match_path_with_method.clone(),
-                                Route {
-                                    service: path.service.name.clone(),
-                                    rewrite: path.service.rewrite.clone(),
-                                },
-                            )
-                            .map_err(|e| {
-                                NylonError::ConfigError(format!("Failed to insert route: {}", e))
-                            })?;
-                        tracing::info!("[{}] Add: {:?}", route.name, match_path_with_method);
-                    }
-                    let match_path_with_method = format!("/{}{}", method, match_path);
-                    matchit_route
-                        .insert(
-                            match_path_with_method.clone(),
-                            Route {
-                                service: path.service.name.clone(),
-                                rewrite: path.service.rewrite.clone(),
-                            },
-                        )
-                        .map_err(|e| {
-                            NylonError::ConfigError(format!("Failed to insert route: {}", e))
-                        })?;
 
+            let methods = path.methods.clone();
+            let service = Route {
+                service: path.service.name.clone(),
+                rewrite: path.service.rewrite.clone(),
+            };
+
+            if let Some(methods) = methods {
+                for method in methods {
+                    let match_path_with_method = if path.path == "/" {
+                        format!("/{method}/")
+                    } else {
+                        format!("/{method}{match_path}")
+                    };
+
+                    matchit_route
+                        .insert(&match_path_with_method, service.clone())
+                        .map_err(|e| {
+                            NylonError::ConfigError(format!("Failed to register route: {e}"))
+                        })?;
                     tracing::info!("[{}] Add: {:?}", route.name, match_path_with_method);
                 }
             } else {
-                if path.path.clone() == *"/" {
-                    matchit_route
-                        .insert(
-                            path.path.clone(),
-                            Route {
-                                service: path.service.name.clone(),
-                                rewrite: path.service.rewrite.clone(),
-                            },
-                        )
-                        .map_err(|e| {
-                            NylonError::ConfigError(format!("Failed to insert route: {}", e))
-                        })?;
-                    tracing::info!("[{}] Add: {:?}", route.name, path.path.clone());
-                }
-                matchit_route
-                    .insert(
-                        match_path.clone(),
-                        Route {
-                            service: path.service.name.clone(),
-                            rewrite: path.service.rewrite.clone(),
-                        },
-                    )
-                    .map_err(|e| {
-                        NylonError::ConfigError(format!("Failed to insert route: {}", e))
+                for p in [&path.path, &match_path] {
+                    matchit_route.insert(p, service.clone()).map_err(|e| {
+                        NylonError::ConfigError(format!("Failed to register route: {e}"))
                     })?;
-                tracing::info!("[{}] Add: {:?}", route.name, match_path);
+                    tracing::info!("[{}] Add: {:?}", route.name, p);
+                }
             }
         }
-        let mut m_route = HashMap::new();
-        m_route.insert(route.name.clone(), matchit_route);
-        store::insert(store::KEY_ROUTES_MATCHIT, m_route);
+
+        store::insert(
+            store::KEY_ROUTES_MATCHIT,
+            HashMap::from([(route.name.clone(), matchit_route)]),
+        );
     }
+
     store::insert(store::KEY_ROUTES, store_route);
     Ok(())
 }
 
 pub fn find_route(session: &Session) -> Result<(Route, HashMap<String, String>), NylonError> {
-    let mut path = session.req_header().uri.path().to_string();
-    let mut host = match session.get_header("host") {
-        Some(host) => host.to_str().unwrap_or_default().to_string(),
-        None => "".to_string(),
-    };
-    let mut method = session.req_header().method.to_string();
-    if session.req_header().version == Version::HTTP_2 {
-        let sessionv2 = match session.as_http2() {
-            Some(session) => session,
-            None => {
-                return Err(NylonError::RouteNotFound(
-                    "Session is not HTTP/2".to_string(),
-                ));
-            }
-        };
-        path = sessionv2.req_header().uri.path().to_string();
-        host = match sessionv2.req_header().uri.host() {
-            Some(h) => h.to_string(),
-            None => "".to_string(),
-        };
-        method = sessionv2.req_header().method.to_string();
-    } else {
-        host = match host.split(':').next() {
-            Some(h) => h.to_string(),
-            None => host,
-        };
-    }
-    let Some(routes_matchit) =
+    let (path, host, method) = get_request_info(session)?;
+
+    let routes_matchit =
         store::get::<HashMap<String, matchit::Router<Route>>>(store::KEY_ROUTES_MATCHIT)
-    else {
-        return Err(NylonError::RouteNotFound("Routes are not set".to_string()));
-    };
-    let Some(header_selector) = store::get::<String>(store::KEY_HEADER_SELECTOR) else {
-        return Err(NylonError::RouteNotFound(
-            "Header selector is not set".to_string(),
-        ));
-    };
-    let Some(store_route) = store::get::<HashMap<String, String>>(store::KEY_ROUTES) else {
-        return Err(NylonError::RouteNotFound("Routes are not set".to_string()));
-    };
-    // println!("method: {:?}", method);
-    let header_selector = session.req_header().headers.get(header_selector.as_str());
-    if let Some(header_selector) = header_selector {
-        let header_selector = header_selector.to_str().unwrap_or_default().to_string();
-        let route = store_route.get::<String>(&format!("header-{}", header_selector));
-        if let Some(route_name) = route {
-            let Some(route) = routes_matchit.get(route_name) else {
-                return Err(NylonError::RouteNotFound("Route is not set".to_string()));
-            };
-            let path_with_method = format!("/{}{}", method, path);
-            let matchit_route = match route.at(path.as_str()) {
-                Ok(route) => route,
-                Err(_) => match route.at(path_with_method.as_str()) {
-                    Ok(route) => route,
-                    Err(_) => {
-                        return Err(NylonError::RouteNotFound("Route is not set".to_string()));
-                    }
-                },
-            };
-            let route = matchit_route.value.clone();
-            let params = matchit_route.params.clone();
-            let mut params_map = HashMap::new();
-            for (key, value) in params.iter() {
-                params_map.insert(key.to_string(), value.to_string());
-            }
-            return Ok((route, params_map));
+            .ok_or_else(|| NylonError::ShouldNeverHappen("Route matcher not found in store".into()))?;
+
+    let header_selector = store::get::<String>(store::KEY_HEADER_SELECTOR)
+        .ok_or_else(|| NylonError::ShouldNeverHappen("Header selector not configured".into()))?;
+
+    let store_route = store::get::<HashMap<String, String>>(store::KEY_ROUTES)
+        .ok_or_else(|| NylonError::ShouldNeverHappen("Route map not found in store".into()))?;
+
+    // Check header match
+    if let Some(header_value) = session.req_header().headers.get(&header_selector) {
+        let value = header_value.to_str().unwrap_or_default();
+        if let Some(route_name) = store_route.get(&format!("header-{value}")) {
+            return find_matching_route(&routes_matchit, route_name, &path, &method);
         }
     }
 
-    let route = store_route.get::<String>(&format!("host-{}", host));
-    if let Some(route_name) = route {
-        let Some(route) = routes_matchit.get(route_name) else {
-            return Err(NylonError::RouteNotFound("Route is not set".to_string()));
-        };
-        let path_with_method = format!("/{}{}", method, path);
-        // println!("path: {:?}", path);
-        // println!("path_with_method: {:?}", path_with_method);
-        let matchit_route = match route.at(path.as_str()) {
-            Ok(route) => route,
-            Err(_) => match route.at(path_with_method.as_str()) {
-                Ok(route) => route,
-                Err(_) => {
-                    return Err(NylonError::RouteNotFound("Route is not set".to_string()));
-                }
-            },
-        };
-        let route = matchit_route.value.clone();
-        let params = matchit_route.params.clone();
-        let mut params_map = HashMap::new();
-        for (key, value) in params.iter() {
-            params_map.insert(key.to_string(), value.to_string());
-        }
-        return Ok((route, params_map));
+    // Fallback to host match
+    if let Some(route_name) = store_route.get(&format!("host-{host}")) {
+        return find_matching_route(&routes_matchit, route_name, &path, &method);
     }
-    Err(NylonError::RouteNotFound("Route is not set".to_string()))
+
+    Err(NylonError::RouteNotFound(format!(
+        "No route matched for host: {host}, method: {method}, path: {path}"
+    )))
+}
+
+fn get_request_info(session: &Session) -> Result<(String, String, String), NylonError> {
+    if session.is_http2() {
+        let s = session.as_http2().ok_or_else(|| {
+            NylonError::RouteNotFound("Failed to interpret session as HTTP/2".into())
+        })?;
+
+        Ok((
+            s.req_header().uri.path().to_string(),
+            s.req_header().uri.host().unwrap_or_default().to_string(),
+            s.req_header().method.to_string(),
+        ))
+    } else {
+        let path = session.req_header().uri.path().to_string();
+        let host = session
+            .get_header("host")
+            .and_then(|h| h.to_str().ok())
+            .unwrap_or_default()
+            .split(':')
+            .next()
+            .unwrap_or("")
+            .to_string();
+        let method = session.req_header().method.to_string();
+
+        Ok((path, host, method))
+    }
+}
+
+fn find_matching_route(
+    routes_matchit: &HashMap<String, matchit::Router<Route>>,
+    route_name: &str,
+    path: &str,
+    method: &str,
+) -> Result<(Route, HashMap<String, String>), NylonError> {
+    let router = routes_matchit
+        .get(route_name)
+        .ok_or_else(|| NylonError::RouteNotFound("Route map missing for given name".into()))?;
+
+    let path_with_method = format!("/{method}{path}");
+
+    let result = router
+        .at(path)
+        .or_else(|_| router.at(&path_with_method))
+        .map_err(|_| {
+            NylonError::RouteNotFound(format!(
+                "No route matched for method: {method}, path: {path}"
+            ))
+        })?;
+
+    let route = result.value.clone();
+    let params = result
+        .params
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+
+    Ok((route, params))
 }
