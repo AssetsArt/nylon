@@ -11,17 +11,11 @@ use serde_json::Value;
 pub struct Response<'a> {
     pub headers: ResponseHeader,
     pub body: Option<Bytes>,
-    pub session: &'a mut Session,
     pub proxy: &'a NylonRuntime,
-    pub ctx: &'a mut NylonContext,
 }
 
 impl<'a> Response<'a> {
-    pub async fn new(
-        proxy: &'a NylonRuntime,
-        ctx: &'a mut NylonContext,
-        session: &'a mut Session,
-    ) -> pingora::Result<Self> {
+    pub async fn new(proxy: &'a NylonRuntime) -> pingora::Result<Self> {
         Ok(Self {
             headers: match ResponseHeader::build(200, None) {
                 Ok(h) => h,
@@ -34,9 +28,7 @@ impl<'a> Response<'a> {
                 }
             },
             body: None,
-            session,
             proxy,
-            ctx,
         })
     }
 
@@ -92,14 +84,18 @@ impl<'a> Response<'a> {
         Ok(self)
     }
 
-    pub async fn send(&mut self) -> pingora::Result<bool> {
+    pub async fn send(
+        &mut self,
+        session: &mut Session,
+        ctx: &mut NylonContext,
+    ) -> pingora::Result<bool> {
         self.proxy
-            .response_filter(self.session, &mut self.headers, self.ctx)
+            .response_filter(session, &mut self.headers, ctx)
             .await?;
         let mut tasks = vec![HttpTask::Header(Box::new(self.headers.clone()), false)];
         let _ = self
             .proxy
-            .response_body_filter(self.session, &mut self.body, false, self.ctx)
+            .response_body_filter(session, &mut self.body, false, ctx)
             .is_ok();
         if let Some(body) = self.body.clone() {
             tasks.push(HttpTask::Body(Some(body), false));
@@ -108,7 +104,7 @@ impl<'a> Response<'a> {
         }
         tasks.push(HttpTask::Done);
 
-        if let Err(e) = self.session.response_duplex_vec(tasks).await {
+        if let Err(e) = session.response_duplex_vec(tasks).await {
             tracing::error!("Error sending response: {:?}", e);
             return Err(pingora::Error::because(
                 ErrorType::InternalError,

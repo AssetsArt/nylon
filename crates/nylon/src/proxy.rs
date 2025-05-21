@@ -6,7 +6,6 @@ use pingora::{
     prelude::HttpPeer,
     proxy::{ProxyHttp, Session},
 };
-use serde_json::json;
 
 #[async_trait]
 impl ProxyHttp for NylonRuntime {
@@ -21,17 +20,21 @@ impl ProxyHttp for NylonRuntime {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
-        let mut res = Response::new(self, ctx, session).await?;
-        let (route, _) = match nylon_store::routes::find_route(res.session) {
+        let mut res = Response::new(self).await?;
+        if let Err(e) = ctx.parse_request(session).await {
+            return res
+                .status(e.http_status())
+                .body_json(e.exception_json())?
+                .send(session, ctx)
+                .await;
+        }
+        let (route, _) = match nylon_store::routes::find_route(session) {
             Ok(route) => route,
             Err(e) => {
                 return res
-                    .status(500)
-                    .body_json(json!({
-                        "error": "INTERNAL_ERROR",
-                        "message": e.to_string(),
-                    }))?
-                    .send()
+                    .status(e.http_status())
+                    .body_json(e.exception_json())?
+                    .send(session, ctx)
                     .await;
             }
         };
@@ -39,42 +42,14 @@ impl ProxyHttp for NylonRuntime {
             Ok(backend) => backend,
             Err(e) => {
                 return res
-                    .status(500)
-                    .body_json(json!({
-                        "error": "CONFIG_ERROR",
-                        "message": e.to_string(),
-                    }))?
-                    .send()
+                    .status(e.http_status())
+                    .body_json(e.exception_json())?
+                    .send(session, ctx)
                     .await;
             }
         };
-        let ip = match res.session.client_addr() {
-            Some(ip) => match ip.as_inet() {
-                Some(ip) => ip.ip().to_string(),
-                None => {
-                    return res
-                        .status(400)
-                        .body_json(json!({
-                            "error": "CLIENT_ERROR",
-                            "message": "Unable to get client IP",
-                        }))?
-                        .send()
-                        .await;
-                }
-            },
-            None => {
-                return res
-                    .status(400)
-                    .body_json(json!({
-                        "error": "CLIENT_ERROR",
-                        "message": "Unable to get client IP",
-                    }))?
-                    .send()
-                    .await;
-            }
-        };
-        let mut selection_key = ip.to_string();
-        if let Some(header_value) = res.session.req_header().headers.get("x-forwarded-for") {
+        let mut selection_key = ctx.client_ip.clone();
+        if let Some(header_value) = session.req_header().headers.get("x-forwarded-for") {
             let value = header_value.to_str().unwrap_or_default();
             selection_key.push_str(value);
         }
@@ -82,12 +57,9 @@ impl ProxyHttp for NylonRuntime {
             Ok(b) => b,
             Err(e) => {
                 return res
-                    .status(500)
-                    .body_json(json!({
-                        "error": "CONFIG_ERROR",
-                        "message": e.to_string(),
-                    }))?
-                    .send()
+                    .status(e.http_status())
+                    .body_json(e.exception_json())?
+                    .send(session, ctx)
                     .await;
             }
         };

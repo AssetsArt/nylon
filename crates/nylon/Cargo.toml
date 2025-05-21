@@ -17,3 +17,4 @@ openssl = { workspace = true }
 tokio = { workspace = true }
 bytes = { workspace = true }
 serde_json = { workspace = true }
+http = { workspace = true }

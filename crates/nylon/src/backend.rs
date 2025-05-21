@@ -9,5 +9,9 @@ pub fn selection(selection_key: &str, service: &HttpService) -> Result<Backend, 
         BackendType::Consistent(lb) => lb.select(selection_key.as_bytes(), 256),
         BackendType::Random(lb) => lb.select(selection_key.as_bytes(), 256),
     }
-    .ok_or_else(|| NylonError::ConfigError("No backend found".to_string()))
+    .ok_or(NylonError::HttpException(
+        500,
+        "INTERNAL_SERVER_ERROR",
+        "No backend found",
+    ))
 }
