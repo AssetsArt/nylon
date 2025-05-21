@@ -41,14 +41,44 @@ impl ProxyHttp for NylonRuntime {
                 return res
                     .status(500)
                     .body_json(json!({
-                        "error": "INTERNAL_ERROR",
+                        "error": "CONFIG_ERROR",
                         "message": e.to_string(),
                     }))?
                     .send()
                     .await;
             }
         };
-        ctx.backend = match backend::selection("-", &http_service) {
+        let ip = match res.session.client_addr() {
+            Some(ip) => match ip.as_inet() {
+                Some(ip) => ip.ip().to_string(),
+                None => {
+                    return res
+                        .status(400)
+                        .body_json(json!({
+                            "error": "CLIENT_ERROR",
+                            "message": "Unable to get client IP",
+                        }))?
+                        .send()
+                        .await;
+                }
+            },
+            None => {
+                return res
+                    .status(400)
+                    .body_json(json!({
+                        "error": "CLIENT_ERROR",
+                        "message": "Unable to get client IP",
+                    }))?
+                    .send()
+                    .await;
+            }
+        };
+        let mut selection_key = ip.to_string();
+        if let Some(header_value) = res.session.req_header().headers.get("x-forwarded-for") {
+            let value = header_value.to_str().unwrap_or_default();
+            selection_key.push_str(value);
+        }
+        ctx.backend = match backend::selection(selection_key.as_str(), &http_service) {
             Ok(b) => b,
             Err(e) => {
                 return res
