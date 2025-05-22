@@ -48,12 +48,7 @@ impl ProxyHttp for NylonRuntime {
                     .await;
             }
         };
-        let mut selection_key = ctx.client_ip.clone();
-        if let Some(header_value) = session.req_header().headers.get("x-forwarded-for") {
-            let value = header_value.to_str().unwrap_or_default();
-            selection_key.push_str(value);
-        }
-        ctx.backend = match backend::selection(selection_key.as_str(), &http_service) {
+        ctx.backend = match backend::selection(&http_service, session, ctx) {
             Ok(b) => b,
             Err(e) => {
                 return res
