@@ -75,7 +75,10 @@ impl NylonError {
             NylonError::AcmeJWSError(message) => message.to_string(),
             NylonError::AcmeClientError(message) => message.to_string(),
             NylonError::InternalServerError(message) => message.to_string(),
-            NylonError::ShouldNeverHappen(message) => message.to_string(),
+            NylonError::ShouldNeverHappen(message) => format!(
+                "[BUG] This should never happen. Please report it at https://github.com/AssetsArt/nylon: {}",
+                message
+            ),
         }
     }
 
