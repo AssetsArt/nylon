@@ -1,3 +1,4 @@
+pub mod context;
 pub mod plugins;
 pub mod proxy;
 pub mod route;

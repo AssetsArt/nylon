@@ -1,6 +1,7 @@
-use crate::{backend, context::NylonContext, response::Response, runtime::NylonRuntime};
+use crate::{backend, context::NylonContextExt, response::Response, runtime::NylonRuntime};
 use async_trait::async_trait;
 use nylon_error::NylonError;
+use nylon_types::context::NylonContext;
 use pingora::{
     ErrorType,
     prelude::HttpPeer,

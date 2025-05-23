@@ -8,6 +8,7 @@ pub struct MiddlewareItem {
     pub response_filter: Option<String>,
     pub response_body_filter: Option<String>,
     pub logging: Option<String>,
+    pub payload: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -15,8 +16,6 @@ pub struct RouteConfig {
     pub route: RouteMatcher,
     pub name: String,
     pub tls: Option<TlsRoute>,
-    pub remove_headers: Option<Vec<String>>,
-    pub add_headers: Option<Vec<Header>>,
     pub middleware: Option<Vec<MiddlewareItem>>,
     pub paths: Vec<PathConfig>,
 }

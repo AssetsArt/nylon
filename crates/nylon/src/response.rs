@@ -1,5 +1,6 @@
-use crate::{context::NylonContext, runtime::NylonRuntime};
+use crate::runtime::NylonRuntime;
 use bytes::Bytes;
+use nylon_types::context::NylonContext;
 use pingora::{
     ErrorType,
     http::ResponseHeader,

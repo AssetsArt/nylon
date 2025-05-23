@@ -1,6 +1,6 @@
-use crate::context::NylonContext;
 use nylon_error::NylonError;
 use nylon_store::lb_backends::{BackendType, HttpService};
+use nylon_types::context::NylonContext;
 use pingora::{lb::Backend, proxy::Session};
 
 pub fn selection(

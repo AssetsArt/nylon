@@ -3,6 +3,24 @@ routes:
       type: host
       value: localhost # domain.com|domain2.com|domain3.com
     name: http-route-1
+
+    middleware:
+      - plugin: RequestHeaderModifier
+        payload:
+          remove:
+            - x-version
+          set:
+            - name: x-request-id
+              value: "${headers.x_client_id}-${request_id}"
+            - name: x-forwarded-for
+              value: "${client_ip}"
+
+      - plugin: ResponseHeaderModifier
+        payload:
+          set:
+            - name: x-server
+              value: ${env.SERVER_NAME}
+
     paths:
       - pathType: Prefix # Exact or Prefix
         methods:
