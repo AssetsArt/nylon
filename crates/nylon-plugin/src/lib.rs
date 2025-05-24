@@ -28,7 +28,7 @@ pub fn run_middleware(
     match try_builtin(plugin_name) {
         Some(BuiltinPlugin::RequestHeaderModifier) => {
             tracing::debug!("Running request header modifier plugin: {}", plugin_name);
-            tracing::debug!("Payload: {:?}", payload);
+            tracing::debug!("Payload: {:#?}", payload);
             native::header_modifier::request(ctx, session, payload)?;
         }
         Some(BuiltinPlugin::ResponseHeaderModifier) => {

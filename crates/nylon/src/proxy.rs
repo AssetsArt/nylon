@@ -46,7 +46,7 @@ impl ProxyHttp for NylonRuntime {
             .iter()
             .flatten()
             .chain(route.path_middleware.iter().flatten());
-        tracing::debug!("Request filter: {:?}", middleware_items);
+        tracing::debug!("Request filter: {:#?}", middleware_items);
         for middleware in middleware_items {
             let plugin_name = match &middleware.plugin {
                 Some(name) => name,
