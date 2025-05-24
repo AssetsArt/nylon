@@ -40,15 +40,13 @@ impl ProxyHttp for NylonRuntime {
                     .await;
             }
         };
-
         let middleware_items = route
             .route_middleware
             .iter()
             .flatten()
             .chain(route.path_middleware.iter().flatten());
-        tracing::debug!("Request filter: {:#?}", middleware_items);
         for middleware in middleware_items {
-            let plugin_name = match &middleware.plugin {
+            let plugin_name = match &middleware.0.plugin {
                 Some(name) => name,
                 None => {
                     return Err(pingora::Error::because(
@@ -56,15 +54,15 @@ impl ProxyHttp for NylonRuntime {
                         "[request_filter]",
                         NylonError::ConfigError(format!(
                             "Middleware plugin not found: {:?}",
-                            middleware.plugin
+                            middleware.0.plugin
                         )),
                     ));
                 }
             };
             match run_middleware(
                 plugin_name,
-                &middleware.payload,
-                &route.payload_ast,
+                &middleware.0.payload,
+                &middleware.1,
                 ctx,
                 session,
             ) {

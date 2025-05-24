@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use serde_json::Value;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct MiddlewareItem {
@@ -39,17 +40,9 @@ pub struct Header {
     pub value: String,
 }
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
-pub enum PathType {
-    Exact,
-    Prefix,
-}
-
 #[derive(Debug, Deserialize, Clone)]
 pub struct PathConfig {
-    #[serde(rename = "pathType")]
-    pub path_type: PathType,
-    pub path: String,
+    pub path: Value,
     pub service: ServiceRef,
     pub middleware: Option<Vec<MiddlewareItem>>,
     pub methods: Option<Vec<String>>,

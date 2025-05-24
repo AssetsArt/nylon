@@ -1,11 +1,13 @@
+#![allow(clippy::type_complexity)]
 use crate as store;
 use nylon_error::NylonError;
 use nylon_types::{
-    route::{MiddlewareItem, PathType, RouteConfig},
+    route::{MiddlewareItem, RouteConfig},
     services::{ServiceItem, ServiceType},
     template::{Expr, extract_and_parse_templates, walk_json},
 };
 use pingora::proxy::Session;
+use serde_json::Value;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
@@ -13,9 +15,8 @@ pub struct Route {
     pub service: String,
     pub service_type: ServiceType,
     pub rewrite: Option<String>,
-    pub route_middleware: Option<Vec<MiddlewareItem>>,
-    pub path_middleware: Option<Vec<MiddlewareItem>>,
-    pub payload_ast: Option<HashMap<String, Vec<Expr>>>,
+    pub route_middleware: Option<Vec<(MiddlewareItem, Option<HashMap<String, Vec<Expr>>>)>>,
+    pub path_middleware: Option<Vec<(MiddlewareItem, Option<HashMap<String, Vec<Expr>>>)>>,
 }
 
 pub fn store(
@@ -46,15 +47,14 @@ pub fn store(
         }
 
         let mut route_middleware = vec![];
-        let mut payload_ast = HashMap::<String, Vec<Expr>>::new();
         if let Some(middleware) = &route.middleware {
             for m in middleware {
+                let mut payload_ast = HashMap::<String, Vec<Expr>>::new();
                 if let Some(_group) = &m.group {
                     todo!("plugin group");
                 }
                 if let Some(payload) = &m.payload {
                     walk_json(payload, "".to_string(), &mut |path, val| {
-                        // println!("{} = {}", path, val);
                         if let Some(s) = val.as_str() {
                             let ast = extract_and_parse_templates(s).unwrap_or_default();
                             if !ast.is_empty() {
@@ -63,21 +63,25 @@ pub fn store(
                         }
                     });
                 }
-                route_middleware.push(m.clone());
+                route_middleware.push((m.clone(), Some(payload_ast)));
             }
         }
 
         let mut matchit_route = matchit::Router::<Route>::new();
         for path in &route.paths {
-            let mut match_path = path.path.clone();
-            if path.path_type == PathType::Prefix {
-                match_path = if path.path == "/" {
-                    "/{*p}".to_string()
-                } else {
-                    format!("{}/{{*p}}", path.path)
-                };
+            let mut match_path: Vec<&str> = vec![];
+            if let Value::Array(arr) = &path.path {
+                for p in arr {
+                    match_path.push(p.as_str().unwrap_or_default());
+                }
+            } else if let Value::String(p) = &path.path {
+                match_path.push(p.as_str());
+            } else {
+                return Err(NylonError::ConfigError(format!(
+                    "Invalid path type: {}",
+                    path.path
+                )));
             }
-
             let methods = path.methods.clone();
             let mut service = Route {
                 service: path.service.name.clone(),
@@ -93,13 +97,13 @@ pub fn store(
                 },
                 route_middleware: Some(route_middleware.clone()),
                 path_middleware: None,
-                payload_ast: None,
+                // payload_ast: None,
             };
 
-            let mut payload_ast = payload_ast.clone();
             if let Some(middleware) = &path.middleware {
                 let mut middleware_items = vec![];
                 for m in middleware {
+                    let mut payload_ast = HashMap::<String, Vec<Expr>>::new();
                     if let Some(_group) = &m.group {
                         todo!("plugin group");
                     }
@@ -113,36 +117,25 @@ pub fn store(
                             }
                         });
                     }
-                    middleware_items.push(m.clone());
+                    middleware_items.push((m.clone(), Some(payload_ast)));
                 }
                 service.path_middleware = Some(middleware_items);
             }
-            service.payload_ast = Some(payload_ast);
 
             if let Some(methods) = methods {
                 for method in methods {
-                    let mut match_path_with_method = vec![];
-                    if path.path == "/" && path.path_type == PathType::Prefix {
-                        match_path_with_method.push(format!("/{method}/"));
-                    }
-                    match_path_with_method.push(format!("/{method}{match_path}"));
-
-                    for path in match_path_with_method {
-                        matchit_route.insert(&path, service.clone()).map_err(|e| {
-                            NylonError::ConfigError(format!("Failed to register route: {e}"))
-                        })?;
-                        tracing::info!("[{}] Add: {:?}", route.name, path);
+                    for p in &match_path {
+                        matchit_route
+                            .insert(format!("/{method}{p}"), service.clone())
+                            .map_err(|e| {
+                                NylonError::ConfigError(format!("Failed to register route: {e}"))
+                            })?;
+                        tracing::info!("[{}] Add: {:?}", route.name, format!("/{method}{p}"));
                     }
                 }
             } else {
-                let mut add_path = vec![];
-                if path.path == "/" && path.path_type == PathType::Prefix {
-                    add_path.push("/".to_string());
-                }
-                add_path.push(match_path);
-
-                for p in add_path {
-                    matchit_route.insert(&p, service.clone()).map_err(|e| {
+                for p in match_path {
+                    matchit_route.insert(p, service.clone()).map_err(|e| {
                         NylonError::ConfigError(format!("Failed to register route: {e}"))
                     })?;
                     tracing::info!("[{}] Add: {:?}", route.name, p);

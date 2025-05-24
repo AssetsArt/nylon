@@ -12,3 +12,4 @@ pingora = { workspace = true }
 fnv = { workspace = true }
 matchit = { workspace = true }
 tracing = { workspace = true }
+serde_json = { workspace = true }

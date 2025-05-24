@@ -1,3 +1,5 @@
+
+# https://github.com/ibraheemdev/matchit
 routes:
   - route:
       type: host
@@ -24,21 +26,31 @@ routes:
       #         value: ${env(SERVER_NAME)}
 
     paths:
-      - pathType: Prefix # Exact or Prefix
+      - path: 
+          - /
+          - /{*path}
         methods:
           - GET
           - POST
           - OPTIONS
-        path: /
         service:
           name: http-service
+      - path: /api/v1/{name}
+        middleware:
+          - plugin: RequestHeaderModifier
+            payload:
+              set:
+                - name: x-route-name
+                  value: "path 2"
+        service:
+          name: http-service
+
 
   - route:
       type: header
       value: my-svc
     name: http-route-2
     paths:
-      - pathType: Prefix # Exact or Prefix
-        path: /
+      - path: /{*path}
         service:
           name: http-service-2
