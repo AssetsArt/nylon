@@ -1,16 +1,26 @@
 use crate as store;
 use nylon_error::NylonError;
-use nylon_types::route::{PathType, RouteConfig};
+use nylon_types::{
+    route::{MiddlewareItem, PathType, RouteConfig},
+    services::{ServiceItem, ServiceType},
+};
 use pingora::proxy::Session;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Route {
     pub service: String,
+    pub service_type: ServiceType,
     pub rewrite: Option<String>,
+    pub route_middleware: Option<Vec<MiddlewareItem>>,
+    pub path_middleware: Option<Vec<MiddlewareItem>>,
 }
 
-pub fn store(routes: Vec<&RouteConfig>) -> Result<(), NylonError> {
+pub fn store(
+    routes: Vec<&RouteConfig>,
+    services: &Vec<&ServiceItem>,
+    // plugin_groups: // todo
+) -> Result<(), NylonError> {
     let mut store_route = HashMap::new();
     let mut globa_routes_matchit = HashMap::new();
     for route in routes {
@@ -33,8 +43,17 @@ pub fn store(routes: Vec<&RouteConfig>) -> Result<(), NylonError> {
             }
         }
 
-        let mut matchit_route = matchit::Router::<Route>::new();
+        let mut route_middleware = vec![];
+        if let Some(middleware) = &route.middleware {
+            for m in middleware {
+                if let Some(_group) = &m.group {
+                    todo!("plugin group");
+                }
+                route_middleware.push(m.clone());
+            }
+        }
 
+        let mut matchit_route = matchit::Router::<Route>::new();
         for path in &route.paths {
             let mut match_path = path.path.clone();
             if path.path_type == PathType::Prefix {
@@ -46,10 +65,32 @@ pub fn store(routes: Vec<&RouteConfig>) -> Result<(), NylonError> {
             }
 
             let methods = path.methods.clone();
-            let service = Route {
+            let mut service = Route {
                 service: path.service.name.clone(),
                 rewrite: path.service.rewrite.clone(),
+                service_type: match services.iter().find(|s| s.name == path.service.name) {
+                    Some(s) => s.service_type.clone(),
+                    None => {
+                        return Err(NylonError::ConfigError(format!(
+                            "Service {} not found",
+                            path.service.name
+                        )));
+                    }
+                },
+                route_middleware: Some(route_middleware.clone()),
+                path_middleware: None,
             };
+
+            if let Some(middleware) = &path.middleware {
+                let mut middleware_items = vec![];
+                for m in middleware {
+                    if let Some(_group) = &m.group {
+                        todo!("plugin group");
+                    }
+                    middleware_items.push(m.clone());
+                }
+                service.path_middleware = Some(middleware_items);
+            }
 
             if let Some(methods) = methods {
                 for method in methods {

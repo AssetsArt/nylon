@@ -17,9 +17,9 @@ struct Header {
 }
 
 pub fn request(
-    ctx: &mut NylonContext,
+    _ctx: &mut NylonContext,
     session: &mut Session,
-    payload: Option<&Value>,
+    payload: &Option<Value>,
 ) -> Result<(), NylonError> {
     let payload = match payload {
         Some(payload) => serde_json::from_value::<Payload>(payload.clone())
@@ -29,9 +29,20 @@ pub fn request(
             set: None,
         },
     };
+
+    if let Some(set) = payload.set {
+        let headers = session.req_header_mut();
+        for header in set {
+            let _ = headers.remove_header(&header.name);
+            let name = header.name.to_ascii_uppercase();
+            let _ = headers.append_header(name, &header.value);
+        }
+    }
+
     if let Some(remove) = payload.remove {
+        let headers = session.req_header_mut();
         for header in remove {
-            let _ = session.req_header_mut().remove_header(&header);
+            let _ = headers.remove_header(&header);
         }
     }
     Ok(())

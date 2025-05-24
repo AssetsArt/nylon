@@ -15,11 +15,11 @@ routes:
             - name: x-forwarded-for
               value: "${client_ip}"
 
-      - plugin: ResponseHeaderModifier
-        payload:
-          set:
-            - name: x-server
-              value: ${env.SERVER_NAME}
+      # - plugin: ResponseHeaderModifier
+      #   payload:
+      #     set:
+      #       - name: x-server
+      #         value: ${env.SERVER_NAME}
 
     paths:
       - pathType: Prefix # Exact or Prefix

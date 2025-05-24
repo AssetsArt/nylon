@@ -56,7 +56,7 @@ pub struct HttpService {
     pub backend_type: BackendType,
 }
 
-pub async fn store(services: Vec<&ServiceItem>) -> Result<(), NylonError> {
+pub async fn store(services: &Vec<&ServiceItem>) -> Result<(), NylonError> {
     let services = services
         .iter()
         .filter(|s| s.service_type == ServiceType::Http);

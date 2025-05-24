@@ -191,10 +191,13 @@ impl ProxyConfigExt for ProxyConfig {
             .iter()
             .flatten()
             .collect::<Vec<&ServiceItem>>();
-        store::lb_backends::store(services).await?;
+        store::lb_backends::store(&services).await?;
 
         // store routes
-        store::routes::store(self.routes.iter().flatten().collect::<Vec<&RouteConfig>>())?;
+        store::routes::store(
+            self.routes.iter().flatten().collect::<Vec<&RouteConfig>>(),
+            &services,
+        )?;
 
         // store header selector
         store::insert(

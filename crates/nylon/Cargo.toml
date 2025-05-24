@@ -9,6 +9,7 @@ nylon-config = { path = "../nylon-config" }
 nylon-error = { path = "../nylon-error" }
 nylon-types = { path = "../nylon-types" }
 nylon-store = { path = "../nylon-store" }
+nylon-plugin = { path = "../nylon-plugin" }
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 pingora = { workspace = true }

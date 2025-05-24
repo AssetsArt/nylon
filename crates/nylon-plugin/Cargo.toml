@@ -9,3 +9,4 @@ nylon-error = { path = "../nylon-error" }
 serde_json = { workspace = true }
 serde = { workspace = true }
 pingora = { workspace = true }
+tracing = { workspace = true }
