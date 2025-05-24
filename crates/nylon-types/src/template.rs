@@ -27,7 +27,18 @@ pub enum Expr {
 /// Parse a template expression string into an Expr
 pub fn parse_expression(input: &str) -> Option<Expr> {
     let mut chars = input.chars().peekable();
-    parse_expr(&mut chars)
+    let expr_option = parse_expr(&mut chars);
+
+    if let Some(ref _expr) = expr_option {
+        skip_whitespace(&mut chars);
+        if chars.peek().is_none() {
+            expr_option
+        } else {
+            None
+        }
+    } else {
+        expr_option
+    }
 }
 
 fn parse_expr<I: Iterator<Item = char>>(chars: &mut std::iter::Peekable<I>) -> Option<Expr> {
@@ -661,7 +672,7 @@ mod tests {
                 ]
             })
         );
-        // assert_eq!(parse_expression("invalid-char()"), None);
+        assert_eq!(parse_expression("invalid-char()"), None);
         assert_eq!(parse_expression("func('unterminated literal"), None);
         assert_eq!(parse_expression("func(arg1,"), None);
     }
