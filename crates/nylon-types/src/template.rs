@@ -5,19 +5,25 @@ use nylon_error::NylonError;
 use regex::Regex;
 use serde_json::Value;
 
+/// Represents a part of a JSON path
 #[derive(Debug)]
 enum PathPart {
     Key(String),
     Index(usize),
 }
 
+/// Represents a template expression that can be evaluated
 #[derive(Debug, Clone)]
 pub enum Expr {
+    /// A literal string value
     Literal(String),
+    /// A variable reference
     Var(String),
+    /// A function call with name and arguments
     Func { name: String, args: Vec<Expr> },
 }
 
+/// Parse a template expression string into an Expr
 pub fn parse_expression(input: &str) -> Option<Expr> {
     let mut chars = input.chars().peekable();
     parse_expr(&mut chars)
@@ -47,7 +53,6 @@ fn parse_literal<I: Iterator<Item = char>>(chars: &mut std::iter::Peekable<I>) -
         }
         val.push(c);
     }
-    // println!("literal: {}", val);
     Some(Expr::Literal(val))
 }
 
@@ -98,6 +103,7 @@ fn skip_whitespace<I: Iterator<Item = char>>(chars: &mut std::iter::Peekable<I>)
     }
 }
 
+/// Extract and parse template expressions from a string
 pub fn extract_and_parse_templates(input: &str) -> Result<Vec<Expr>, NylonError> {
     let re = Regex::new(r"\$\{([^}]+)\}")
         .map_err(|e| NylonError::ConfigError(format!("Invalid regex: {e}")))?;
@@ -133,21 +139,21 @@ pub fn extract_and_parse_templates(input: &str) -> Result<Vec<Expr>, NylonError>
     Ok(result)
 }
 
+/// Evaluate a template expression in the given context
 pub fn eval_expr(expr: &Expr, ctx: &NylonContext) -> String {
-    // println!("eval_expr: {:#?}", expr);
     match expr {
         Expr::Literal(s) => s.clone(),
         Expr::Var(name) => match name.as_str() {
             "client_ip" => ctx.client_ip.clone(),
             "request_id" => ctx.request_id.clone().unwrap_or_default(),
-            _ => "".to_string(), // fallback
+            _ => String::new(), // fallback
         },
         Expr::Func { name, args } => match name.as_str() {
             "header" => {
                 if let Some(Expr::Var(h)) = args.first() {
                     ctx.headers.get(h).cloned().unwrap_or_default()
                 } else {
-                    "".to_string()
+                    String::new()
                 }
             }
             "var" => {
@@ -155,10 +161,10 @@ pub fn eval_expr(expr: &Expr, ctx: &NylonContext) -> String {
                     match v.as_str() {
                         "client_ip" => ctx.client_ip.clone(),
                         "request_id" => ctx.request_id.clone().unwrap_or_default(),
-                        _ => "".to_string(),
+                        _ => String::new(),
                     }
                 } else {
-                    "".to_string()
+                    String::new()
                 }
             }
             "or" => {
@@ -168,21 +174,21 @@ pub fn eval_expr(expr: &Expr, ctx: &NylonContext) -> String {
                         return val;
                     }
                 }
-                "".to_string()
+                String::new()
             }
             "env" => {
                 if let Some(Expr::Var(v)) = args.first() {
-                    println!("env: {:?}", std::env::vars());
                     std::env::var(v).unwrap_or_default()
                 } else {
-                    "".to_string()
+                    String::new()
                 }
             }
-            _ => "".to_string(),
+            _ => String::new(),
         },
     }
 }
 
+/// Render a template string by evaluating all expressions in the given context
 pub fn render_template_string(expr: &[Expr], ctx: &NylonContext) -> String {
     let mut result = String::new();
     for expr in expr {
@@ -191,6 +197,7 @@ pub fn render_template_string(expr: &[Expr], ctx: &NylonContext) -> String {
     result
 }
 
+/// Walk through a JSON value and visit each path
 pub fn walk_json(value: &Value, path: String, visit: &mut impl FnMut(String, &Value)) {
     match value {
         Value::Object(map) => {
@@ -299,6 +306,7 @@ fn set_json_value(root: &mut Value, path: &str, new_val: Value) {
     }
 }
 
+/// Apply template expressions to a JSON value
 pub fn apply_payload_ast(
     value: &mut Value,
     payload_ast: &HashMap<String, Vec<Expr>>,
@@ -306,7 +314,6 @@ pub fn apply_payload_ast(
 ) {
     for (path, exprs) in payload_ast {
         let rendered = render_template_string(exprs, ctx);
-        // println!("rendered: {}", rendered);
-        set_json_value(value, path, Value::String(rendered.as_str().to_string()));
+        set_json_value(value, path, Value::String(rendered));
     }
 }
