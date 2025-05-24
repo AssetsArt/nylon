@@ -10,16 +10,18 @@ routes:
           remove:
             - x-version
           set:
+            - name: x-hb-conf
+              value: "prefix->${env(HOMEBREW_PREFIX)}"
             - name: x-request-id
-              value: "${headers.x_client_id}-${request_id}"
+              value: "${or(header(host), 'default')}-${or(var(request_id), 'id-1')}"
             - name: x-forwarded-for
-              value: "${client_ip}"
+              value: "${var(client_ip)}"
 
       # - plugin: ResponseHeaderModifier
       #   payload:
       #     set:
       #       - name: x-server
-      #         value: ${env.SERVER_NAME}
+      #         value: ${env(SERVER_NAME)}
 
     paths:
       - pathType: Prefix # Exact or Prefix

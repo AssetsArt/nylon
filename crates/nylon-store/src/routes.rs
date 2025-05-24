@@ -3,6 +3,7 @@ use nylon_error::NylonError;
 use nylon_types::{
     route::{MiddlewareItem, PathType, RouteConfig},
     services::{ServiceItem, ServiceType},
+    template::{Expr, extract_and_parse_templates, walk_json},
 };
 use pingora::proxy::Session;
 use std::collections::HashMap;
@@ -14,6 +15,7 @@ pub struct Route {
     pub rewrite: Option<String>,
     pub route_middleware: Option<Vec<MiddlewareItem>>,
     pub path_middleware: Option<Vec<MiddlewareItem>>,
+    pub payload_ast: Option<HashMap<String, Vec<Expr>>>,
 }
 
 pub fn store(
@@ -44,10 +46,22 @@ pub fn store(
         }
 
         let mut route_middleware = vec![];
+        let mut payload_ast = HashMap::<String, Vec<Expr>>::new();
         if let Some(middleware) = &route.middleware {
             for m in middleware {
                 if let Some(_group) = &m.group {
                     todo!("plugin group");
+                }
+                if let Some(payload) = &m.payload {
+                    walk_json(payload, "".to_string(), &mut |path, val| {
+                        // println!("{} = {}", path, val);
+                        if let Some(s) = val.as_str() {
+                            let ast = extract_and_parse_templates(s).unwrap_or_default();
+                            if !ast.is_empty() {
+                                payload_ast.insert(path, ast);
+                            }
+                        }
+                    });
                 }
                 route_middleware.push(m.clone());
             }
@@ -79,18 +93,31 @@ pub fn store(
                 },
                 route_middleware: Some(route_middleware.clone()),
                 path_middleware: None,
+                payload_ast: None,
             };
 
+            let mut payload_ast = payload_ast.clone();
             if let Some(middleware) = &path.middleware {
                 let mut middleware_items = vec![];
                 for m in middleware {
                     if let Some(_group) = &m.group {
                         todo!("plugin group");
                     }
+                    if let Some(payload) = &m.payload {
+                        walk_json(payload, "".to_string(), &mut |path, val| {
+                            if let Some(s) = val.as_str() {
+                                let ast = extract_and_parse_templates(s).unwrap_or_default();
+                                if !ast.is_empty() {
+                                    payload_ast.insert(path, ast);
+                                }
+                            }
+                        });
+                    }
                     middleware_items.push(m.clone());
                 }
                 service.path_middleware = Some(middleware_items);
             }
+            service.payload_ast = Some(payload_ast);
 
             if let Some(methods) = methods {
                 for method in methods {

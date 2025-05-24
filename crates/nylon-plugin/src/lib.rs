@@ -1,5 +1,7 @@
+use std::collections::HashMap;
+
 use nylon_error::NylonError;
-use nylon_types::context::NylonContext;
+use nylon_types::{context::NylonContext, template::Expr};
 use pingora::proxy::Session;
 use serde_json::Value;
 
@@ -22,6 +24,7 @@ fn try_builtin(name: &str) -> Option<BuiltinPlugin> {
 pub fn run_middleware(
     plugin_name: &str,
     payload: &Option<Value>,
+    payload_ast: &Option<HashMap<String, Vec<Expr>>>,
     ctx: &mut NylonContext,
     session: &mut Session,
 ) -> Result<(), NylonError> {
@@ -29,7 +32,7 @@ pub fn run_middleware(
         Some(BuiltinPlugin::RequestHeaderModifier) => {
             tracing::debug!("Running request header modifier plugin: {}", plugin_name);
             tracing::debug!("Payload: {:#?}", payload);
-            native::header_modifier::request(ctx, session, payload)?;
+            native::header_modifier::request(ctx, session, payload, payload_ast)?;
         }
         Some(BuiltinPlugin::ResponseHeaderModifier) => {
             todo!("response header modifier");

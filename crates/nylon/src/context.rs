@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_types::context::NylonContext;
@@ -13,8 +15,10 @@ pub trait NylonContextExt {
 impl NylonContextExt for NylonContext {
     fn new() -> Self {
         Self {
+            headers: HashMap::new(),
             backend: Backend::new("127.0.0.1:80").expect("Unable to create backend"),
             client_ip: String::new(),
+            request_id: None,
         }
     }
 

@@ -61,7 +61,13 @@ impl ProxyHttp for NylonRuntime {
                     ));
                 }
             };
-            match run_middleware(plugin_name, &middleware.payload, ctx, session) {
+            match run_middleware(
+                plugin_name,
+                &middleware.payload,
+                &route.payload_ast,
+                ctx,
+                session,
+            ) {
                 Ok(_) => {}
                 Err(e) => {
                     return res

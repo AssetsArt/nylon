@@ -1,8 +1,12 @@
 use nylon_error::NylonError;
-use nylon_types::context::NylonContext;
+use nylon_types::{
+    context::NylonContext,
+    template::{Expr, apply_payload_ast},
+};
 use pingora::proxy::Session;
 use serde::Deserialize;
 use serde_json::Value;
+use std::collections::HashMap;
 
 #[derive(Debug, Deserialize, Clone)]
 struct Payload {
@@ -17,19 +21,26 @@ struct Header {
 }
 
 pub fn request(
-    _ctx: &mut NylonContext,
+    ctx: &mut NylonContext,
     session: &mut Session,
     payload: &Option<Value>,
+    payload_ast: &Option<HashMap<String, Vec<Expr>>>,
 ) -> Result<(), NylonError> {
-    let payload = match payload {
-        Some(payload) => serde_json::from_value::<Payload>(payload.clone())
-            .map_err(|e| NylonError::ConfigError(e.to_string()))?,
+    let payload = match payload.as_ref() {
+        Some(payload) => {
+            let mut payload = payload.clone();
+            if let Some(payload_ast) = payload_ast {
+                apply_payload_ast(&mut payload, payload_ast, ctx);
+            }
+            serde_json::from_value::<Payload>(payload.clone())
+                .map_err(|e| NylonError::ConfigError(e.to_string()))?
+        }
         None => Payload {
             remove: None,
             set: None,
         },
     };
-
+    // println!("payload: {:#?}", payload);
     if let Some(set) = payload.set {
         let headers = session.req_header_mut();
         for header in set {
@@ -38,7 +49,6 @@ pub fn request(
             let _ = headers.append_header(name, &header.value);
         }
     }
-
     if let Some(remove) = payload.remove {
         let headers = session.req_header_mut();
         for header in remove {
