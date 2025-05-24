@@ -42,6 +42,14 @@ impl NylonContextExt for NylonContext {
                 ));
             }
         };
+
+        let headers = &session.req_header().headers;
+        for (name, value) in headers.iter() {
+            if let Ok(value_str) = value.to_str() {
+                self.headers.insert(name.to_string(), value_str.to_string());
+            }
+        }
+
         Ok(())
     }
 }
