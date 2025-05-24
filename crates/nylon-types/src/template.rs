@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-
 use crate::context::NylonContext;
 use nylon_error::NylonError;
 use regex::Regex;

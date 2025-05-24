@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-
 use pingora::lb::Backend;
 
 #[derive(Debug, Clone)]

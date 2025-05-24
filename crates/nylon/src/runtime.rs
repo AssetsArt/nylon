@@ -5,7 +5,6 @@ use pingora::{
     proxy,
     server::{Server, configuration::ServerConf},
 };
-
 use crate::{background_service::NylonBackgroundService, dynamic_certificate::new_tls_settings};
 
 #[derive(Debug, Clone)]

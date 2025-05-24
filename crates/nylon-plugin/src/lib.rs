@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-
 use nylon_error::NylonError;
 use nylon_types::{context::NylonContext, template::Expr};
 use pingora::proxy::Session;
