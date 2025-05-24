@@ -13,7 +13,7 @@ routes:
             - x-version
           set:
             - name: x-hb-conf
-              value: "prefix->${env(HOMEBREW_PREFIX)}"
+              value: "prefix->${env(HOMEBREW_PREFIX)}-${or(env(MY_APP_NAME), 'default')}"
             - name: x-request-id
               value: "${uuid(v7)}"
             - name: x-timestamp
