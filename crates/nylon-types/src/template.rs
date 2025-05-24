@@ -181,6 +181,30 @@ pub fn eval_expr(expr: &Expr, ctx: &NylonContext) -> String {
                 } else {
                     String::new()
                 }
+            },
+            "eq" => {
+                if args.len() >= 2 {
+                    let val1 = eval_expr(&args[0], ctx);
+                    let val2 = eval_expr(&args[1], ctx);
+
+                    if val1 == val2 {
+                        // If a third argument is provided, evaluate and return it as the result of eq.
+                        if let Some(value_if_equal) = args.get(2) {
+                            eval_expr(value_if_equal, ctx)
+                        } else {
+                            // If no third argument, return the common value.
+                            // This makes 'eq(A, B)' usable in 'or' constructs,
+                            // returning the value of A (and B) if they are equal.
+                            val1
+                        }
+                    } else {
+                        // Not equal, return an empty string.
+                        String::new()
+                    }
+                } else {
+                    // Not enough arguments for comparison, return an empty string.
+                    String::new()
+                }
             }
             _ => String::new(),
         },

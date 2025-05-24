@@ -17,7 +17,7 @@ routes:
             - name: x-request-id
               value: "${or(header(host), 'default')}-${or(var(request_id), 'id-1')}"
             - name: x-forwarded-for
-              value: "${var(client_ip)}"
+              value: "${var(client_ip)}-${eq(var(client_ip), '127.0.0.1', 'local')}"
 
       # - plugin: ResponseHeaderModifier
       #   payload:
