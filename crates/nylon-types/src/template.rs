@@ -435,7 +435,6 @@ pub fn apply_payload_ast(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pingora::lb::Backend;
     use serde_json::json;
 
     fn mock_ctx() -> NylonContext {
@@ -444,9 +443,8 @@ mod tests {
         headers.insert("Host".to_string(), "example.com".to_string());
 
         NylonContext {
-            backend: Backend::new("127.0.0.1:80").expect("Unable to create backend"),
-            client_ip: "127.0.0.1".to_string(),
             headers,
+            ..Default::default()
         }
     }
 
