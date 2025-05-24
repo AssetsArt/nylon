@@ -1,3 +1,4 @@
+use crate::{background_service::NylonBackgroundService, dynamic_certificate::new_tls_settings};
 use nylon_config::runtime::RuntimeConfig;
 use nylon_error::NylonError;
 use pingora::{
@@ -5,7 +6,6 @@ use pingora::{
     proxy,
     server::{Server, configuration::ServerConf},
 };
-use crate::{background_service::NylonBackgroundService, dynamic_certificate::new_tls_settings};
 
 #[derive(Debug, Clone)]
 pub struct NylonRuntime {}

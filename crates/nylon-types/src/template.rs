@@ -1,8 +1,10 @@
-use std::collections::HashMap;
 use crate::context::NylonContext;
+use chrono::Utc;
 use nylon_error::NylonError;
 use regex::Regex;
 use serde_json::Value;
+use std::collections::HashMap;
+use uuid::Uuid;
 
 /// Represents a part of a JSON path
 #[derive(Debug)]
@@ -144,7 +146,6 @@ pub fn eval_expr(expr: &Expr, ctx: &NylonContext) -> String {
         Expr::Literal(s) => s.clone(),
         Expr::Var(name) => match name.as_str() {
             "client_ip" => ctx.client_ip.clone(),
-            "request_id" => ctx.request_id.clone().unwrap_or_default(),
             _ => String::new(), // fallback
         },
         Expr::Func { name, args } => match name.as_str() {
@@ -159,14 +160,21 @@ pub fn eval_expr(expr: &Expr, ctx: &NylonContext) -> String {
                 if let Some(Expr::Var(v)) = args.first() {
                     match v.as_str() {
                         "client_ip" => ctx.client_ip.clone(),
-                        "request_id" => ctx.request_id.clone().unwrap_or_default(),
                         _ => String::new(),
                     }
                 } else {
                     String::new()
                 }
             }
+            "env" => {
+                if let Some(Expr::Var(v)) = args.first() {
+                    std::env::var(v).unwrap_or_default()
+                } else {
+                    String::new()
+                }
+            }
             "or" => {
+                // Or
                 for arg in args {
                     let val = eval_expr(arg, ctx);
                     if !val.is_empty() {
@@ -175,14 +183,8 @@ pub fn eval_expr(expr: &Expr, ctx: &NylonContext) -> String {
                 }
                 String::new()
             }
-            "env" => {
-                if let Some(Expr::Var(v)) = args.first() {
-                    std::env::var(v).unwrap_or_default()
-                } else {
-                    String::new()
-                }
-            },
             "eq" => {
+                // Equal
                 if args.len() >= 2 {
                     let val1 = eval_expr(&args[0], ctx);
                     let val2 = eval_expr(&args[1], ctx);
@@ -203,6 +205,79 @@ pub fn eval_expr(expr: &Expr, ctx: &NylonContext) -> String {
                     }
                 } else {
                     // Not enough arguments for comparison, return an empty string.
+                    String::new()
+                }
+            }
+            "neq" => {
+                // Not Equal
+                if args.len() >= 2 {
+                    let val1 = eval_expr(&args[0], ctx);
+                    let val2 = eval_expr(&args[1], ctx);
+
+                    if val1 != val2 {
+                        if let Some(value_if_not_equal) = args.get(2) {
+                            eval_expr(value_if_not_equal, ctx)
+                        } else {
+                            val1 // true
+                        }
+                    } else {
+                        String::new() // false
+                    }
+                } else {
+                    String::new()
+                }
+            }
+            "upper" => {
+                // Convert to uppercase: upper('someString')
+                if let Some(arg_expr) = args.first() {
+                    eval_expr(arg_expr, ctx).to_uppercase()
+                } else {
+                    String::new()
+                }
+            }
+            "lower" => {
+                // Convert to lowercase: lower('SomeString')
+                if let Some(arg_expr) = args.first() {
+                    eval_expr(arg_expr, ctx).to_lowercase()
+                } else {
+                    String::new()
+                }
+            }
+
+            "len" => {
+                // Get length of a string: len('abc') -> "3"
+                if let Some(arg_expr) = args.first() {
+                    eval_expr(arg_expr, ctx).len().to_string()
+                } else {
+                    String::new()
+                }
+            }
+            "if_cond" => {
+                // Conditional: if_cond(condition_expr, then_expr, else_expr)
+                if args.len() == 3 {
+                    let condition = eval_expr(&args[0], ctx);
+                    if !condition.is_empty() {
+                        // true
+                        eval_expr(&args[1], ctx)
+                    } else {
+                        eval_expr(&args[2], ctx)
+                    }
+                } else {
+                    String::new() // Incorrect number of arguments
+                }
+            }
+            "timestamp" => Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            "uuid" => {
+                // uuid(v4), uuid(v7)
+                if let Some(Expr::Var(v)) = args.first() {
+                    if v == "v4" {
+                        Uuid::new_v4().to_string()
+                    } else if v == "v7" {
+                        Uuid::now_v7().to_string()
+                    } else {
+                        String::new()
+                    }
+                } else {
                     String::new()
                 }
             }

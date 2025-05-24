@@ -15,7 +15,9 @@ routes:
             - name: x-hb-conf
               value: "prefix->${env(HOMEBREW_PREFIX)}"
             - name: x-request-id
-              value: "${or(header(host), 'default')}-${or(var(request_id), 'id-1')}"
+              value: "${uuid(v7)}"
+            - name: x-timestamp
+              value: "${timestamp()}"
             - name: x-forwarded-for
               value: "${var(client_ip)}-${eq(var(client_ip), '127.0.0.1', 'local')}"
 
