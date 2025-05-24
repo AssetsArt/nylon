@@ -20,6 +20,8 @@ routes:
               value: "${timestamp()}"
             - name: x-forwarded-for
               value: "${var(client_ip)}-${eq(var(client_ip), '127.0.0.1', 'local')}"
+            - name: x-host
+              value: "${header(host)}"
 
       # - plugin: ResponseHeaderModifier
       #   payload:
