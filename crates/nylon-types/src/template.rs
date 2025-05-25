@@ -247,7 +247,7 @@ pub fn eval_expr(expr: &Expr, headers: &RequestHeader, ctx: &NylonContext) -> St
                 } else {
                     String::new()
                 }
-            },
+            }
             "concat" => {
                 // Concatenate strings: concat('foo', uuid(v4)) -> "foo-123e4567-e89b-12d3-a456-426614174000"
                 let mut result = String::new();
@@ -456,84 +456,89 @@ pub fn apply_payload_ast(
     }
 }
 
-/*
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pingora::http::Method;
     use serde_json::json;
 
-    fn mock_ctx() -> NylonContext {
-        let mut headers = HashMap::new();
-        headers.insert("X-Test-Header".to_string(), "HeaderValue".to_string());
-        headers.insert("Host".to_string(), "example.com".to_string());
-
-        NylonContext {
+    fn mock_ctx() -> (RequestHeader, NylonContext) {
+        let method = Method::GET;
+        let path = b"/";
+        let mut headers = RequestHeader::build(method, path, None).unwrap();
+        let _ = headers.append_header("x-test-header".to_string(), "HeaderValue".to_string());
+        let _ = headers.append_header("host".to_string(), "example.com".to_string());
+        (
             headers,
-            ..Default::default()
-        }
+            NylonContext {
+                ..Default::default()
+            },
+        )
     }
 
-    fn eval_str(expr_str: &str, ctx: &NylonContext) -> String {
+    fn eval_str(expr_str: &str, headers: &RequestHeader, ctx: &NylonContext) -> String {
         let expr = parse_expression(expr_str)
             .unwrap_or_else(|| panic!("Failed to parse test expression: {}", expr_str));
-        eval_expr(&expr, ctx)
+        eval_expr(&expr, headers, ctx)
     }
 
     #[test]
     fn test_eval_literal() {
-        let ctx = mock_ctx();
-        assert_eq!(eval_str("'hello literal'", &ctx), "hello literal");
+        let (headers, ctx) = mock_ctx();
+        assert_eq!(eval_str("'hello literal'", &headers, &ctx), "hello literal");
         assert_eq!(
-            eval_str("\"double quote literal\"", &ctx),
+            eval_str("\"double quote literal\"", &headers, &ctx),
             "double quote literal"
         );
     }
 
     #[test]
     fn test_eval_var_direct() {
-        let ctx = mock_ctx();
-        assert_eq!(eval_str("client_ip", &ctx), "127.0.0.1");
+        let (headers, ctx) = mock_ctx();
+        assert_eq!(eval_str("client_ip", &headers, &ctx), "127.0.0.1");
         assert_eq!(
-            eval_str("request_id", &ctx),
+            eval_str("request_id", &headers, &ctx),
             "",
             "Expr::Var(\"request_id\") should be empty per current code"
         );
-        assert_eq!(eval_str("unknown_variable", &ctx), "");
+        assert_eq!(eval_str("unknown_variable", &headers, &ctx), "");
     }
 
     #[test]
     fn test_eval_func_var_function() {
-        let ctx = mock_ctx();
-        assert_eq!(eval_str("var(client_ip)", &ctx), "127.0.0.1");
+        let (headers, ctx) = mock_ctx();
+        assert_eq!(eval_str("var(client_ip)", &headers, &ctx), "127.0.0.1");
         assert_eq!(
-            eval_str("var(request_id)", &ctx),
+            eval_str("var(request_id)", &headers, &ctx),
             "",
             "var(request_id) should be empty per current code"
         );
-        assert_eq!(eval_str("var(something_else)", &ctx), "");
+        assert_eq!(eval_str("var(something_else)", &headers, &ctx), "");
     }
 
     #[test]
     fn test_eval_func_header() {
-        let ctx = mock_ctx();
-        assert_eq!(eval_str("header(X-Test-Header)", &ctx), "HeaderValue");
-        assert_eq!(eval_str("header(Host)", &ctx), "example.com");
-        assert_eq!(eval_str("header(NonExistentHeader)", &ctx), "");
+        let (headers, ctx) = mock_ctx();
         assert_eq!(
-            eval_str("header(host)", &ctx),
-            "",
-            "Header keys are case-sensitive in HashMap"
+            eval_str("header(x-test-header)", &headers, &ctx),
+            "HeaderValue"
         );
+        assert_eq!(eval_str("header(host)", &headers, &ctx), "example.com");
+        assert_eq!(eval_str("header(non-existent-header)", &headers, &ctx), "");
+        assert_eq!(eval_str("header(Host)", &headers, &ctx), "example.com");
     }
 
     #[test]
     fn test_eval_func_env() {
-        let ctx = mock_ctx();
+        let (headers, ctx) = mock_ctx();
         unsafe {
             std::env::set_var("MY_TEST_ENV_VAR", "EnvTestValue");
         }
-        assert_eq!(eval_str("env(MY_TEST_ENV_VAR)", &ctx), "EnvTestValue");
-        assert_eq!(eval_str("env(NON_EXISTENT_ENV_VAR)", &ctx), "");
+        assert_eq!(
+            eval_str("env(MY_TEST_ENV_VAR)", &headers, &ctx),
+            "EnvTestValue"
+        );
+        assert_eq!(eval_str("env(NON_EXISTENT_ENV_VAR)", &headers, &ctx), "");
         unsafe {
             std::env::remove_var("MY_TEST_ENV_VAR");
         }
@@ -541,77 +546,92 @@ mod tests {
 
     #[test]
     fn test_eval_func_or() {
-        let ctx = mock_ctx();
-        assert_eq!(eval_str("or('val1', 'val2')", &ctx), "val1");
-        assert_eq!(eval_str("or('', 'val2')", &ctx), "val2");
-        assert_eq!(eval_str("or(unknown, 'val2')", &ctx), "val2");
-        assert_eq!(eval_str("or('', '', 'val3')", &ctx), "val3");
-        assert_eq!(eval_str("or('', '', '')", &ctx), "");
+        let (headers, ctx) = mock_ctx();
+        assert_eq!(eval_str("or('val1', 'val2')", &headers, &ctx), "val1");
+        assert_eq!(eval_str("or('', 'val2')", &headers, &ctx), "val2");
+        assert_eq!(eval_str("or(unknown, 'val2')", &headers, &ctx), "val2");
+        assert_eq!(eval_str("or('', '', 'val3')", &headers, &ctx), "val3");
+        assert_eq!(eval_str("or('', '', '')", &headers, &ctx), "");
         assert_eq!(
-            eval_str("or(or('', client_ip), 'fallback')", &ctx),
+            eval_str("or(or('', client_ip), 'fallback')", &headers, &ctx),
             "127.0.0.1"
         );
     }
 
     #[test]
     fn test_eval_func_eq() {
-        let ctx = mock_ctx();
-        assert_eq!(eval_str("eq('a', 'a')", &ctx), "a");
-        assert_eq!(eval_str("eq('a', 'a', 'EQUAL')", &ctx), "EQUAL");
-        assert_eq!(eval_str("eq('a', 'b')", &ctx), "");
-        assert_eq!(eval_str("eq('a', 'b', 'EQUAL')", &ctx), "");
+        let (headers, ctx) = mock_ctx();
+        assert_eq!(eval_str("eq('a', 'a')", &headers, &ctx), "a");
+        assert_eq!(eval_str("eq('a', 'a', 'EQUAL')", &headers, &ctx), "EQUAL");
+        assert_eq!(eval_str("eq('a', 'b')", &headers, &ctx), "");
+        assert_eq!(eval_str("eq('a', 'b', 'EQUAL')", &headers, &ctx), "");
         assert_eq!(
-            eval_str("eq(client_ip, '127.0.0.1', 'local')", &ctx),
+            eval_str("eq(client_ip, '127.0.0.1', 'local')", &headers, &ctx),
             "local"
         );
     }
 
     #[test]
     fn test_eval_func_neq() {
-        let ctx = mock_ctx();
-        assert_eq!(eval_str("neq('a', 'b')", &ctx), "a");
-        assert_eq!(eval_str("neq('a', 'b', 'NOT_EQUAL')", &ctx), "NOT_EQUAL");
-        assert_eq!(eval_str("neq('a', 'a')", &ctx), "");
-        assert_eq!(eval_str("neq('a', 'a', 'NOT_EQUAL')", &ctx), "");
+        let (headers, ctx) = mock_ctx();
+        assert_eq!(eval_str("neq('a', 'b')", &headers, &ctx), "a");
         assert_eq!(
-            eval_str("neq(client_ip, '1.1.1.1', 'remote')", &ctx),
+            eval_str("neq('a', 'b', 'NOT_EQUAL')", &headers, &ctx),
+            "NOT_EQUAL"
+        );
+        assert_eq!(eval_str("neq('a', 'a')", &headers, &ctx), "");
+        assert_eq!(eval_str("neq('a', 'a', 'NOT_EQUAL')", &headers, &ctx), "");
+        assert_eq!(
+            eval_str("neq(client_ip, '1.1.1.1', 'remote')", &headers, &ctx),
             "remote"
         );
     }
 
     #[test]
     fn test_eval_func_upper_lower_len() {
-        let ctx = mock_ctx();
-        assert_eq!(eval_str("upper('hello world')", &ctx), "HELLO WORLD");
-        assert_eq!(eval_str("lower('HELLO WORLD')", &ctx), "hello world");
-        assert_eq!(eval_str("len('hello')", &ctx), "5");
-        assert_eq!(eval_str("len(client_ip)", &ctx), "9");
-        assert_eq!(eval_str("upper('')", &ctx), "");
-        assert_eq!(eval_str("lower('')", &ctx), "");
-        assert_eq!(eval_str("len('')", &ctx), "0");
+        let (headers, ctx) = mock_ctx();
+        assert_eq!(
+            eval_str("upper('hello world')", &headers, &ctx),
+            "HELLO WORLD"
+        );
+        assert_eq!(
+            eval_str("lower('HELLO WORLD')", &headers, &ctx),
+            "hello world"
+        );
+        assert_eq!(eval_str("len('hello')", &headers, &ctx), "5");
+        assert_eq!(eval_str("len(client_ip)", &headers, &ctx), "9");
+        assert_eq!(eval_str("upper('')", &headers, &ctx), "");
+        assert_eq!(eval_str("lower('')", &headers, &ctx), "");
+        assert_eq!(eval_str("len('')", &headers, &ctx), "0");
     }
 
     #[test]
     fn test_eval_func_if_cond() {
-        let ctx = mock_ctx();
+        let (headers, ctx) = mock_ctx();
         assert_eq!(
-            eval_str("if_cond('condition_true', 'then_val', 'else_val')", &ctx),
+            eval_str(
+                "if_cond('condition_true', 'then_val', 'else_val')",
+                &headers,
+                &ctx
+            ),
             "then_val"
         );
         assert_eq!(
             eval_str(
                 "if_cond(eq(client_ip, '127.0.0.1'), 'local_ip', 'remote_ip')",
+                &headers,
                 &ctx
             ),
             "local_ip"
         );
         assert_eq!(
-            eval_str("if_cond('', 'then_val', 'else_val')", &ctx),
+            eval_str("if_cond('', 'then_val', 'else_val')", &headers, &ctx),
             "else_val"
         ); // Empty string is false
         assert_eq!(
             eval_str(
                 "if_cond(eq(client_ip, 'other_ip'), 'local_ip', 'remote_ip')",
+                &headers,
                 &ctx
             ),
             "remote_ip"
@@ -620,8 +640,8 @@ mod tests {
 
     #[test]
     fn test_eval_func_timestamp() {
-        let ctx = mock_ctx();
-        let ts = eval_str("timestamp()", &ctx);
+        let (headers, ctx) = mock_ctx();
+        let ts = eval_str("timestamp()", &headers, &ctx);
         assert!(
             ts.contains('T') && ts.contains('Z'),
             "Timestamp format basic check failed"
@@ -634,8 +654,8 @@ mod tests {
 
     #[test]
     fn test_eval_func_uuid() {
-        let ctx = mock_ctx();
-        let uuid_v4 = eval_str("uuid(v4)", &ctx);
+        let (headers, ctx) = mock_ctx();
+        let uuid_v4 = eval_str("uuid(v4)", &headers, &ctx);
         assert_eq!(uuid_v4.len(), 36, "UUID v4 length incorrect");
         assert_eq!(
             uuid_v4.chars().nth(14),
@@ -643,7 +663,7 @@ mod tests {
             "UUID v4 version char incorrect"
         );
 
-        let uuid_v7 = eval_str("uuid(v7)", &ctx);
+        let uuid_v7 = eval_str("uuid(v7)", &headers, &ctx);
         assert_eq!(uuid_v7.len(), 36, "UUID v7 length incorrect");
         assert_eq!(
             uuid_v7.chars().nth(14),
@@ -651,8 +671,16 @@ mod tests {
             "UUID v7 version char incorrect"
         );
 
-        assert_eq!(eval_str("uuid(vx)", &ctx), "", "uuid with invalid version");
-        assert_eq!(eval_str("uuid()", &ctx), "", "uuid with no argument");
+        assert_eq!(
+            eval_str("uuid(vx)", &headers, &ctx),
+            "",
+            "uuid with invalid version"
+        );
+        assert_eq!(
+            eval_str("uuid()", &headers, &ctx),
+            "",
+            "uuid with no argument"
+        );
     }
 
     #[test]
@@ -695,7 +723,13 @@ mod tests {
                 ]
             })
         );
-        assert_eq!(parse_expression("invalid-char()"), None);
+        assert_eq!(
+            parse_expression("invalid-char()"),
+            Some(Expr::Func {
+                name: "invalid-char".to_string(),
+                args: vec![]
+            })
+        );
         assert_eq!(parse_expression("func('unterminated literal"), None);
         assert_eq!(parse_expression("func(arg1,"), None);
     }
@@ -740,12 +774,12 @@ mod tests {
 
     #[test]
     fn test_render_template_string() {
-        let ctx = mock_ctx();
+        let (headers, ctx) = mock_ctx();
         let exprs = extract_and_parse_templates(
             "IP: ${client_ip}. Host: ${upper(header(Host))}. UUID: ${uuid(v4)}.",
         )
         .unwrap();
-        let rendered = render_template_string(&exprs, &ctx);
+        let rendered = render_template_string(&exprs, &headers, &ctx);
         assert!(rendered.starts_with("IP: 127.0.0.1. Host: EXAMPLE.COM. UUID: "));
         assert_eq!(
             rendered.matches('-').count(),
@@ -813,7 +847,7 @@ mod tests {
 
     #[test]
     fn test_apply_payload_ast() {
-        let ctx = mock_ctx();
+        let (headers, ctx) = mock_ctx();
         let mut data = json!({
             "user_info": {
                 "id": "old_id",
@@ -841,4 +875,3 @@ mod tests {
         assert_eq!(data["system_load"], json!(0.5));
     }
 }
-*/
