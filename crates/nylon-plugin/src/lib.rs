@@ -1,12 +1,12 @@
 use nylon_error::NylonError;
 use nylon_types::{context::NylonContext, template::Expr};
-use pingora::proxy::Session;
+use pingora::{http::ResponseHeader, proxy::Session};
 use serde_json::Value;
 use std::collections::HashMap;
 
 mod native;
 
-enum BuiltinPlugin {
+pub enum BuiltinPlugin {
     RequestHeaderModifier,
     ResponseHeaderModifier,
 }
@@ -20,21 +20,34 @@ fn try_builtin(name: &str) -> Option<BuiltinPlugin> {
     }
 }
 
+pub fn try_response_filter(name: &str) -> Option<BuiltinPlugin> {
+    match name {
+        "ResponseHeaderModifier" => Some(BuiltinPlugin::ResponseHeaderModifier),
+        _ => None,
+    }
+}
+
 pub fn run_middleware(
     plugin_name: &str,
     payload: &Option<Value>,
     payload_ast: &Option<HashMap<String, Vec<Expr>>>,
     ctx: &mut NylonContext,
     session: &mut Session,
+    upstream_response: Option<&mut ResponseHeader>,
 ) -> Result<(), NylonError> {
     match try_builtin(plugin_name) {
         Some(BuiltinPlugin::RequestHeaderModifier) => {
-            tracing::debug!("Running request header modifier plugin: {}", plugin_name);
-            tracing::debug!("Payload: {:#?}", payload);
+            // tracing::debug!("Running request header modifier plugin: {}", plugin_name);
+            // tracing::debug!("Payload: {:#?}", payload);
             native::header_modifier::request(ctx, session, payload, payload_ast)?;
         }
         Some(BuiltinPlugin::ResponseHeaderModifier) => {
-            todo!("response header modifier");
+            if let Some(upstream_response) = upstream_response {
+                // tracing::debug!("Running response header modifier plugin: {}", plugin_name);
+                // tracing::debug!("Payload: {:#?}", payload);
+                // tracing::debug!("Upstream response: {:#?}", upstream_response);
+                native::header_modifier::response(ctx, upstream_response, payload, payload_ast)?;
+            }
         }
         _ => {
             // fallback ไป external plugin (WASM, FFI)

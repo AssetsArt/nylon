@@ -47,7 +47,7 @@ fn parse_expr<I: Iterator<Item = char>>(chars: &mut std::iter::Peekable<I>) -> O
     if let Some(c) = chars.peek() {
         match c {
             '\'' | '"' => parse_literal(chars),
-            'a'..='z' | 'A'..='Z' | '_' => parse_func_or_var(chars),
+            'a'..='z' | 'A'..='Z' | '_' | '-' => parse_func_or_var(chars),
             _ => None,
         }
     } else {
@@ -71,7 +71,7 @@ fn parse_literal<I: Iterator<Item = char>>(chars: &mut std::iter::Peekable<I>) -
 fn parse_func_or_var<I: Iterator<Item = char>>(chars: &mut std::iter::Peekable<I>) -> Option<Expr> {
     let mut name = String::new();
     while let Some(&c) = chars.peek() {
-        if c.is_alphanumeric() || c == '_' {
+        if c.is_alphanumeric() || c == '_' || c == '-' {
             name.push(c);
             chars.next();
         } else {

@@ -1,10 +1,11 @@
 use crate::{backend, context::NylonContextExt, response::Response, runtime::NylonRuntime};
 use async_trait::async_trait;
 use nylon_error::NylonError;
-use nylon_plugin::run_middleware;
+use nylon_plugin::{run_middleware, try_response_filter};
 use nylon_types::{context::NylonContext, services::ServiceType};
 use pingora::{
     ErrorType,
+    http::ResponseHeader,
     prelude::HttpPeer,
     proxy::{ProxyHttp, Session},
 };
@@ -65,6 +66,7 @@ impl ProxyHttp for NylonRuntime {
                 &middleware.1,
                 ctx,
                 session,
+                None,
             ) {
                 Ok(_) => {}
                 Err(e) => {
@@ -126,5 +128,71 @@ impl ProxyHttp for NylonRuntime {
             }
         };
         Ok(Box::new(peer))
+    }
+
+    async fn response_filter(
+        &self,
+        session: &mut Session,
+        upstream_response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
+    ) -> pingora::Result<()>
+    where
+        Self::CTX: Send + Sync,
+    {
+        let Some(route) = ctx.route.clone() else {
+            return Ok(());
+        };
+        let middleware_items = route
+            .route_middleware
+            .iter()
+            .flatten()
+            .chain(route.path_middleware.iter().flatten())
+            .filter(|m| {
+                if let Some(name) = m.0.plugin.as_ref() {
+                    return try_response_filter(name).is_some();
+                } else if m.0.request_filter.is_some() {
+                    return true;
+                }
+                false
+            });
+
+        // tracing::debug!("[response_filter] middleware: {:#?}", middleware_items);
+        for middleware in middleware_items {
+            let plugin_name = match &middleware.0.plugin {
+                Some(name) => name,
+                None => {
+                    return Err(pingora::Error::because(
+                        ErrorType::InternalError,
+                        "[request_filter]",
+                        NylonError::ConfigError(format!(
+                            "Middleware plugin not found: {:?}",
+                            middleware.0.plugin
+                        )),
+                    ));
+                }
+            };
+            match run_middleware(
+                plugin_name,
+                &middleware.0.payload,
+                &middleware.1,
+                ctx,
+                session,
+                Some(upstream_response),
+            ) {
+                Ok(_) => {}
+                Err(e) => {
+                    return Err(pingora::Error::because(
+                        ErrorType::InternalError,
+                        "[response_filter]",
+                        e.to_string(),
+                    ));
+                }
+            }
+        }
+
+        // if route.service_type == ServiceType::Plugin {
+        //     return Ok(());
+        // }
+        Ok(())
     }
 }
