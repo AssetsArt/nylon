@@ -26,11 +26,12 @@ pub fn request(
     payload: &Option<Value>,
     payload_ast: &Option<HashMap<String, Vec<Expr>>>,
 ) -> Result<(), NylonError> {
+    let headers = session.req_header_mut();
     let payload = match payload.as_ref() {
         Some(payload) => {
             let mut payload = payload.clone();
             if let Some(payload_ast) = payload_ast {
-                apply_payload_ast(&mut payload, payload_ast, ctx);
+                apply_payload_ast(&mut payload, payload_ast, headers, ctx);
             }
             serde_json::from_value::<Payload>(payload.clone())
                 .map_err(|e| NylonError::ConfigError(e.to_string()))?
@@ -42,7 +43,6 @@ pub fn request(
     };
     // println!("payload: {:#?}", payload);
     if let Some(set) = payload.set {
-        let headers = session.req_header_mut();
         for header in set {
             let _ = headers.remove_header(&header.name);
             let name = header.name.to_ascii_lowercase();
@@ -50,7 +50,6 @@ pub fn request(
         }
     }
     if let Some(remove) = payload.remove {
-        let headers = session.req_header_mut();
         for header in remove {
             let _ = headers.remove_header(&header.to_ascii_lowercase());
         }
@@ -60,15 +59,17 @@ pub fn request(
 
 pub fn response(
     ctx: &mut NylonContext,
+    session: &mut Session,
     upstream_response: &mut ResponseHeader,
     payload: &Option<Value>,
     payload_ast: &Option<HashMap<String, Vec<Expr>>>,
 ) -> Result<(), NylonError> {
+    let headers = session.req_header();
     let payload = match payload.as_ref() {
         Some(payload) => {
             let mut payload = payload.clone();
             if let Some(payload_ast) = payload_ast {
-                apply_payload_ast(&mut payload, payload_ast, ctx);
+                apply_payload_ast(&mut payload, payload_ast, headers, ctx);
             }
             serde_json::from_value::<Payload>(payload.clone())
                 .map_err(|e| NylonError::ConfigError(e.to_string()))?
@@ -78,20 +79,19 @@ pub fn response(
             set: None,
         },
     };
-    println!("payload: {:#?}", payload);
-    // if let Some(set) = payload.set {
-    //     let headers = session.req_header_mut();
-    //     for header in set {
-    //         let _ = headers.remove_header(&header.name);
-    //         let name = header.name.to_ascii_uppercase();
-    //         let _ = headers.append_header(name, &header.value);
-    //     }
-    // }
-    // if let Some(remove) = payload.remove {
-    //     let headers = session.req_header_mut();
-    //     for header in remove {
-    //         let _ = headers.remove_header(&header);
-    //     }
-    // }
+    let headers = upstream_response;
+    if let Some(set) = payload.set {
+        for header in set {
+            let _ = headers.remove_header(&header.name);
+            let name = header.name.to_ascii_uppercase();
+            let _ = headers.append_header(name, &header.value);
+        }
+    }
+    if let Some(remove) = payload.remove {
+        let headers = session.req_header_mut();
+        for header in remove {
+            let _ = headers.remove_header(&header);
+        }
+    }
     Ok(())
 }

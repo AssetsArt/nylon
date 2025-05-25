@@ -20,6 +20,13 @@ fn try_builtin(name: &str) -> Option<BuiltinPlugin> {
     }
 }
 
+pub fn try_request_filter(name: &str) -> Option<BuiltinPlugin> {
+    match name {
+        "RequestHeaderModifier" => Some(BuiltinPlugin::RequestHeaderModifier),
+        _ => None,
+    }
+}
+
 pub fn try_response_filter(name: &str) -> Option<BuiltinPlugin> {
     match name {
         "ResponseHeaderModifier" => Some(BuiltinPlugin::ResponseHeaderModifier),
@@ -46,7 +53,13 @@ pub fn run_middleware(
                 // tracing::debug!("Running response header modifier plugin: {}", plugin_name);
                 // tracing::debug!("Payload: {:#?}", payload);
                 // tracing::debug!("Upstream response: {:#?}", upstream_response);
-                native::header_modifier::response(ctx, upstream_response, payload, payload_ast)?;
+                native::header_modifier::response(
+                    ctx,
+                    session,
+                    upstream_response,
+                    payload,
+                    payload_ast,
+                )?;
             }
         }
         _ => {

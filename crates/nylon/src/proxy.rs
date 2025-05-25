@@ -1,7 +1,7 @@
 use crate::{backend, context::NylonContextExt, response::Response, runtime::NylonRuntime};
 use async_trait::async_trait;
 use nylon_error::NylonError;
-use nylon_plugin::{run_middleware, try_response_filter};
+use nylon_plugin::{run_middleware, try_request_filter, try_response_filter};
 use nylon_types::{context::NylonContext, services::ServiceType};
 use pingora::{
     ErrorType,
@@ -45,7 +45,15 @@ impl ProxyHttp for NylonRuntime {
             .route_middleware
             .iter()
             .flatten()
-            .chain(route.path_middleware.iter().flatten());
+            .chain(route.path_middleware.iter().flatten())
+            .filter(|m| {
+                if let Some(name) = m.0.plugin.as_ref() {
+                    return try_request_filter(name).is_some();
+                } else if m.0.request_filter.is_some() {
+                    return true;
+                }
+                false
+            });
         for middleware in middleware_items {
             let plugin_name = match &middleware.0.plugin {
                 Some(name) => name,
@@ -150,13 +158,12 @@ impl ProxyHttp for NylonRuntime {
             .filter(|m| {
                 if let Some(name) = m.0.plugin.as_ref() {
                     return try_response_filter(name).is_some();
-                } else if m.0.request_filter.is_some() {
+                } else if m.0.response_filter.is_some() {
                     return true;
                 }
                 false
             });
 
-        // tracing::debug!("[response_filter] middleware: {:#?}", middleware_items);
         for middleware in middleware_items {
             let plugin_name = match &middleware.0.plugin {
                 Some(name) => name,
@@ -189,10 +196,6 @@ impl ProxyHttp for NylonRuntime {
                 }
             }
         }
-
-        // if route.service_type == ServiceType::Plugin {
-        //     return Ok(());
-        // }
         Ok(())
     }
 }

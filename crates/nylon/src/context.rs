@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_types::context::NylonContext;
 use pingora::{lb::Backend, proxy::Session};
-use std::collections::HashMap;
 
 #[async_trait]
 pub trait NylonContextExt {
@@ -14,7 +13,6 @@ pub trait NylonContextExt {
 impl NylonContextExt for NylonContext {
     fn new() -> Self {
         Self {
-            headers: HashMap::new(),
             backend: Backend::new("127.0.0.1:80").expect("Unable to create backend"),
             client_ip: String::new(),
             route: None,
@@ -41,14 +39,6 @@ impl NylonContextExt for NylonContext {
                 ));
             }
         };
-
-        let headers = &session.req_header().headers;
-        for (name, value) in headers.iter() {
-            if let Ok(value_str) = value.to_str() {
-                self.headers.insert(name.to_string(), value_str.to_string());
-            }
-        }
-
         Ok(())
     }
 }
