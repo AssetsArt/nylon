@@ -78,6 +78,7 @@ impl ProxyHttp for NylonRuntime {
         }
 
         if route.service_type == ServiceType::Plugin {
+            ctx.route = Some(route);
             return Ok(true);
         } else {
             let http_service = match nylon_store::lb_backends::get(&route.service).await {
@@ -101,6 +102,7 @@ impl ProxyHttp for NylonRuntime {
                 }
             };
             // next phase will be handled by upstream_peer
+            ctx.route = Some(route);
             Ok(false)
         }
     }

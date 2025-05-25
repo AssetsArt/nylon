@@ -17,6 +17,7 @@ impl NylonContextExt for NylonContext {
             headers: HashMap::new(),
             backend: Backend::new("127.0.0.1:80").expect("Unable to create backend"),
             client_ip: String::new(),
+            route: None,
         }
     }
 

@@ -2,22 +2,14 @@
 use crate as store;
 use nylon_error::NylonError;
 use nylon_types::{
-    route::{MiddlewareItem, RouteConfig},
-    services::{ServiceItem, ServiceType},
+    context::Route,
+    route::RouteConfig,
+    services::ServiceItem,
     template::{Expr, extract_and_parse_templates, walk_json},
 };
 use pingora::proxy::Session;
 use serde_json::Value;
 use std::collections::HashMap;
-
-#[derive(Debug, Clone)]
-pub struct Route {
-    pub service: String,
-    pub service_type: ServiceType,
-    pub rewrite: Option<String>,
-    pub route_middleware: Option<Vec<(MiddlewareItem, Option<HashMap<String, Vec<Expr>>>)>>,
-    pub path_middleware: Option<Vec<(MiddlewareItem, Option<HashMap<String, Vec<Expr>>>)>>,
-}
 
 pub fn store(
     routes: Vec<&RouteConfig>,
