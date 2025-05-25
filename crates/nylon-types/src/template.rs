@@ -93,10 +93,17 @@ fn parse_func_or_var<I: Iterator<Item = char>>(chars: &mut std::iter::Peekable<I
             }
             if let Some(expr) = parse_expr(chars) {
                 args.push(expr);
+            } else {
+                chars.next();
+                return None;
             }
+
             skip_whitespace(chars);
             if chars.peek() == Some(&',') {
                 chars.next();
+            } else if chars.peek() != Some(&')') {
+                chars.next();
+                return None;
             }
         }
         Some(Expr::Func { name, args })
@@ -240,6 +247,14 @@ pub fn eval_expr(expr: &Expr, headers: &RequestHeader, ctx: &NylonContext) -> St
                 } else {
                     String::new()
                 }
+            },
+            "concat" => {
+                // Concatenate strings: concat('foo', uuid(v4)) -> "foo-123e4567-e89b-12d3-a456-426614174000"
+                let mut result = String::new();
+                for arg in args {
+                    result.push_str(&eval_expr(arg, headers, ctx));
+                }
+                result
             }
             "upper" => {
                 // Convert to uppercase: upper('someString')
