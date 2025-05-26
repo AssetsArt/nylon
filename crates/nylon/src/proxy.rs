@@ -202,4 +202,33 @@ impl ProxyHttp for NylonRuntime {
         }
         Ok(())
     }
+
+    async fn connected_to_upstream(
+        &self,
+        _session: &mut Session,
+        _reused: bool,
+        _peer: &HttpPeer,
+        #[cfg(unix)] _fd: std::os::unix::io::RawFd,
+        #[cfg(windows)] _sock: std::os::windows::io::RawSocket,
+        _digest: Option<&pingora::protocols::Digest>,
+        _ctx: &mut Self::CTX,
+    ) -> pingora::Result<()>
+    where
+        Self::CTX: Send + Sync,
+    {
+        // println!("connected_to_upstream");
+        // println!("reused: {}", _reused);
+        // println!("peer: {:#?}", _peer);
+        // println!("fd: {}", _fd);
+        // println!("digest: {:#?}", _digest);
+        Ok(())
+    }
+
+    async fn logging(&self, _session: &mut Session, _e: Option<&pingora::Error>, _ctx: &mut Self::CTX)
+    where
+        Self::CTX: Send + Sync,
+    {
+        // println!("logging");
+        // println!("e: {:#?}", _e);
+    }
 }

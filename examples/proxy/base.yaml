@@ -1,5 +1,19 @@
 header_selector: x-nylon-proxy
 
+logs:
+  - name: access
+    path: ./logs/access.log
+    format:
+      timestamp: "${timestamp()}"
+      client_ip: "${request(client_ip)}"
+      method: "${request(method)}"
+      path: "${request(path)}"
+      status: "${response(status)}"
+      response_time: "${response(duration)}"
+      response_size: "${response(size)}"
+      referer: "${header(referer)}"
+      user_agent: "${header(user-agent)}"
+    
 # plugins:
 #   - name: go-users
 #     type: ffi
@@ -47,7 +61,7 @@ middleware_groups:
           - name: x-timestamp
             value: "${timestamp()}"
           - name: x-forwarded-for
-            value: "${var(client_ip)}-${eq(var(client_ip), '127.0.0.1', 'local')}"
+            value: "${request(client_ip)}-${eq(request(client_ip), '127.0.0.1', 'local')}"
           - name: x-host
             value: "${header(host)}"
     - plugin: ResponseHeaderModifier

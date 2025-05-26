@@ -19,8 +19,8 @@ enum PathPart {
 pub enum Expr {
     /// A literal string value
     Literal(String),
-    /// A variable reference
-    Var(String),
+    /// A request variable reference
+    Request(String),
     /// A function call with name and arguments
     Func { name: String, args: Vec<Expr> },
 }
@@ -108,7 +108,7 @@ fn parse_func_or_var<I: Iterator<Item = char>>(chars: &mut std::iter::Peekable<I
         }
         Some(Expr::Func { name, args })
     } else {
-        Some(Expr::Var(name))
+        Some(Expr::Request(name))
     }
 }
 
@@ -162,13 +162,13 @@ pub fn extract_and_parse_templates(input: &str) -> Result<Vec<Expr>, NylonError>
 pub fn eval_expr(expr: &Expr, headers: &RequestHeader, ctx: &NylonContext) -> String {
     match expr {
         Expr::Literal(s) => s.clone(),
-        Expr::Var(name) => match name.as_str() {
+        Expr::Request(name) => match name.as_str() {
             "client_ip" => ctx.client_ip.clone(),
             _ => String::new(), // fallback
         },
         Expr::Func { name, args } => match name.as_str() {
             "header" => {
-                if let Some(Expr::Var(h)) = args.first() {
+                if let Some(Expr::Request(h)) = args.first() {
                     match headers.headers.get(h) {
                         Some(value) => value.to_str().unwrap_or_default().to_string(),
                         None => String::new(),
@@ -177,8 +177,8 @@ pub fn eval_expr(expr: &Expr, headers: &RequestHeader, ctx: &NylonContext) -> St
                     String::new()
                 }
             }
-            "var" => {
-                if let Some(Expr::Var(v)) = args.first() {
+            "request" => {
+                if let Some(Expr::Request(v)) = args.first() {
                     match v.as_str() {
                         "client_ip" => ctx.client_ip.clone(),
                         _ => String::new(),
@@ -188,7 +188,7 @@ pub fn eval_expr(expr: &Expr, headers: &RequestHeader, ctx: &NylonContext) -> St
                 }
             }
             "env" => {
-                if let Some(Expr::Var(v)) = args.first() {
+                if let Some(Expr::Request(v)) = args.first() {
                     std::env::var(v).unwrap_or_default()
                 } else {
                     String::new()
@@ -298,7 +298,7 @@ pub fn eval_expr(expr: &Expr, headers: &RequestHeader, ctx: &NylonContext) -> St
             "timestamp" => Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             "uuid" => {
                 // uuid(v4), uuid(v7)
-                if let Some(Expr::Var(v)) = args.first() {
+                if let Some(Expr::Request(v)) = args.first() {
                     if v == "v4" {
                         Uuid::new_v4().to_string()
                     } else if v == "v7" {
@@ -493,27 +493,27 @@ mod tests {
     }
 
     #[test]
-    fn test_eval_var_direct() {
+    fn test_eval_request_direct() {
         let (headers, ctx) = mock_ctx();
         assert_eq!(eval_str("client_ip", &headers, &ctx), "127.0.0.1");
         assert_eq!(
             eval_str("request_id", &headers, &ctx),
             "",
-            "Expr::Var(\"request_id\") should be empty per current code"
+            "Expr::Request(\"request_id\") should be empty per current code"
         );
         assert_eq!(eval_str("unknown_variable", &headers, &ctx), "");
     }
 
     #[test]
-    fn test_eval_func_var_function() {
+    fn test_eval_func_request_function() {
         let (headers, ctx) = mock_ctx();
-        assert_eq!(eval_str("var(client_ip)", &headers, &ctx), "127.0.0.1");
+        assert_eq!(eval_str("request(client_ip)", &headers, &ctx), "127.0.0.1");
         assert_eq!(
-            eval_str("var(request_id)", &headers, &ctx),
+            eval_str("request(request_id)", &headers, &ctx),
             "",
-            "var(request_id) should be empty per current code"
+            "request(request_id) should be empty per current code"
         );
-        assert_eq!(eval_str("var(something_else)", &headers, &ctx), "");
+        assert_eq!(eval_str("request(something_else)", &headers, &ctx), "");
     }
 
     #[test]
@@ -691,7 +691,7 @@ mod tests {
         );
         assert_eq!(
             parse_expression("myVar"),
-            Some(Expr::Var("myVar".to_string()))
+            Some(Expr::Request("myVar".to_string()))
         );
         assert_eq!(
             parse_expression("do()"),
@@ -706,7 +706,7 @@ mod tests {
                 name: "do".to_string(),
                 args: vec![
                     Expr::Literal("arg1".to_string()),
-                    Expr::Var("argVar".to_string())
+                    Expr::Request("argVar".to_string())
                 ]
             })
         );
@@ -717,7 +717,7 @@ mod tests {
                 args: vec![
                     Expr::Func {
                         name: "inner".to_string(),
-                        args: vec![Expr::Var("var".to_string())]
+                        args: vec![Expr::Request("var".to_string())]
                     },
                     Expr::Literal("lit".to_string())
                 ]
@@ -746,11 +746,11 @@ mod tests {
         if let Expr::Func { name, args } = &exprs1[1] {
             assert_eq!(name, "upper");
             assert_eq!(args.len(), 1);
-            assert_eq!(args[0], Expr::Var("world_var".to_string()));
+            assert_eq!(args[0], Expr::Request("world_var".to_string()));
         } else {
             panic!("Expected Func 'upper'");
         }
-        assert_eq!(exprs1[3], Expr::Var("client_ip".to_string()));
+        assert_eq!(exprs1[3], Expr::Request("client_ip".to_string()));
 
         let res2 = extract_and_parse_templates("No templates.").unwrap();
         assert_eq!(res2, vec![Expr::Literal("No templates.".to_string())]);
@@ -758,7 +758,7 @@ mod tests {
         let res3 = extract_and_parse_templates("${var1}${var2}").unwrap();
         assert_eq!(
             res3,
-            vec![Expr::Var("var1".to_string()), Expr::Var("var2".to_string())]
+            vec![Expr::Request("var1".to_string()), Expr::Request("var2".to_string())]
         );
 
         let res4 = extract_and_parse_templates("").unwrap();
