@@ -3,7 +3,7 @@ use crate as store;
 use nylon_error::NylonError;
 use nylon_types::{
     context::Route,
-    route::RouteConfig,
+    route::{MiddlewareItem, RouteConfig},
     services::ServiceItem,
     template::{Expr, extract_and_parse_templates, walk_json},
 };
@@ -14,8 +14,9 @@ use std::collections::HashMap;
 pub fn store(
     routes: Vec<&RouteConfig>,
     services: &Vec<&ServiceItem>,
-    // plugin_groups: // todo
+    middleware_groups: &Option<HashMap<String, Vec<MiddlewareItem>>>,
 ) -> Result<(), NylonError> {
+    let middleware_groups = middleware_groups.clone().unwrap_or_default();
     let mut store_route = HashMap::new();
     let mut globa_routes_matchit = HashMap::new();
     for route in routes {
@@ -39,23 +40,33 @@ pub fn store(
         }
 
         let mut route_middleware = vec![];
+        let parsed_middleware =
+            |middleware: Vec<MiddlewareItem>,
+             to: &mut Vec<(MiddlewareItem, Option<HashMap<String, Vec<Expr>>>)>| {
+                for m in middleware {
+                    let mut payload_ast = HashMap::<String, Vec<Expr>>::new();
+                    if let Some(payload) = &m.payload {
+                        walk_json(payload, "".to_string(), &mut |path, val| {
+                            if let Some(s) = val.as_str() {
+                                let ast = extract_and_parse_templates(s).unwrap_or_default();
+                                if !ast.is_empty() {
+                                    payload_ast.insert(path, ast);
+                                }
+                            }
+                        });
+                    }
+                    to.push((m, Some(payload_ast)));
+                }
+            };
         if let Some(middleware) = &route.middleware {
             for m in middleware {
-                let mut payload_ast = HashMap::<String, Vec<Expr>>::new();
-                if let Some(_group) = &m.group {
-                    todo!("plugin group");
+                if let Some(group) = &m.group {
+                    if let Some(plugins) = middleware_groups.get(group) {
+                        parsed_middleware(plugins.clone(), &mut route_middleware);
+                    }
+                    continue;
                 }
-                if let Some(payload) = &m.payload {
-                    walk_json(payload, "".to_string(), &mut |path, val| {
-                        if let Some(s) = val.as_str() {
-                            let ast = extract_and_parse_templates(s).unwrap_or_default();
-                            if !ast.is_empty() {
-                                payload_ast.insert(path, ast);
-                            }
-                        }
-                    });
-                }
-                route_middleware.push((m.clone(), Some(payload_ast)));
+                parsed_middleware(vec![m.clone()], &mut route_middleware);
             }
         }
 
@@ -89,27 +100,18 @@ pub fn store(
                 },
                 route_middleware: Some(route_middleware.clone()),
                 path_middleware: None,
-                // payload_ast: None,
             };
 
             if let Some(middleware) = &path.middleware {
                 let mut middleware_items = vec![];
                 for m in middleware {
-                    let mut payload_ast = HashMap::<String, Vec<Expr>>::new();
-                    if let Some(_group) = &m.group {
-                        todo!("plugin group");
+                    if let Some(group) = &m.group {
+                        if let Some(plugins) = middleware_groups.get(group) {
+                            parsed_middleware(plugins.clone(), &mut middleware_items);
+                        }
+                        continue;
                     }
-                    if let Some(payload) = &m.payload {
-                        walk_json(payload, "".to_string(), &mut |path, val| {
-                            if let Some(s) = val.as_str() {
-                                let ast = extract_and_parse_templates(s).unwrap_or_default();
-                                if !ast.is_empty() {
-                                    payload_ast.insert(path, ast);
-                                }
-                            }
-                        });
-                    }
-                    middleware_items.push((m.clone(), Some(payload_ast)));
+                    parsed_middleware(vec![m.clone()], &mut middleware_items);
                 }
                 service.path_middleware = Some(middleware_items);
             }

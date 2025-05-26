@@ -33,10 +33,29 @@ services:
         weight: 3
 
 
-  # - name: ffi-service
-  #   service_type: plugin
-  #   plugin:
-  #     name: ffi-plugin
-  #     entry: "sdk_handle_request"
-  #     payload:
-  #       debug: true
+middleware_groups:
+  header-modifier:
+    - plugin: RequestHeaderModifier
+      payload:
+        remove:
+          - x-version
+        set:
+          - name: x-hb-conf
+            value: "prefix->${env(HOMEBREW_PREFIX)}-${or(env(MY_APP_NAME), 'default')}"
+          - name: x-request-id
+            value: "${uuid(v7)}"
+          - name: x-timestamp
+            value: "${timestamp()}"
+          - name: x-forwarded-for
+            value: "${var(client_ip)}-${eq(var(client_ip), '127.0.0.1', 'local')}"
+          - name: x-host
+            value: "${header(host)}"
+    - plugin: ResponseHeaderModifier
+      payload:
+        set:
+          - name: x-request-id-false
+            value: "${or(header(x-request-id-false), concat('foo', '-', uuid(v4)))}"
+          - name: x-request-id
+            value: "${header(x-request-id)}"
+          - name: x-server
+            value: ${or(env(SERVER_NAME), 'my-server')}

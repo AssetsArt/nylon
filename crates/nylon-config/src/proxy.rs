@@ -197,6 +197,7 @@ impl ProxyConfigExt for ProxyConfig {
         store::routes::store(
             self.routes.iter().flatten().collect::<Vec<&RouteConfig>>(),
             &services,
+            &self.middleware_groups,
         )?;
 
         // store header selector
