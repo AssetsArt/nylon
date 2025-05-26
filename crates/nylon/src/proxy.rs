@@ -75,7 +75,9 @@ impl ProxyHttp for NylonRuntime {
                 ctx,
                 session,
                 None,
-            ) {
+            )
+            .await
+            {
                 Ok(_) => {}
                 Err(e) => {
                     return res
@@ -185,7 +187,9 @@ impl ProxyHttp for NylonRuntime {
                 ctx,
                 session,
                 Some(upstream_response),
-            ) {
+            )
+            .await
+            {
                 Ok(_) => {}
                 Err(e) => {
                     return Err(pingora::Error::because(

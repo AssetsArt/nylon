@@ -34,7 +34,7 @@ pub fn try_response_filter(name: &str) -> Option<BuiltinPlugin> {
     }
 }
 
-pub fn run_middleware(
+pub async fn run_middleware(
     plugin_name: &str,
     payload: &Option<Value>,
     payload_ast: &Option<HashMap<String, Vec<Expr>>>,
