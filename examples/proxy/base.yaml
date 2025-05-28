@@ -1,18 +1,18 @@
 header_selector: x-nylon-proxy
 
-logs:
-  - name: access
-    path: ./logs/access.log
-    format:
-      timestamp: "${timestamp()}"
-      client_ip: "${request(client_ip)}"
-      method: "${request(method)}"
-      path: "${request(path)}"
-      status: "${response(status)}"
-      response_time: "${response(duration)}"
-      response_size: "${response(size)}"
-      referer: "${header(referer)}"
-      user_agent: "${header(user-agent)}"
+# logs:
+#   - name: access
+#     path: ./logs/access.log
+#     format:
+#       timestamp: "${timestamp()}"
+#       client_ip: "${request(client_ip)}"
+#       method: "${request(method)}"
+#       path: "${request(path)}"
+#       status: "${response(status)}"
+#       response_time: "${response(duration)}"
+#       response_size: "${response(size)}"
+#       referer: "${header(referer)}"
+#       user_agent: "${header(user-agent)}"
     
 # plugins:
 #   - name: go-users
