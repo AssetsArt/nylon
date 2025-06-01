@@ -4,6 +4,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use nylon_error::NylonError;
+use nylon_plugin::loaders;
 use nylon_store as store;
 use nylon_types::{
     proxy::ProxyConfig,
@@ -207,6 +208,11 @@ impl ProxyConfigExt for ProxyConfig {
                 .clone()
                 .unwrap_or(store::DEFAULT_HEADER_SELECTOR.to_string()),
         );
+
+        // register plugins
+        for plugin in self.plugins.iter().flatten() {
+            loaders::load(plugin);
+        }
 
         Ok(())
     }

@@ -14,17 +14,23 @@ header_selector: x-nylon-proxy
 #       referer: "${header(referer)}"
 #       user_agent: "${header(user-agent)}"
     
-# plugins:
-#   - name: go-users
-#     type: ffi
-#     file: ./examples/plugin_sdk.so
-#     entry:
-#       - sdk_handle_request
-#     life_cycle:
-#       setup: true
-#       shutdown: true
+plugins:
+  - name: plugin_sdk
+    type: ffi
+    file: ./target/examples/go/plugin_sdk.so
+    entry:
+      - sdk_handle_request
+    # life_cycle:
+    #   setup: true
+    #   shutdown: true
 
 services:
+  - name: go-plugin
+    service_type: plugin
+    plugin:
+      name: plugin_sdk
+      entry: sdk_handle_request
+
   - name: http-service
     service_type: http
     algorithm: round_robin # Options: round_robin, random, consistent, weighted

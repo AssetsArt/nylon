@@ -15,6 +15,8 @@ pub const KEY_LB_BACKENDS: &str = "lb_backends";
 pub const KEY_ROUTES: &str = "routes";
 pub const KEY_ROUTES_MATCHIT: &str = "routes_matchit";
 pub const KEY_HEADER_SELECTOR: &str = "header_selector";
+pub const KEY_LIBRARY_FILE: &str = "library_file";
+pub const KEY_PLUGINS: &str = "plugins";
 
 // storage for global variables
 static GLOBAL_STORE: Lazy<DashMap<String, Box<dyn Any + Send + Sync>>> = Lazy::new(DashMap::new);

@@ -18,16 +18,16 @@ routes:
           - POST
           - OPTIONS
         service:
-          name: http-service
-      - path: /api/v1/{name}
-        middleware:
-          - plugin: RequestHeaderModifier
-            payload:
-              set:
-                - name: x-route-name
-                  value: "path 2"
-        service:
-          name: http-service
+          name: go-plugin
+      # - path: /api/v1/{name}
+      #   middleware:
+      #     - plugin: RequestHeaderModifier
+      #       payload:
+      #         set:
+      #           - name: x-route-name
+      #             value: "path 2"
+      #   service:
+      #     name: http-service
 
 # header route
   - route:

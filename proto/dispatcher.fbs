@@ -1,0 +1,9 @@
+namespace nylon_dispatcher;
+
+table NylonDispatcher {
+  request_id: string (required);
+  name: string;
+  data: [ubyte] (required);
+}
+
+root_type NylonDispatcher;

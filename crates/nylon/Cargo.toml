@@ -10,6 +10,7 @@ nylon-error = { path = "../nylon-error" }
 nylon-types = { path = "../nylon-types" }
 nylon-store = { path = "../nylon-store" }
 nylon-plugin = { path = "../nylon-plugin" }
+nylon-sdk = { path = "../../sdk/rust" }
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 pingora = { workspace = true }
@@ -19,3 +20,4 @@ tokio = { workspace = true }
 bytes = { workspace = true }
 serde_json = { workspace = true }
 http = { workspace = true }
+flatbuffers = { workspace = true }

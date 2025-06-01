@@ -3,7 +3,7 @@ use crate as store;
 use nylon_error::NylonError;
 use nylon_types::{
     context::Route,
-    route::{MiddlewareItem, RouteConfig, PathConfig},
+    route::{MiddlewareItem, PathConfig, RouteConfig},
     services::ServiceItem,
     template::{Expr, extract_and_parse_templates, walk_json},
 };
@@ -43,7 +43,8 @@ pub fn store(
     for route in routes {
         process_route_matcher(route, &mut store_route)?;
         let route_middleware = process_route_middleware(route, &middleware_groups)?;
-        let matchit_route = create_matchit_router(route, services, &route_middleware, &middleware_groups)?;
+        let matchit_route =
+            create_matchit_router(route, services, &route_middleware, &middleware_groups)?;
         globa_routes_matchit.insert(route.name.clone(), matchit_route);
     }
 
@@ -52,7 +53,10 @@ pub fn store(
     Ok(())
 }
 
-fn process_route_matcher(route: &RouteConfig, store_route: &mut HashMap<String, String>) -> Result<(), NylonError> {
+fn process_route_matcher(
+    route: &RouteConfig,
+    store_route: &mut HashMap<String, String>,
+) -> Result<(), NylonError> {
     match route.route.kind.as_str() {
         "host" => {
             for host in route.route.value.split('|') {
@@ -100,7 +104,7 @@ fn create_matchit_router(
     middleware_groups: &HashMap<String, Vec<MiddlewareItem>>,
 ) -> Result<matchit::Router<Route>, NylonError> {
     let mut matchit_route = matchit::Router::<Route>::new();
-    
+
     for path in &route.paths {
         let match_path = extract_match_path(path)?;
         let methods = path.methods.clone();
@@ -156,18 +160,15 @@ fn create_route_service(
     route_middleware: &[(MiddlewareItem, Option<HashMap<String, Vec<Expr>>>)],
     middleware_groups: &HashMap<String, Vec<MiddlewareItem>>,
 ) -> Result<Route, NylonError> {
-    let mut service = Route {
-        service: path.service.name.clone(),
+    let service = services
+        .iter()
+        .find(|s| s.name == path.service.name)
+        .ok_or_else(|| {
+            NylonError::ConfigError(format!("Service {} not found", path.service.name))
+        })?;
+    let mut route = Route {
+        service: service.to_owned().clone(),
         rewrite: path.service.rewrite.clone(),
-        service_type: match services.iter().find(|s| s.name == path.service.name) {
-            Some(s) => s.service_type.clone(),
-            None => {
-                return Err(NylonError::ConfigError(format!(
-                    "Service {} not found",
-                    path.service.name
-                )));
-            }
-        },
         route_middleware: Some(route_middleware.to_vec()),
         path_middleware: None,
     };
@@ -183,10 +184,10 @@ fn create_route_service(
             }
             parsed_middleware(vec![m.clone()], &mut middleware_items);
         }
-        service.path_middleware = Some(middleware_items);
+        route.path_middleware = Some(middleware_items);
     }
 
-    Ok(service)
+    Ok(route)
 }
 
 pub fn find_route(session: &Session) -> Result<(Route, HashMap<String, String>), NylonError> {
@@ -237,9 +238,9 @@ fn get_request_info(session: &Session) -> Result<(String, String, String), Nylon
 }
 
 fn get_http2_request_info(session: &Session) -> Result<(String, String, String), NylonError> {
-    let s = session.as_http2().ok_or_else(|| {
-        NylonError::RouteNotFound("Failed to interpret session as HTTP/2".into())
-    })?;
+    let s = session
+        .as_http2()
+        .ok_or_else(|| NylonError::RouteNotFound("Failed to interpret session as HTTP/2".into()))?;
 
     Ok((
         s.req_header().uri.path().to_string(),

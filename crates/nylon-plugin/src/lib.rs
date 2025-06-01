@@ -4,6 +4,8 @@ use pingora::{http::ResponseHeader, proxy::Session};
 use serde_json::Value;
 use std::collections::HashMap;
 
+pub mod dispatcher;
+pub mod loaders;
 mod native;
 
 pub enum BuiltinPlugin {
@@ -41,18 +43,14 @@ pub async fn run_middleware(
     ctx: &mut NylonContext,
     session: &mut Session,
     upstream_response: Option<&mut ResponseHeader>,
+    _dispatcher: Option<&mut [u8]>,
 ) -> Result<(), NylonError> {
     match try_builtin(plugin_name) {
         Some(BuiltinPlugin::RequestHeaderModifier) => {
-            // tracing::debug!("Running request header modifier plugin: {}", plugin_name);
-            // tracing::debug!("Payload: {:#?}", payload);
             native::header_modifier::request(ctx, session, payload, payload_ast)?;
         }
         Some(BuiltinPlugin::ResponseHeaderModifier) => {
             if let Some(upstream_response) = upstream_response {
-                // tracing::debug!("Running response header modifier plugin: {}", plugin_name);
-                // tracing::debug!("Payload: {:#?}", payload);
-                // tracing::debug!("Upstream response: {:#?}", upstream_response);
                 native::header_modifier::response(
                     ctx,
                     session,

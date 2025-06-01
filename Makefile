@@ -9,5 +9,14 @@ dev:
 	done
 	RUST_BACKTRACE=1 RUST_LOG="info,warn,debug" cargo watch -w crates -w examples -w proto -q -c -x "run -- run --config ./examples/config.yaml"
 
+generate:
+	flatc --rust -o sdk/rust/src/fbs proto/dispatcher.fbs
+	flatc --rust -o sdk/rust/src/fbs proto/http_context.fbs
+	flatc --go -o sdk/go/fbs proto/dispatcher.fbs
+	flatc --go -o sdk/go/fbs proto/http_context.fbs
+
+build-examples:
+	cd examples/go && go build -buildmode=c-shared -o ./../../target/examples/go/plugin_sdk.so
+
 build:
 	cargo build --release

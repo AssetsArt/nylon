@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_types::context::NylonContext;
-use pingora::{lb::Backend, proxy::Session};
+use pingora::proxy::Session;
 
 #[async_trait]
 pub trait NylonContextExt {
@@ -12,11 +12,7 @@ pub trait NylonContextExt {
 #[async_trait]
 impl NylonContextExt for NylonContext {
     fn new() -> Self {
-        Self {
-            backend: Backend::new("127.0.0.1:80").expect("Unable to create backend"),
-            client_ip: String::new(),
-            route: None,
-        }
+        Self::default()
     }
 
     async fn parse_request(&mut self, session: &mut Session) -> Result<(), NylonError> {

@@ -1,0 +1,28 @@
+namespace nylon_http_context;
+
+table Header {
+  key: string (required);
+  value: string (required);
+}
+
+table NylonHttpRequest {
+  method: string (required);
+  path: string (required);
+  query: string;
+  headers: [Header];
+  body: [ubyte];
+}
+
+table NylonHttpResponse {
+  status: int;
+  headers: [Header];
+  body: [ubyte];
+}
+
+table NylonHttpContext {
+  end: bool;
+  request: NylonHttpRequest (required);
+  response: NylonHttpResponse (required);
+}
+
+root_type NylonHttpContext;

@@ -7,6 +7,7 @@ edition = "2024"
 nylon-error = { path = "../nylon-error" }
 nylon-store = { path = "../nylon-store" }
 nylon-types = { path = "../nylon-types" }
+nylon-plugin = { path = "../nylon-plugin" }
 serde_yml = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

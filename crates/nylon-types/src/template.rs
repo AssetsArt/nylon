@@ -758,7 +758,10 @@ mod tests {
         let res3 = extract_and_parse_templates("${var1}${var2}").unwrap();
         assert_eq!(
             res3,
-            vec![Expr::Request("var1".to_string()), Expr::Request("var2".to_string())]
+            vec![
+                Expr::Request("var1".to_string()),
+                Expr::Request("var2".to_string())
+            ]
         );
 
         let res4 = extract_and_parse_templates("").unwrap();
