@@ -585,9 +585,8 @@ pub mod nylon_http_context {
     }
 
     impl<'a> NylonHttpContext<'a> {
-        pub const VT_END: flatbuffers::VOffsetT = 4;
-        pub const VT_REQUEST: flatbuffers::VOffsetT = 6;
-        pub const VT_RESPONSE: flatbuffers::VOffsetT = 8;
+        pub const VT_REQUEST: flatbuffers::VOffsetT = 4;
+        pub const VT_RESPONSE: flatbuffers::VOffsetT = 6;
 
         #[inline]
         pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -610,21 +609,9 @@ pub mod nylon_http_context {
             if let Some(x) = args.request {
                 builder.add_request(x);
             }
-            builder.add_end(args.end);
             builder.finish()
         }
 
-        #[inline]
-        pub fn end(&self) -> bool {
-            // Safety:
-            // Created from valid Table for this object
-            // which contains a valid value in this slot
-            unsafe {
-                self._tab
-                    .get::<bool>(NylonHttpContext::VT_END, Some(false))
-                    .unwrap()
-            }
-        }
         #[inline]
         pub fn request(&self) -> NylonHttpRequest<'a> {
             // Safety:
@@ -663,7 +650,6 @@ pub mod nylon_http_context {
         ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
             use self::flatbuffers::Verifiable;
             v.visit_table(pos)?
-                .visit_field::<bool>("end", Self::VT_END, false)?
                 .visit_field::<flatbuffers::ForwardsUOffset<NylonHttpRequest>>(
                     "request",
                     Self::VT_REQUEST,
@@ -679,7 +665,6 @@ pub mod nylon_http_context {
         }
     }
     pub struct NylonHttpContextArgs<'a> {
-        pub end: bool,
         pub request: Option<flatbuffers::WIPOffset<NylonHttpRequest<'a>>>,
         pub response: Option<flatbuffers::WIPOffset<NylonHttpResponse<'a>>>,
     }
@@ -687,7 +672,6 @@ pub mod nylon_http_context {
         #[inline]
         fn default() -> Self {
             NylonHttpContextArgs {
-                end: false,
                 request: None,  // required field
                 response: None, // required field
             }
@@ -699,11 +683,6 @@ pub mod nylon_http_context {
         start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
     }
     impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> NylonHttpContextBuilder<'a, 'b, A> {
-        #[inline]
-        pub fn add_end(&mut self, end: bool) {
-            self.fbb_
-                .push_slot::<bool>(NylonHttpContext::VT_END, end, false);
-        }
         #[inline]
         pub fn add_request(&mut self, request: flatbuffers::WIPOffset<NylonHttpRequest<'b>>) {
             self.fbb_
@@ -744,7 +723,6 @@ pub mod nylon_http_context {
     impl core::fmt::Debug for NylonHttpContext<'_> {
         fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             let mut ds = f.debug_struct("NylonHttpContext");
-            ds.field("end", &self.end());
             ds.field("request", &self.request());
             ds.field("response", &self.response());
             ds.finish()

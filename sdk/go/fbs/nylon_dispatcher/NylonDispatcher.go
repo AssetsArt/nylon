@@ -41,15 +41,19 @@ func (rcv *NylonDispatcher) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *NylonDispatcher) RequestId() []byte {
+func (rcv *NylonDispatcher) HttpEnd() bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
-		return rcv._tab.ByteVector(o + rcv._tab.Pos)
+		return rcv._tab.GetBool(o + rcv._tab.Pos)
 	}
-	return nil
+	return false
 }
 
-func (rcv *NylonDispatcher) Name() []byte {
+func (rcv *NylonDispatcher) MutateHttpEnd(n bool) bool {
+	return rcv._tab.MutateBoolSlot(4, n)
+}
+
+func (rcv *NylonDispatcher) RequestId() []byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
@@ -57,8 +61,24 @@ func (rcv *NylonDispatcher) Name() []byte {
 	return nil
 }
 
-func (rcv *NylonDispatcher) Data(j int) byte {
+func (rcv *NylonDispatcher) Name() []byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	if o != 0 {
+		return rcv._tab.ByteVector(o + rcv._tab.Pos)
+	}
+	return nil
+}
+
+func (rcv *NylonDispatcher) Entry() []byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
+	if o != 0 {
+		return rcv._tab.ByteVector(o + rcv._tab.Pos)
+	}
+	return nil
+}
+
+func (rcv *NylonDispatcher) Data(j int) byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
@@ -67,7 +87,7 @@ func (rcv *NylonDispatcher) Data(j int) byte {
 }
 
 func (rcv *NylonDispatcher) DataLength() int {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		return rcv._tab.VectorLen(o)
 	}
@@ -75,7 +95,7 @@ func (rcv *NylonDispatcher) DataLength() int {
 }
 
 func (rcv *NylonDispatcher) DataBytes() []byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
@@ -83,7 +103,7 @@ func (rcv *NylonDispatcher) DataBytes() []byte {
 }
 
 func (rcv *NylonDispatcher) MutateData(j int, n byte) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
@@ -92,16 +112,22 @@ func (rcv *NylonDispatcher) MutateData(j int, n byte) bool {
 }
 
 func NylonDispatcherStart(builder *flatbuffers.Builder) {
-	builder.StartObject(3)
+	builder.StartObject(5)
+}
+func NylonDispatcherAddHttpEnd(builder *flatbuffers.Builder, httpEnd bool) {
+	builder.PrependBoolSlot(0, httpEnd, false)
 }
 func NylonDispatcherAddRequestId(builder *flatbuffers.Builder, requestId flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(requestId), 0)
+	builder.PrependUOffsetTSlot(1, flatbuffers.UOffsetT(requestId), 0)
 }
 func NylonDispatcherAddName(builder *flatbuffers.Builder, name flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(1, flatbuffers.UOffsetT(name), 0)
+	builder.PrependUOffsetTSlot(2, flatbuffers.UOffsetT(name), 0)
+}
+func NylonDispatcherAddEntry(builder *flatbuffers.Builder, entry flatbuffers.UOffsetT) {
+	builder.PrependUOffsetTSlot(3, flatbuffers.UOffsetT(entry), 0)
 }
 func NylonDispatcherAddData(builder *flatbuffers.Builder, data flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(2, flatbuffers.UOffsetT(data), 0)
+	builder.PrependUOffsetTSlot(4, flatbuffers.UOffsetT(data), 0)
 }
 func NylonDispatcherStartDataVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(1, numElems, 1)

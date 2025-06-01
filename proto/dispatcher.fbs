@@ -1,8 +1,10 @@
 namespace nylon_dispatcher;
 
 table NylonDispatcher {
+  http_end: bool;
   request_id: string (required);
   name: string;
+  entry: string;
   data: [ubyte] (required);
 }
 

@@ -67,7 +67,6 @@ impl ProxyHttp for NylonRuntime {
         };
         let resp_offset = NylonHttpResponse::create(&mut fbs, response);
         let dispatcher_args = &NylonHttpContextArgs {
-            end: true,
             request: Some(req_offset),
             response: Some(resp_offset),
         };
@@ -82,8 +81,10 @@ impl ProxyHttp for NylonRuntime {
         let dispatcher = NylonDispatcher::create(
             &mut fbs,
             &NylonDispatcherArgs {
+                http_end: false,
                 request_id: Some(request_id),
                 name: None,
+                entry: None,
                 data: Some(data_vec),
             },
         );
@@ -148,6 +149,9 @@ impl ProxyHttp for NylonRuntime {
                     use nylon_sdk::fbs::http_context_generated::nylon_http_context::root_as_nylon_http_context;
                     let dispatcher =
                         root_as_nylon_dispatcher(buf.as_slice()).expect("invalid dispatcher");
+
+                    println!("http end: {}", dispatcher.http_end());
+
                     let http_ctx = root_as_nylon_http_context(dispatcher.data().bytes())
                         .expect("invalid http context");
                     let body = http_ctx.response().body().unwrap().bytes().to_vec();

@@ -35,9 +35,11 @@ pub mod nylon_dispatcher {
     }
 
     impl<'a> NylonDispatcher<'a> {
-        pub const VT_REQUEST_ID: flatbuffers::VOffsetT = 4;
-        pub const VT_NAME: flatbuffers::VOffsetT = 6;
-        pub const VT_DATA: flatbuffers::VOffsetT = 8;
+        pub const VT_HTTP_END: flatbuffers::VOffsetT = 4;
+        pub const VT_REQUEST_ID: flatbuffers::VOffsetT = 6;
+        pub const VT_NAME: flatbuffers::VOffsetT = 8;
+        pub const VT_ENTRY: flatbuffers::VOffsetT = 10;
+        pub const VT_DATA: flatbuffers::VOffsetT = 12;
 
         #[inline]
         pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -57,15 +59,30 @@ pub mod nylon_dispatcher {
             if let Some(x) = args.data {
                 builder.add_data(x);
             }
+            if let Some(x) = args.entry {
+                builder.add_entry(x);
+            }
             if let Some(x) = args.name {
                 builder.add_name(x);
             }
             if let Some(x) = args.request_id {
                 builder.add_request_id(x);
             }
+            builder.add_http_end(args.http_end);
             builder.finish()
         }
 
+        #[inline]
+        pub fn http_end(&self) -> bool {
+            // Safety:
+            // Created from valid Table for this object
+            // which contains a valid value in this slot
+            unsafe {
+                self._tab
+                    .get::<bool>(NylonDispatcher::VT_HTTP_END, Some(false))
+                    .unwrap()
+            }
+        }
         #[inline]
         pub fn request_id(&self) -> &'a str {
             // Safety:
@@ -85,6 +102,16 @@ pub mod nylon_dispatcher {
             unsafe {
                 self._tab
                     .get::<flatbuffers::ForwardsUOffset<&str>>(NylonDispatcher::VT_NAME, None)
+            }
+        }
+        #[inline]
+        pub fn entry(&self) -> Option<&'a str> {
+            // Safety:
+            // Created from valid Table for this object
+            // which contains a valid value in this slot
+            unsafe {
+                self._tab
+                    .get::<flatbuffers::ForwardsUOffset<&str>>(NylonDispatcher::VT_ENTRY, None)
             }
         }
         #[inline]
@@ -111,12 +138,14 @@ pub mod nylon_dispatcher {
         ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
             use self::flatbuffers::Verifiable;
             v.visit_table(pos)?
+                .visit_field::<bool>("http_end", Self::VT_HTTP_END, false)?
                 .visit_field::<flatbuffers::ForwardsUOffset<&str>>(
                     "request_id",
                     Self::VT_REQUEST_ID,
                     true,
                 )?
                 .visit_field::<flatbuffers::ForwardsUOffset<&str>>("name", Self::VT_NAME, false)?
+                .visit_field::<flatbuffers::ForwardsUOffset<&str>>("entry", Self::VT_ENTRY, false)?
                 .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, u8>>>(
                     "data",
                     Self::VT_DATA,
@@ -127,16 +156,20 @@ pub mod nylon_dispatcher {
         }
     }
     pub struct NylonDispatcherArgs<'a> {
+        pub http_end: bool,
         pub request_id: Option<flatbuffers::WIPOffset<&'a str>>,
         pub name: Option<flatbuffers::WIPOffset<&'a str>>,
+        pub entry: Option<flatbuffers::WIPOffset<&'a str>>,
         pub data: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, u8>>>,
     }
     impl<'a> Default for NylonDispatcherArgs<'a> {
         #[inline]
         fn default() -> Self {
             NylonDispatcherArgs {
+                http_end: false,
                 request_id: None, // required field
                 name: None,
+                entry: None,
                 data: None, // required field
             }
         }
@@ -148,6 +181,11 @@ pub mod nylon_dispatcher {
     }
     impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> NylonDispatcherBuilder<'a, 'b, A> {
         #[inline]
+        pub fn add_http_end(&mut self, http_end: bool) {
+            self.fbb_
+                .push_slot::<bool>(NylonDispatcher::VT_HTTP_END, http_end, false);
+        }
+        #[inline]
         pub fn add_request_id(&mut self, request_id: flatbuffers::WIPOffset<&'b str>) {
             self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(
                 NylonDispatcher::VT_REQUEST_ID,
@@ -158,6 +196,11 @@ pub mod nylon_dispatcher {
         pub fn add_name(&mut self, name: flatbuffers::WIPOffset<&'b str>) {
             self.fbb_
                 .push_slot_always::<flatbuffers::WIPOffset<_>>(NylonDispatcher::VT_NAME, name);
+        }
+        #[inline]
+        pub fn add_entry(&mut self, entry: flatbuffers::WIPOffset<&'b str>) {
+            self.fbb_
+                .push_slot_always::<flatbuffers::WIPOffset<_>>(NylonDispatcher::VT_ENTRY, entry);
         }
         #[inline]
         pub fn add_data(&mut self, data: flatbuffers::WIPOffset<flatbuffers::Vector<'b, u8>>) {
@@ -187,8 +230,10 @@ pub mod nylon_dispatcher {
     impl core::fmt::Debug for NylonDispatcher<'_> {
         fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
             let mut ds = f.debug_struct("NylonDispatcher");
+            ds.field("http_end", &self.http_end());
             ds.field("request_id", &self.request_id());
             ds.field("name", &self.name());
+            ds.field("entry", &self.entry());
             ds.field("data", &self.data());
             ds.finish()
         }

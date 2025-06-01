@@ -3,7 +3,6 @@
 package main
 
 /*
-#include <stdlib.h>
 #include "../../c/nylon.h"
 */
 import "C"
@@ -31,15 +30,18 @@ func send_response(output []byte) C.FfiOutput {
 //export sdk_handle_request
 func sdk_handle_request(ptr *C.uchar, input_len C.int) C.FfiOutput {
 	input := C.GoBytes(unsafe.Pointer(ptr), C.int(input_len))
-	ctx := sdk.ParseContext(input)
-	http_ctx := sdk.SwitchHttpContext(ctx.DataBytes())
+	dispatcher := sdk.WrapDispatcher(input)
+	http_ctx := dispatcher.SwitchDataToHttpContext()
 
 	// create response
-	resp := sdk.NewHttpResponse(http_ctx).JSON(map[string]any{
+	http_ctx.Response.BodyJSON(map[string]any{
 		"ok": true,
 		"ts": time.Now().Unix(),
 	})
 
-	out := resp.Send(ctx)
-	return send_response(out)
+	// switch http context to bytes
+	dispatcher.SetHttpEnd(true)
+	dispatcher.SetData(http_ctx.SwitchHttpContextToBytes())
+
+	return send_response(dispatcher.ToBytes())
 }

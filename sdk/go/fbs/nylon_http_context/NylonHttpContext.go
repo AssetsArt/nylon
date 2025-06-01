@@ -41,20 +41,8 @@ func (rcv *NylonHttpContext) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *NylonHttpContext) End() bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
-	if o != 0 {
-		return rcv._tab.GetBool(o + rcv._tab.Pos)
-	}
-	return false
-}
-
-func (rcv *NylonHttpContext) MutateEnd(n bool) bool {
-	return rcv._tab.MutateBoolSlot(4, n)
-}
-
 func (rcv *NylonHttpContext) Request(obj *NylonHttpRequest) *NylonHttpRequest {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
 		x := rcv._tab.Indirect(o + rcv._tab.Pos)
 		if obj == nil {
@@ -67,7 +55,7 @@ func (rcv *NylonHttpContext) Request(obj *NylonHttpRequest) *NylonHttpRequest {
 }
 
 func (rcv *NylonHttpContext) Response(obj *NylonHttpResponse) *NylonHttpResponse {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(8))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		x := rcv._tab.Indirect(o + rcv._tab.Pos)
 		if obj == nil {
@@ -80,16 +68,13 @@ func (rcv *NylonHttpContext) Response(obj *NylonHttpResponse) *NylonHttpResponse
 }
 
 func NylonHttpContextStart(builder *flatbuffers.Builder) {
-	builder.StartObject(3)
-}
-func NylonHttpContextAddEnd(builder *flatbuffers.Builder, end bool) {
-	builder.PrependBoolSlot(0, end, false)
+	builder.StartObject(2)
 }
 func NylonHttpContextAddRequest(builder *flatbuffers.Builder, request flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(1, flatbuffers.UOffsetT(request), 0)
+	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(request), 0)
 }
 func NylonHttpContextAddResponse(builder *flatbuffers.Builder, response flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(2, flatbuffers.UOffsetT(response), 0)
+	builder.PrependUOffsetTSlot(1, flatbuffers.UOffsetT(response), 0)
 }
 func NylonHttpContextEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
