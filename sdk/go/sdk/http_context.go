@@ -75,7 +75,6 @@ func (r *Request) RemoveHeader(key string) {
 
 // Response
 type Response struct {
-	End     bool
 	Status  int
 	Headers map[string]string
 	Body    []byte
@@ -101,10 +100,6 @@ func WrapResponse(ctx *nylon_http_context.NylonHttpContext) *Response {
 }
 
 // Builder
-func (r *Response) SetEnd(end bool) {
-	r.End = end
-}
-
 func (r *Response) SetHeader(key, value string) {
 	r.Headers[key] = value
 }

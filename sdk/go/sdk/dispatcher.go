@@ -2,6 +2,8 @@ package sdk
 
 import "C"
 import (
+	"net/url"
+
 	"github.com/AssetsArt/easy-proxy/sdk/go/fbs/nylon_dispatcher"
 	"github.com/AssetsArt/easy-proxy/sdk/go/fbs/nylon_http_context"
 	flatbuffers "github.com/google/flatbuffers/go"
@@ -28,6 +30,24 @@ func NewDispatcher() *Dispatcher {
 		PluginName: "",
 		Entry:      "",
 		Data:       nil,
+	}
+}
+
+// new http context
+func NewHttpContext() *HttpContext {
+	return &HttpContext{
+		Request: Request{
+			Method:  "",
+			Path:    "",
+			Query:   url.Values{},
+			Headers: make(map[string]string),
+			Body:    nil,
+		},
+		Response: Response{
+			Status:  200,
+			Headers: make(map[string]string),
+			Body:    nil,
+		},
 	}
 }
 
