@@ -20,6 +20,17 @@ type HttpContext struct {
 	Response Response
 }
 
+// new dispatcher
+func NewDispatcher() *Dispatcher {
+	return &Dispatcher{
+		HttpEnd:    false,
+		RequestId:  "",
+		PluginName: "",
+		Entry:      "",
+		Data:       nil,
+	}
+}
+
 func WrapDispatcher(input []byte) *Dispatcher {
 	raw := nylon_dispatcher.GetRootAsNylonDispatcher(input, 0)
 	return &Dispatcher{
@@ -31,7 +42,6 @@ func WrapDispatcher(input []byte) *Dispatcher {
 	}
 }
 
-// Utils
 func (d *Dispatcher) ToBytes() []byte {
 	bufSize := len(d.Data) + len(d.RequestId) + len(d.PluginName) + len(d.Entry) + 256
 	builder := flatbuffers.NewBuilder(bufSize)
@@ -119,7 +129,6 @@ func (h *HttpContext) SwitchHttpContextToBytes() []byte {
 	return builder.FinishedBytes()
 }
 
-// Modify
 func (d *Dispatcher) SetPluginName(name string) {
 	d.PluginName = name
 }
