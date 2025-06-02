@@ -41,7 +41,7 @@ func sdk_handle_request(ptr *C.uchar, input_len C.int) C.FfiOutput {
 
 	// switch http context to bytes
 	dispatcher.SetHttpEnd(true)
-	dispatcher.SetData(http_ctx.SwitchHttpContextToBytes())
+	dispatcher.SetData(http_ctx.ToBytes())
 
 	return send_response(dispatcher.ToBytes())
 }

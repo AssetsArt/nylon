@@ -93,7 +93,7 @@ func (d *Dispatcher) SwitchDataToHttpContext() *HttpContext {
 	}
 }
 
-func (h *HttpContext) SwitchHttpContextToBytes() []byte {
+func (h *HttpContext) ToBytes() []byte {
 	bufSize := len(h.Request.Body) + len(h.Response.Body) + 256
 	bufSize += len(h.Request.Headers) + len(h.Response.Headers)
 	bufSize += len(h.Request.Query)
