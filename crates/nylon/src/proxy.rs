@@ -11,6 +11,20 @@ use pingora::{
     proxy::{ProxyHttp, Session},
 };
 
+/// Helper function to handle error responses consistently
+async fn handle_error_response<'a>(
+    res: &'a mut Response<'a>,
+    session: &'a mut Session,
+    ctx: &'a mut NylonContext,
+    error: impl Into<NylonError>,
+) -> pingora::Result<bool> {
+    let error = error.into();
+    res.status(error.http_status())
+        .body_json(error.exception_json())?
+        .send(session, ctx)
+        .await
+}
+
 #[async_trait]
 impl ProxyHttp for NylonRuntime {
     type CTX = NylonContext;
@@ -19,43 +33,42 @@ impl ProxyHttp for NylonRuntime {
         NylonContext::new()
     }
 
+    /// Handles incoming HTTP requests and applies middleware filters
     async fn request_filter(
         &self,
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
         let mut res = Response::new(self).await?;
+
+        // Parse request and handle errors
         if let Err(e) = ctx.parse_request(session).await {
-            return res
-                .status(e.http_status())
-                .body_json(e.exception_json())?
-                .send(session, ctx)
-                .await;
+            return handle_error_response(&mut res, session, ctx, e).await;
         }
+
+        // Find matching route
         let (route, params) = match nylon_store::routes::find_route(session) {
             Ok(route) => route,
-            Err(e) => {
-                return res
-                    .status(e.http_status())
-                    .body_json(e.exception_json())?
-                    .send(session, ctx)
-                    .await;
-            }
+            Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
         };
+
         ctx.route = Some(route.clone());
+
+        // Process middleware
         let middleware_items = route
             .route_middleware
             .iter()
             .flatten()
             .chain(route.path_middleware.iter().flatten())
             .filter(|m| {
-                if m.0.request_filter.is_some() {
-                    return true;
-                } else if let Some(name) = m.0.plugin.as_ref() {
-                    return try_request_filter(name).is_some();
-                };
-                false
+                m.0.request_filter.is_some()
+                    || m.0
+                        .plugin
+                        .as_ref()
+                        .map(|name| try_request_filter(name).is_some())
+                        .unwrap_or(false)
             });
+
         for middleware in middleware_items {
             match run_middleware(
                 &MiddlewareContext {
@@ -70,38 +83,27 @@ impl ProxyHttp for NylonRuntime {
             )
             .await
             {
-                Ok((http_end, dispatcher)) => {
-                    if http_end {
-                        return res
-                            .dispatcher_to_response(&dispatcher)?
-                            .send(session, ctx)
-                            .await;
-                    }
-                }
-                Err(e) => {
+                Ok((http_end, dispatcher)) if http_end => {
                     return res
-                        .status(e.http_status())
-                        .body_json(e.exception_json())?
+                        .dispatcher_to_response(&dispatcher)?
                         .send(session, ctx)
                         .await;
                 }
+                Ok(_) => continue,
+                Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
             }
         }
 
+        // Handle plugin service type
         if route.service.service_type == ServiceType::Plugin {
             let http_context =
                 match nylon_sdk::proxy_http::build_http_context(session, Some(params.clone()), ctx)
                     .await
                 {
                     Ok(context) => context,
-                    Err(e) => {
-                        return res
-                            .status(e.http_status())
-                            .body_json(e.exception_json())?
-                            .send(session, ctx)
-                            .await;
-                    }
+                    Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
                 };
+
             match nylon_plugin::dispatcher::http_service_dispatch(ctx, None, None, &http_context)
                 .await
             {
@@ -113,8 +115,10 @@ impl ProxyHttp for NylonRuntime {
                             e.to_string(),
                         )
                     })?;
-                    let data = dispatcher.data().bytes().to_vec();
-                    return res.dispatcher_to_response(&data)?.send(session, ctx).await;
+                    return res
+                        .dispatcher_to_response(dispatcher.data().bytes())?
+                        .send(session, ctx)
+                        .await;
                 }
                 Err(e) => {
                     return Err(pingora::Error::because(
@@ -124,54 +128,39 @@ impl ProxyHttp for NylonRuntime {
                     ));
                 }
             }
-            // return Ok(true);
-        } else {
-            let http_service = match nylon_store::lb_backends::get(&route.service.name).await {
-                Ok(backend) => backend,
-                Err(e) => {
-                    return res
-                        .status(e.http_status())
-                        .body_json(e.exception_json())?
-                        .send(session, ctx)
-                        .await;
-                }
-            };
-            ctx.backend = match backend::selection(&http_service, session, ctx) {
-                Ok(b) => b,
-                Err(e) => {
-                    return res
-                        .status(e.http_status())
-                        .body_json(e.exception_json())?
-                        .send(session, ctx)
-                        .await;
-                }
-            };
-            // next phase will be handled by upstream_peer
-            Ok(false)
         }
+
+        // Handle regular service type
+        let http_service = match nylon_store::lb_backends::get(&route.service.name).await {
+            Ok(backend) => backend,
+            Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
+        };
+
+        ctx.backend = match backend::selection(&http_service, session, ctx) {
+            Ok(b) => b,
+            Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
+        };
+
+        Ok(false)
     }
 
+    /// Selects the upstream peer for the request
     async fn upstream_peer(
         &self,
         _session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
-        let peer = match ctx.backend.ext.get::<HttpPeer>() {
-            Some(p) => p.clone(),
-            None => {
-                return Err(pingora::Error::because(
-                    ErrorType::InternalError,
-                    "[upstream_peer]",
-                    NylonError::ConfigError(format!(
-                        "[backend:{}] no peer found",
-                        ctx.backend.addr
-                    )),
-                ));
-            }
-        };
-        Ok(Box::new(peer))
+        let peer = ctx.backend.ext.get::<HttpPeer>().ok_or_else(|| {
+            pingora::Error::because(
+                ErrorType::InternalError,
+                "[upstream_peer]",
+                NylonError::ConfigError(format!("[backend:{}] no peer found", ctx.backend.addr)),
+            )
+        })?;
+        Ok(Box::new(peer.clone()))
     }
 
+    /// Processes response filters for the request
     async fn response_filter(
         &self,
         session: &mut Session,
@@ -184,22 +173,23 @@ impl ProxyHttp for NylonRuntime {
         let Some(route) = ctx.route.clone() else {
             return Ok(());
         };
+
         let middleware_items = route
             .route_middleware
             .iter()
             .flatten()
             .chain(route.path_middleware.iter().flatten())
             .filter(|m| {
-                if m.0.response_filter.is_some() {
-                    return true;
-                } else if let Some(name) = m.0.plugin.as_ref() {
-                    return try_response_filter(name).is_some();
-                };
-                false
+                m.0.response_filter.is_some()
+                    || m.0
+                        .plugin
+                        .as_ref()
+                        .map(|name| try_response_filter(name).is_some())
+                        .unwrap_or(false)
             });
 
         for middleware in middleware_items {
-            match run_middleware(
+            if let Err(e) = run_middleware(
                 &MiddlewareContext {
                     middleware: middleware.0.clone(),
                     payload: middleware.0.payload.clone(),
@@ -212,19 +202,17 @@ impl ProxyHttp for NylonRuntime {
             )
             .await
             {
-                Ok(_) => {}
-                Err(e) => {
-                    return Err(pingora::Error::because(
-                        ErrorType::InternalError,
-                        "[response_filter]",
-                        e.to_string(),
-                    ));
-                }
+                return Err(pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[response_filter]",
+                    e.to_string(),
+                ));
             }
         }
         Ok(())
     }
 
+    /// Called when connected to upstream server
     async fn connected_to_upstream(
         &self,
         _session: &mut Session,
@@ -238,14 +226,10 @@ impl ProxyHttp for NylonRuntime {
     where
         Self::CTX: Send + Sync,
     {
-        // println!("connected_to_upstream");
-        // println!("reused: {}", _reused);
-        // println!("peer: {:#?}", _peer);
-        // println!("fd: {}", _fd);
-        // println!("digest: {:#?}", _digest);
         Ok(())
     }
 
+    /// Handles request logging
     async fn logging(
         &self,
         _session: &mut Session,
@@ -254,7 +238,6 @@ impl ProxyHttp for NylonRuntime {
     ) where
         Self::CTX: Send + Sync,
     {
-        // println!("logging");
-        // println!("e: {:#?}", _e);
+        // Logging implementation
     }
 }
