@@ -66,3 +66,28 @@ func sdk_handle_request(ptr *C.uchar, input_len C.int) C.FfiOutput {
 
 	return send_response(dispatcher.ToBytes())
 }
+
+//export sdk_handle_middleware
+func sdk_handle_middleware(ptr *C.uchar, input_len C.int) C.FfiOutput {
+	input := C.GoBytes(unsafe.Pointer(ptr), C.int(input_len))
+	dispatcher := sdk.WrapDispatcher(input)
+	http_ctx := dispatcher.SwitchDataToHttpContext()
+	// create response
+	http_ctx.Response.BodyJSON(map[string]any{
+		"ok":   true,
+		"ts":   time.Now().Unix(),
+		"from": "middleware",
+	})
+
+	pass := http_ctx.Request.Query.Get("pass")
+	if pass == "true" {
+		// switch http context to bytes
+		dispatcher.SetHttpEnd(true)
+	} else {
+		// switch http context to bytes
+		dispatcher.SetHttpEnd(false)
+	}
+	dispatcher.SetData(http_ctx.ToBytes())
+
+	return send_response(dispatcher.ToBytes())
+}

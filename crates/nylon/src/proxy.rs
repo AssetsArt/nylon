@@ -49,11 +49,11 @@ impl ProxyHttp for NylonRuntime {
             .flatten()
             .chain(route.path_middleware.iter().flatten())
             .filter(|m| {
-                if let Some(name) = m.0.plugin.as_ref() {
-                    return try_request_filter(name).is_some();
-                } else if m.0.request_filter.is_some() {
+                if m.0.request_filter.is_some() {
                     return true;
-                }
+                } else if let Some(name) = m.0.plugin.as_ref() {
+                    return try_request_filter(name).is_some();
+                };
                 false
             });
         for middleware in middleware_items {
@@ -103,7 +103,9 @@ impl ProxyHttp for NylonRuntime {
                     }
                 };
             ctx.route = Some(route);
-            match nylon_plugin::dispatcher::http_service_dispatch(ctx, None, &http_context).await {
+            match nylon_plugin::dispatcher::http_service_dispatch(ctx, None, None, &http_context)
+                .await
+            {
                 Ok(buf) => {
                     let dispatcher = root_as_nylon_dispatcher(&buf).map_err(|e| {
                         pingora::Error::because(
@@ -190,11 +192,11 @@ impl ProxyHttp for NylonRuntime {
             .flatten()
             .chain(route.path_middleware.iter().flatten())
             .filter(|m| {
-                if let Some(name) = m.0.plugin.as_ref() {
-                    return try_response_filter(name).is_some();
-                } else if m.0.response_filter.is_some() {
+                if m.0.response_filter.is_some() {
                     return true;
-                }
+                } else if let Some(name) = m.0.plugin.as_ref() {
+                    return try_response_filter(name).is_some();
+                };
                 false
             });
 

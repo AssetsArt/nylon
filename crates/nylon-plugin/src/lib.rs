@@ -59,6 +59,7 @@ pub async fn run_middleware(
     let Some(plugin_name) = &middleware.plugin else {
         return Ok((false, vec![]));
     };
+    // println!("plugin_name: {:?}", plugin_name);
     match try_builtin(plugin_name.as_str()) {
         Some(BuiltinPlugin::RequestHeaderModifier) => {
             native::header_modifier::request(ctx, session, payload, payload_ast)?;
@@ -77,12 +78,17 @@ pub async fn run_middleware(
             Ok((false, vec![]))
         }
         _ => {
+            // println!("middleware: {:?}", middleware);
             if let Some(request_filter) = &middleware.request_filter {
                 let http_context =
                     nylon_sdk::proxy_http::build_http_context(session, params.clone(), ctx).await?;
-                let dispatcher =
-                    dispatcher::http_service_dispatch(ctx, Some(request_filter), &http_context)
-                        .await?;
+                let dispatcher = dispatcher::http_service_dispatch(
+                    ctx,
+                    Some(plugin_name.as_str()),
+                    Some(request_filter),
+                    &http_context,
+                )
+                .await?;
                 let dispatcher = root_as_nylon_dispatcher(&dispatcher)
                     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
                 let http_end = dispatcher.http_end();

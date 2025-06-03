@@ -20,6 +20,7 @@ plugins:
     file: ./target/examples/go/plugin_sdk.so
     entry:
       - sdk_handle_request
+      - sdk_handle_middleware
     # life_cycle:
     #   setup: true
     #   shutdown: true
@@ -55,6 +56,9 @@ services:
 
 middleware_groups:
   header-modifier:
+    - plugin: plugin_sdk
+      request_filter: sdk_handle_middleware
+
     - plugin: RequestHeaderModifier
       payload:
         remove:

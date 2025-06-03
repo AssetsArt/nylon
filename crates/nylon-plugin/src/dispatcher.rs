@@ -21,18 +21,29 @@ fn get_plugin(name: &str) -> Result<Arc<FfiPlugin>, NylonError> {
 
 pub async fn http_service_dispatch(
     ctx: &mut NylonContext,
+    plugin: Option<&str>,
     entry: Option<&str>,
     dispatch_data: &[u8],
 ) -> Result<Vec<u8>, NylonError> {
     let request_id = &ctx.request_id;
-    let Some(route) = &ctx.route else {
-        return Err(NylonError::ConfigError("Route not found".to_string()));
+    let (plugin_name, entry) = match plugin {
+        Some(p) => (
+            p,
+            match entry {
+                Some(e) => e,
+                None => return Err(NylonError::ConfigError("Entry not found".to_string())),
+            },
+        ),
+        None => {
+            let Some(route) = &ctx.route else {
+                return Err(NylonError::ConfigError("Route not found".to_string()));
+            };
+            let Some(plugin) = &route.service.plugin else {
+                return Err(NylonError::ConfigError("Plugin not found".to_string()));
+            };
+            (plugin.name.as_str(), plugin.entry.as_ref())
+        }
     };
-    let Some(plugin) = &route.service.plugin else {
-        return Err(NylonError::ConfigError("Plugin not found".to_string()));
-    };
-    let entry = entry.unwrap_or(&plugin.entry);
-    let plugin_name = &plugin.name;
     dispatch(request_id, plugin_name, entry, dispatch_data).await
 }
 

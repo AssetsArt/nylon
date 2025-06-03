@@ -18,7 +18,7 @@ routes:
           - POST
           - OPTIONS
         service:
-          name: go-plugin
+          name: http-service
       # - path: /api/v1/{name}
       #   middleware:
       #     - plugin: RequestHeaderModifier
