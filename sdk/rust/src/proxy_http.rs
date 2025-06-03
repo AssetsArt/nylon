@@ -9,13 +9,14 @@ use std::collections::HashMap;
 
 pub async fn build_http_context(
     session: &mut Session,
-    params: &HashMap<String, String>,
+    params: Option<HashMap<String, String>>,
     _ctx: &mut NylonContext,
 ) -> Result<Vec<u8>, NylonError> {
     let mut fbs = flatbuffers::FlatBufferBuilder::new();
     // params
     let params_vec = params
         .iter()
+        .flatten()
         .map(|(k, v)| {
             let key = fbs.create_string(k.as_str());
             let value = fbs.create_string(v.as_str());

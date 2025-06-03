@@ -1,7 +1,7 @@
 use crate::{backend, context::NylonContextExt, response::Response, runtime::NylonRuntime};
 use async_trait::async_trait;
 use nylon_error::NylonError;
-use nylon_plugin::{run_middleware, try_request_filter, try_response_filter};
+use nylon_plugin::{MiddlewareContext, run_middleware, try_request_filter, try_response_filter};
 use nylon_types::{context::NylonContext, services::ServiceType};
 use pingora::{
     ErrorType,
@@ -69,18 +69,28 @@ impl ProxyHttp for NylonRuntime {
                     ));
                 }
             };
+            // println!("plugin_name: {}", plugin_name);
             match run_middleware(
-                plugin_name,
-                &middleware.0.payload,
-                &middleware.1,
+                &MiddlewareContext {
+                    plugin_name: plugin_name.to_string(),
+                    payload: middleware.0.payload.clone(),
+                    payload_ast: middleware.1.clone(),
+                    params: Some(params.clone()),
+                },
                 ctx,
                 session,
-                None,
                 None,
             )
             .await
             {
-                Ok(_) => {}
+                Ok((http_end, dispatcher)) => {
+                    if http_end {
+                        return res
+                            .dispatcher_to_response(&dispatcher)?
+                            .send(session, ctx)
+                            .await;
+                    }
+                }
                 Err(e) => {
                     return res
                         .status(e.http_status())
@@ -93,7 +103,9 @@ impl ProxyHttp for NylonRuntime {
 
         if route.service.service_type == ServiceType::Plugin {
             let http_context =
-                match nylon_sdk::proxy_http::build_http_context(session, &params, ctx).await {
+                match nylon_sdk::proxy_http::build_http_context(session, Some(params.clone()), ctx)
+                    .await
+                {
                     Ok(context) => context,
                     Err(e) => {
                         return res
@@ -206,13 +218,15 @@ impl ProxyHttp for NylonRuntime {
                 }
             };
             match run_middleware(
-                plugin_name,
-                &middleware.0.payload,
-                &middleware.1,
+                &MiddlewareContext {
+                    plugin_name: plugin_name.to_string(),
+                    payload: middleware.0.payload.clone(),
+                    payload_ast: middleware.1.clone(),
+                    params: None,
+                },
                 ctx,
                 session,
                 Some(upstream_response),
-                None,
             )
             .await
             {

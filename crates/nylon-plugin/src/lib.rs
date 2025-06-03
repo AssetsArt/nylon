@@ -1,4 +1,5 @@
 use nylon_error::NylonError;
+use nylon_sdk::fbs::dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher;
 use nylon_types::{context::NylonContext, template::Expr};
 use pingora::{http::ResponseHeader, proxy::Session};
 use serde_json::Value;
@@ -11,6 +12,13 @@ mod native;
 pub enum BuiltinPlugin {
     RequestHeaderModifier,
     ResponseHeaderModifier,
+}
+
+pub struct MiddlewareContext {
+    pub plugin_name: String,
+    pub payload: Option<Value>,
+    pub payload_ast: Option<HashMap<String, Vec<Expr>>>,
+    pub params: Option<HashMap<String, String>>,
 }
 
 fn try_builtin(name: &str) -> Option<BuiltinPlugin> {
@@ -37,17 +45,21 @@ pub fn try_response_filter(name: &str) -> Option<BuiltinPlugin> {
 }
 
 pub async fn run_middleware(
-    plugin_name: &str,
-    payload: &Option<Value>,
-    payload_ast: &Option<HashMap<String, Vec<Expr>>>,
+    middleware_context: &MiddlewareContext,
     ctx: &mut NylonContext,
     session: &mut Session,
     upstream_response: Option<&mut ResponseHeader>,
-    _dispatcher: Option<&mut [u8]>,
-) -> Result<(), NylonError> {
-    match try_builtin(plugin_name) {
+) -> Result<(bool, Vec<u8>), NylonError> {
+    let (plugin_name, payload, payload_ast, params) = (
+        &middleware_context.plugin_name,
+        &middleware_context.payload,
+        &middleware_context.payload_ast,
+        &middleware_context.params,
+    );
+    match try_builtin(plugin_name.as_str()) {
         Some(BuiltinPlugin::RequestHeaderModifier) => {
             native::header_modifier::request(ctx, session, payload, payload_ast)?;
+            Ok((false, vec![]))
         }
         Some(BuiltinPlugin::ResponseHeaderModifier) => {
             if let Some(upstream_response) = upstream_response {
@@ -59,11 +71,17 @@ pub async fn run_middleware(
                     payload_ast,
                 )?;
             }
+            Ok((false, vec![]))
         }
         _ => {
-            // fallback ไป external plugin (WASM, FFI)
-            todo!("external plugin");
+            // println!("plugin_name: {}", plugin_name);
+            let dispatcher =
+                nylon_sdk::proxy_http::build_http_context(session, params.clone(), ctx).await?;
+
+            let dispatcher = root_as_nylon_dispatcher(&dispatcher)
+                .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
+            let http_end = dispatcher.http_end();
+            Ok((http_end, dispatcher.data().bytes().to_vec()))
         }
     }
-    Ok(())
 }
