@@ -9,6 +9,8 @@ routes:
     name: http-route-1
     middleware:
       - group: header-modifier
+      - plugin: plugin_sdk
+        request_filter: sdk_handle_middleware
     paths:
       - path: 
           - /

@@ -42,7 +42,7 @@ impl ProxyHttp for NylonRuntime {
                     .await;
             }
         };
-
+        ctx.route = Some(route.clone());
         let middleware_items = route
             .route_middleware
             .iter()
@@ -102,7 +102,6 @@ impl ProxyHttp for NylonRuntime {
                             .await;
                     }
                 };
-            ctx.route = Some(route);
             match nylon_plugin::dispatcher::http_service_dispatch(ctx, None, None, &http_context)
                 .await
             {
@@ -148,7 +147,6 @@ impl ProxyHttp for NylonRuntime {
                 }
             };
             // next phase will be handled by upstream_peer
-            ctx.route = Some(route);
             Ok(false)
         }
     }

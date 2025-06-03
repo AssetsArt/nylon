@@ -59,7 +59,6 @@ pub async fn run_middleware(
     let Some(plugin_name) = &middleware.plugin else {
         return Ok((false, vec![]));
     };
-    // println!("plugin_name: {:?}", plugin_name);
     match try_builtin(plugin_name.as_str()) {
         Some(BuiltinPlugin::RequestHeaderModifier) => {
             native::header_modifier::request(ctx, session, payload, payload_ast)?;

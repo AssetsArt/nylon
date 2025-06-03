@@ -56,9 +56,6 @@ services:
 
 middleware_groups:
   header-modifier:
-    - plugin: plugin_sdk
-      request_filter: sdk_handle_middleware
-
     - plugin: RequestHeaderModifier
       payload:
         remove:
