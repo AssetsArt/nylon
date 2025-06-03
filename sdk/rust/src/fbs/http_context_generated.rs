@@ -17,15 +17,15 @@ pub mod nylon_http_context {
     extern crate flatbuffers;
     use self::flatbuffers::{EndianScalar, Follow};
 
-    pub enum HeaderOffset {}
+    pub enum KeyValueOffset {}
     #[derive(Copy, Clone, PartialEq)]
 
-    pub struct Header<'a> {
+    pub struct KeyValue<'a> {
         pub _tab: flatbuffers::Table<'a>,
     }
 
-    impl<'a> flatbuffers::Follow<'a> for Header<'a> {
-        type Inner = Header<'a>;
+    impl<'a> flatbuffers::Follow<'a> for KeyValue<'a> {
+        type Inner = KeyValue<'a>;
         #[inline]
         unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
             Self {
@@ -34,13 +34,13 @@ pub mod nylon_http_context {
         }
     }
 
-    impl<'a> Header<'a> {
+    impl<'a> KeyValue<'a> {
         pub const VT_KEY: flatbuffers::VOffsetT = 4;
         pub const VT_VALUE: flatbuffers::VOffsetT = 6;
 
         #[inline]
         pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
-            Header { _tab: table }
+            KeyValue { _tab: table }
         }
         #[allow(unused_mut)]
         pub fn create<
@@ -50,9 +50,9 @@ pub mod nylon_http_context {
             A: flatbuffers::Allocator + 'bldr,
         >(
             _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr, A>,
-            args: &'args HeaderArgs<'args>,
-        ) -> flatbuffers::WIPOffset<Header<'bldr>> {
-            let mut builder = HeaderBuilder::new(_fbb);
+            args: &'args KeyValueArgs<'args>,
+        ) -> flatbuffers::WIPOffset<KeyValue<'bldr>> {
+            let mut builder = KeyValueBuilder::new(_fbb);
             if let Some(x) = args.value {
                 builder.add_value(x);
             }
@@ -69,7 +69,7 @@ pub mod nylon_http_context {
             // which contains a valid value in this slot
             unsafe {
                 self._tab
-                    .get::<flatbuffers::ForwardsUOffset<&str>>(Header::VT_KEY, None)
+                    .get::<flatbuffers::ForwardsUOffset<&str>>(KeyValue::VT_KEY, None)
                     .unwrap()
             }
         }
@@ -80,13 +80,13 @@ pub mod nylon_http_context {
             // which contains a valid value in this slot
             unsafe {
                 self._tab
-                    .get::<flatbuffers::ForwardsUOffset<&str>>(Header::VT_VALUE, None)
+                    .get::<flatbuffers::ForwardsUOffset<&str>>(KeyValue::VT_VALUE, None)
                     .unwrap()
             }
         }
     }
 
-    impl flatbuffers::Verifiable for Header<'_> {
+    impl flatbuffers::Verifiable for KeyValue<'_> {
         #[inline]
         fn run_verifier(
             v: &mut flatbuffers::Verifier,
@@ -100,57 +100,57 @@ pub mod nylon_http_context {
             Ok(())
         }
     }
-    pub struct HeaderArgs<'a> {
+    pub struct KeyValueArgs<'a> {
         pub key: Option<flatbuffers::WIPOffset<&'a str>>,
         pub value: Option<flatbuffers::WIPOffset<&'a str>>,
     }
-    impl<'a> Default for HeaderArgs<'a> {
+    impl<'a> Default for KeyValueArgs<'a> {
         #[inline]
         fn default() -> Self {
-            HeaderArgs {
+            KeyValueArgs {
                 key: None,   // required field
                 value: None, // required field
             }
         }
     }
 
-    pub struct HeaderBuilder<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> {
+    pub struct KeyValueBuilder<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> {
         fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
         start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
     }
-    impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> HeaderBuilder<'a, 'b, A> {
+    impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> KeyValueBuilder<'a, 'b, A> {
         #[inline]
         pub fn add_key(&mut self, key: flatbuffers::WIPOffset<&'b str>) {
             self.fbb_
-                .push_slot_always::<flatbuffers::WIPOffset<_>>(Header::VT_KEY, key);
+                .push_slot_always::<flatbuffers::WIPOffset<_>>(KeyValue::VT_KEY, key);
         }
         #[inline]
         pub fn add_value(&mut self, value: flatbuffers::WIPOffset<&'b str>) {
             self.fbb_
-                .push_slot_always::<flatbuffers::WIPOffset<_>>(Header::VT_VALUE, value);
+                .push_slot_always::<flatbuffers::WIPOffset<_>>(KeyValue::VT_VALUE, value);
         }
         #[inline]
         pub fn new(
             _fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
-        ) -> HeaderBuilder<'a, 'b, A> {
+        ) -> KeyValueBuilder<'a, 'b, A> {
             let start = _fbb.start_table();
-            HeaderBuilder {
+            KeyValueBuilder {
                 fbb_: _fbb,
                 start_: start,
             }
         }
         #[inline]
-        pub fn finish(self) -> flatbuffers::WIPOffset<Header<'a>> {
+        pub fn finish(self) -> flatbuffers::WIPOffset<KeyValue<'a>> {
             let o = self.fbb_.end_table(self.start_);
-            self.fbb_.required(o, Header::VT_KEY, "key");
-            self.fbb_.required(o, Header::VT_VALUE, "value");
+            self.fbb_.required(o, KeyValue::VT_KEY, "key");
+            self.fbb_.required(o, KeyValue::VT_VALUE, "value");
             flatbuffers::WIPOffset::new(o.value())
         }
     }
 
-    impl core::fmt::Debug for Header<'_> {
+    impl core::fmt::Debug for KeyValue<'_> {
         fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let mut ds = f.debug_struct("Header");
+            let mut ds = f.debug_struct("KeyValue");
             ds.field("key", &self.key());
             ds.field("value", &self.value());
             ds.finish()
@@ -177,8 +177,9 @@ pub mod nylon_http_context {
         pub const VT_METHOD: flatbuffers::VOffsetT = 4;
         pub const VT_PATH: flatbuffers::VOffsetT = 6;
         pub const VT_QUERY: flatbuffers::VOffsetT = 8;
-        pub const VT_HEADERS: flatbuffers::VOffsetT = 10;
-        pub const VT_BODY: flatbuffers::VOffsetT = 12;
+        pub const VT_PARAMS: flatbuffers::VOffsetT = 10;
+        pub const VT_HEADERS: flatbuffers::VOffsetT = 12;
+        pub const VT_BODY: flatbuffers::VOffsetT = 14;
 
         #[inline]
         pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -200,6 +201,9 @@ pub mod nylon_http_context {
             }
             if let Some(x) = args.headers {
                 builder.add_headers(x);
+            }
+            if let Some(x) = args.params {
+                builder.add_params(x);
             }
             if let Some(x) = args.query {
                 builder.add_query(x);
@@ -246,15 +250,28 @@ pub mod nylon_http_context {
             }
         }
         #[inline]
-        pub fn headers(
+        pub fn params(
             &self,
-        ) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Header<'a>>>> {
+        ) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<KeyValue<'a>>>> {
             // Safety:
             // Created from valid Table for this object
             // which contains a valid value in this slot
             unsafe {
                 self._tab.get::<flatbuffers::ForwardsUOffset<
-                    flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Header>>,
+                    flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<KeyValue>>,
+                >>(NylonHttpRequest::VT_PARAMS, None)
+            }
+        }
+        #[inline]
+        pub fn headers(
+            &self,
+        ) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<KeyValue<'a>>>> {
+            // Safety:
+            // Created from valid Table for this object
+            // which contains a valid value in this slot
+            unsafe {
+                self._tab.get::<flatbuffers::ForwardsUOffset<
+                    flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<KeyValue>>,
                 >>(NylonHttpRequest::VT_HEADERS, None)
             }
         }
@@ -285,7 +302,10 @@ pub mod nylon_http_context {
                 .visit_field::<flatbuffers::ForwardsUOffset<&str>>("path", Self::VT_PATH, true)?
                 .visit_field::<flatbuffers::ForwardsUOffset<&str>>("query", Self::VT_QUERY, false)?
                 .visit_field::<flatbuffers::ForwardsUOffset<
-                    flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<Header>>,
+                    flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<KeyValue>>,
+                >>("params", Self::VT_PARAMS, false)?
+                .visit_field::<flatbuffers::ForwardsUOffset<
+                    flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<KeyValue>>,
                 >>("headers", Self::VT_HEADERS, false)?
                 .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, u8>>>(
                     "body",
@@ -300,9 +320,14 @@ pub mod nylon_http_context {
         pub method: Option<flatbuffers::WIPOffset<&'a str>>,
         pub path: Option<flatbuffers::WIPOffset<&'a str>>,
         pub query: Option<flatbuffers::WIPOffset<&'a str>>,
+        pub params: Option<
+            flatbuffers::WIPOffset<
+                flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<KeyValue<'a>>>,
+            >,
+        >,
         pub headers: Option<
             flatbuffers::WIPOffset<
-                flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Header<'a>>>,
+                flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<KeyValue<'a>>>,
             >,
         >,
         pub body: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, u8>>>,
@@ -314,6 +339,7 @@ pub mod nylon_http_context {
                 method: None, // required field
                 path: None,   // required field
                 query: None,
+                params: None,
                 headers: None,
                 body: None,
             }
@@ -341,10 +367,20 @@ pub mod nylon_http_context {
                 .push_slot_always::<flatbuffers::WIPOffset<_>>(NylonHttpRequest::VT_QUERY, query);
         }
         #[inline]
+        pub fn add_params(
+            &mut self,
+            params: flatbuffers::WIPOffset<
+                flatbuffers::Vector<'b, flatbuffers::ForwardsUOffset<KeyValue<'b>>>,
+            >,
+        ) {
+            self.fbb_
+                .push_slot_always::<flatbuffers::WIPOffset<_>>(NylonHttpRequest::VT_PARAMS, params);
+        }
+        #[inline]
         pub fn add_headers(
             &mut self,
             headers: flatbuffers::WIPOffset<
-                flatbuffers::Vector<'b, flatbuffers::ForwardsUOffset<Header<'b>>>,
+                flatbuffers::Vector<'b, flatbuffers::ForwardsUOffset<KeyValue<'b>>>,
             >,
         ) {
             self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(
@@ -382,6 +418,7 @@ pub mod nylon_http_context {
             ds.field("method", &self.method());
             ds.field("path", &self.path());
             ds.field("query", &self.query());
+            ds.field("params", &self.params());
             ds.field("headers", &self.headers());
             ds.field("body", &self.body());
             ds.finish()
@@ -448,13 +485,13 @@ pub mod nylon_http_context {
         #[inline]
         pub fn headers(
             &self,
-        ) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Header<'a>>>> {
+        ) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<KeyValue<'a>>>> {
             // Safety:
             // Created from valid Table for this object
             // which contains a valid value in this slot
             unsafe {
                 self._tab.get::<flatbuffers::ForwardsUOffset<
-                    flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Header>>,
+                    flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<KeyValue>>,
                 >>(NylonHttpResponse::VT_HEADERS, None)
             }
         }
@@ -483,7 +520,7 @@ pub mod nylon_http_context {
             v.visit_table(pos)?
                 .visit_field::<i32>("status", Self::VT_STATUS, false)?
                 .visit_field::<flatbuffers::ForwardsUOffset<
-                    flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<Header>>,
+                    flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<KeyValue>>,
                 >>("headers", Self::VT_HEADERS, false)?
                 .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, u8>>>(
                     "body",
@@ -498,7 +535,7 @@ pub mod nylon_http_context {
         pub status: i32,
         pub headers: Option<
             flatbuffers::WIPOffset<
-                flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Header<'a>>>,
+                flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<KeyValue<'a>>>,
             >,
         >,
         pub body: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, u8>>>,
@@ -528,7 +565,7 @@ pub mod nylon_http_context {
         pub fn add_headers(
             &mut self,
             headers: flatbuffers::WIPOffset<
-                flatbuffers::Vector<'b, flatbuffers::ForwardsUOffset<Header<'b>>>,
+                flatbuffers::Vector<'b, flatbuffers::ForwardsUOffset<KeyValue<'b>>>,
             >,
         ) {
             self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(

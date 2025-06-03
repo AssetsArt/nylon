@@ -65,7 +65,7 @@ func (rcv *NylonHttpRequest) Query() []byte {
 	return nil
 }
 
-func (rcv *NylonHttpRequest) Headers(obj *Header, j int) bool {
+func (rcv *NylonHttpRequest) Params(obj *KeyValue, j int) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
 	if o != 0 {
 		x := rcv._tab.Vector(o)
@@ -77,7 +77,7 @@ func (rcv *NylonHttpRequest) Headers(obj *Header, j int) bool {
 	return false
 }
 
-func (rcv *NylonHttpRequest) HeadersLength() int {
+func (rcv *NylonHttpRequest) ParamsLength() int {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(10))
 	if o != 0 {
 		return rcv._tab.VectorLen(o)
@@ -85,8 +85,28 @@ func (rcv *NylonHttpRequest) HeadersLength() int {
 	return 0
 }
 
-func (rcv *NylonHttpRequest) Body(j int) byte {
+func (rcv *NylonHttpRequest) Headers(obj *KeyValue, j int) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	if o != 0 {
+		x := rcv._tab.Vector(o)
+		x += flatbuffers.UOffsetT(j) * 4
+		x = rcv._tab.Indirect(x)
+		obj.Init(rcv._tab.Bytes, x)
+		return true
+	}
+	return false
+}
+
+func (rcv *NylonHttpRequest) HeadersLength() int {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	if o != 0 {
+		return rcv._tab.VectorLen(o)
+	}
+	return 0
+}
+
+func (rcv *NylonHttpRequest) Body(j int) byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
@@ -95,7 +115,7 @@ func (rcv *NylonHttpRequest) Body(j int) byte {
 }
 
 func (rcv *NylonHttpRequest) BodyLength() int {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
 	if o != 0 {
 		return rcv._tab.VectorLen(o)
 	}
@@ -103,7 +123,7 @@ func (rcv *NylonHttpRequest) BodyLength() int {
 }
 
 func (rcv *NylonHttpRequest) BodyBytes() []byte {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
 	}
@@ -111,7 +131,7 @@ func (rcv *NylonHttpRequest) BodyBytes() []byte {
 }
 
 func (rcv *NylonHttpRequest) MutateBody(j int, n byte) bool {
-	o := flatbuffers.UOffsetT(rcv._tab.Offset(12))
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(14))
 	if o != 0 {
 		a := rcv._tab.Vector(o)
 		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
@@ -120,7 +140,7 @@ func (rcv *NylonHttpRequest) MutateBody(j int, n byte) bool {
 }
 
 func NylonHttpRequestStart(builder *flatbuffers.Builder) {
-	builder.StartObject(5)
+	builder.StartObject(6)
 }
 func NylonHttpRequestAddMethod(builder *flatbuffers.Builder, method flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(method), 0)
@@ -131,14 +151,20 @@ func NylonHttpRequestAddPath(builder *flatbuffers.Builder, path flatbuffers.UOff
 func NylonHttpRequestAddQuery(builder *flatbuffers.Builder, query flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(2, flatbuffers.UOffsetT(query), 0)
 }
+func NylonHttpRequestAddParams(builder *flatbuffers.Builder, params flatbuffers.UOffsetT) {
+	builder.PrependUOffsetTSlot(3, flatbuffers.UOffsetT(params), 0)
+}
+func NylonHttpRequestStartParamsVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
+	return builder.StartVector(4, numElems, 4)
+}
 func NylonHttpRequestAddHeaders(builder *flatbuffers.Builder, headers flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(3, flatbuffers.UOffsetT(headers), 0)
+	builder.PrependUOffsetTSlot(4, flatbuffers.UOffsetT(headers), 0)
 }
 func NylonHttpRequestStartHeadersVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(4, numElems, 4)
 }
 func NylonHttpRequestAddBody(builder *flatbuffers.Builder, body flatbuffers.UOffsetT) {
-	builder.PrependUOffsetTSlot(4, flatbuffers.UOffsetT(body), 0)
+	builder.PrependUOffsetTSlot(5, flatbuffers.UOffsetT(body), 0)
 }
 func NylonHttpRequestStartBodyVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(1, numElems, 1)

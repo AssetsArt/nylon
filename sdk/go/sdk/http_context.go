@@ -14,6 +14,7 @@ type Request struct {
 	Query   url.Values
 	Headers map[string]string
 	Body    []byte
+	Params  map[string]string
 }
 
 func WrapRequest(ctx *nylon_http_context.NylonHttpContext) *Request {
@@ -22,7 +23,7 @@ func WrapRequest(ctx *nylon_http_context.NylonHttpContext) *Request {
 	// Headers
 	headers := map[string]string{}
 	for i := range raw.HeadersLength() {
-		var h nylon_http_context.Header
+		var h nylon_http_context.KeyValue
 		if raw.Headers(&h, i) {
 			headers[string(h.Key())] = string(h.Value())
 		}
@@ -31,13 +32,31 @@ func WrapRequest(ctx *nylon_http_context.NylonHttpContext) *Request {
 	// Query
 	q, _ := url.ParseQuery(string(raw.Query()))
 
+	// Params
+	params := map[string]string{}
+	for i := range raw.ParamsLength() {
+		var p nylon_http_context.KeyValue
+		if raw.Params(&p, i) {
+			params[string(p.Key())] = string(p.Value())
+		}
+	}
+
 	return &Request{
 		Method:  string(raw.Method()),
 		Path:    string(raw.Path()),
 		Query:   q,
 		Headers: headers,
 		Body:    raw.BodyBytes(),
+		Params:  params,
 	}
+}
+
+func (r *Request) ParamsAll() map[string]string {
+	return r.Params
+}
+
+func (r *Request) ParamsGet(key string) string {
+	return r.Params[key]
 }
 
 func (r *Request) QueryGet(key string) string {
@@ -86,7 +105,7 @@ func WrapResponse(ctx *nylon_http_context.NylonHttpContext) *Response {
 	// Headers
 	headers := map[string]string{}
 	for i := range raw.HeadersLength() {
-		var h nylon_http_context.Header
+		var h nylon_http_context.KeyValue
 		if raw.Headers(&h, i) {
 			headers[string(h.Key())] = string(h.Value())
 		}

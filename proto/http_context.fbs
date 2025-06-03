@@ -1,6 +1,6 @@
 namespace nylon_http_context;
 
-table Header {
+table KeyValue {
   key: string (required);
   value: string (required);
 }
@@ -9,13 +9,14 @@ table NylonHttpRequest {
   method: string (required);
   path: string (required);
   query: string;
-  headers: [Header];
+  params: [KeyValue];
+  headers: [KeyValue];
   body: [ubyte];
 }
 
 table NylonHttpResponse {
   status: int;
-  headers: [Header];
+  headers: [KeyValue];
   body: [ubyte];
 }
 

@@ -7,7 +7,7 @@ dev:
 	@for port in $(PORTS); do \
 		kill -9 $$(lsof -t -i :$$port) 2>/dev/null || true; \
 	done
-	RUST_BACKTRACE=1 RUST_LOG="info,warn,debug" cargo watch -w crates -w examples -w proto -q -c -x "run -- run --config ./examples/config.yaml"
+	RUST_BACKTRACE=1 RUST_LOG="info,warn,debug" cargo watch -w crates -w examples -w proto -w sdk -q -c -s "make build-examples && cargo run -- run --config ./examples/config.yaml"
 
 generate:
 	flatc --rust -o sdk/rust/src/fbs proto/dispatcher.fbs

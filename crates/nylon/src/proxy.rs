@@ -1,15 +1,7 @@
 use crate::{backend, context::NylonContextExt, response::Response, runtime::NylonRuntime};
 use async_trait::async_trait;
-use bytes::Bytes;
 use nylon_error::NylonError;
 use nylon_plugin::{run_middleware, try_request_filter, try_response_filter};
-use nylon_sdk::fbs::{
-    dispatcher_generated::nylon_dispatcher::{NylonDispatcher, NylonDispatcherArgs},
-    http_context_generated::nylon_http_context::{
-        NylonHttpContext, NylonHttpContextArgs, NylonHttpRequest, NylonHttpRequestArgs,
-        NylonHttpResponse, NylonHttpResponseArgs,
-    },
-};
 use nylon_types::{context::NylonContext, services::ServiceType};
 use pingora::{
     ErrorType,
@@ -39,7 +31,7 @@ impl ProxyHttp for NylonRuntime {
                 .send(session, ctx)
                 .await;
         }
-        let (route, _) = match nylon_store::routes::find_route(session) {
+        let (route, params) = match nylon_store::routes::find_route(session) {
             Ok(route) => route,
             Err(e) => {
                 return res
@@ -49,48 +41,6 @@ impl ProxyHttp for NylonRuntime {
                     .await;
             }
         };
-
-        // build http context
-        let mut fbs = flatbuffers::FlatBufferBuilder::new();
-        let request = &NylonHttpRequestArgs {
-            method: Some(fbs.create_string("GET")),
-            path: Some(fbs.create_string("/")),
-            query: None,
-            headers: None,
-            body: None,
-        };
-        let req_offset = NylonHttpRequest::create(&mut fbs, request);
-        let response = &NylonHttpResponseArgs {
-            status: 200,
-            headers: None,
-            body: None,
-        };
-        let resp_offset = NylonHttpResponse::create(&mut fbs, response);
-        let dispatcher_args = &NylonHttpContextArgs {
-            request: Some(req_offset),
-            response: Some(resp_offset),
-        };
-        let dispatcher = NylonHttpContext::create(&mut fbs, dispatcher_args);
-        fbs.finish(dispatcher, None);
-        let dispatcher_data = fbs.finished_data();
-
-        // build ctx dispatcher
-        let mut fbs = flatbuffers::FlatBufferBuilder::new();
-        let request_id = fbs.create_string(&ctx.request_id);
-        let data_vec = fbs.create_vector(dispatcher_data);
-        let dispatcher = NylonDispatcher::create(
-            &mut fbs,
-            &NylonDispatcherArgs {
-                http_end: false,
-                request_id: Some(request_id),
-                name: None,
-                entry: None,
-                data: Some(data_vec),
-            },
-        );
-        fbs.finish(dispatcher, None);
-        let ctx_dispatcher = fbs.finished_data();
-        let current_buf = ctx_dispatcher.to_vec();
 
         let middleware_items = route
             .route_middleware
@@ -142,26 +92,21 @@ impl ProxyHttp for NylonRuntime {
         }
 
         if route.service.service_type == ServiceType::Plugin {
+            let http_context =
+                match nylon_sdk::proxy_http::build_http_context(session, &params, ctx).await {
+                    Ok(context) => context,
+                    Err(e) => {
+                        return res
+                            .status(e.http_status())
+                            .body_json(e.exception_json())?
+                            .send(session, ctx)
+                            .await;
+                    }
+                };
             ctx.route = Some(route);
-            match nylon_plugin::dispatcher::http_dispatch(ctx, &current_buf).await {
+            match nylon_plugin::dispatcher::http_service_dispatch(ctx, &http_context).await {
                 Ok(buf) => {
-                    use nylon_sdk::fbs::dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher;
-                    use nylon_sdk::fbs::http_context_generated::nylon_http_context::root_as_nylon_http_context;
-                    let dispatcher =
-                        root_as_nylon_dispatcher(buf.as_slice()).expect("invalid dispatcher");
-
-                    println!("http end: {}", dispatcher.http_end());
-
-                    let http_ctx = root_as_nylon_http_context(dispatcher.data().bytes())
-                        .expect("invalid http context");
-                    let body = http_ctx.response().body().unwrap().bytes().to_vec();
-                    let b = Bytes::from(body);
-                    return res
-                        .status(200)
-                        .header("Content-Type", "application/json")
-                        .body(b)
-                        .send(session, ctx)
-                        .await;
+                    return res.dispatcher_to_response(&buf)?.send(session, ctx).await;
                 }
                 Err(e) => {
                     return Err(pingora::Error::because(

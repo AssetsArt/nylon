@@ -33,10 +33,31 @@ func sdk_handle_request(ptr *C.uchar, input_len C.int) C.FfiOutput {
 	dispatcher := sdk.WrapDispatcher(input)
 	http_ctx := dispatcher.SwitchDataToHttpContext()
 
+	/*
+		bodyJson := map[string]any{}
+		err := http_ctx.Request.BodyJSON(&bodyJson)
+		if err != nil {
+			http_ctx.Response.BodyHTML(`
+			<html>
+				<body>
+					<h1>Error</h1>
+					<p>
+						` + err.Error() + `
+					</p>
+				</body>
+			</html>
+			`)
+			http_ctx.Response.SetStatus(400)
+			dispatcher.SetHttpEnd(true)
+			dispatcher.SetData(http_ctx.ToBytes())
+			return send_response(dispatcher.ToBytes())
+		}
+	*/
 	// create response
 	http_ctx.Response.BodyJSON(map[string]any{
 		"ok": true,
 		"ts": time.Now().Unix(),
+		// "body": bodyJson,
 	})
 
 	// switch http context to bytes

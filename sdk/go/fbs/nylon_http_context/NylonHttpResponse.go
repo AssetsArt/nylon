@@ -53,7 +53,7 @@ func (rcv *NylonHttpResponse) MutateStatus(n int32) bool {
 	return rcv._tab.MutateInt32Slot(4, n)
 }
 
-func (rcv *NylonHttpResponse) Headers(obj *Header, j int) bool {
+func (rcv *NylonHttpResponse) Headers(obj *KeyValue, j int) bool {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		x := rcv._tab.Vector(o)

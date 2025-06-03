@@ -42,6 +42,7 @@ func NewHttpContext() *HttpContext {
 			Query:   url.Values{},
 			Headers: make(map[string]string),
 			Body:    nil,
+			Params:  make(map[string]string),
 		},
 		Response: Response{
 			Status:  200,
@@ -96,7 +97,7 @@ func (d *Dispatcher) SwitchDataToHttpContext() *HttpContext {
 func (h *HttpContext) ToBytes() []byte {
 	bufSize := len(h.Request.Body) + len(h.Response.Body) + 256
 	bufSize += len(h.Request.Headers) + len(h.Response.Headers)
-	bufSize += len(h.Request.Query)
+	bufSize += len(h.Request.Query) + len(h.Request.Params)
 	bufSize += len(h.Request.Method) + len(h.Request.Path)
 
 	builder := flatbuffers.NewBuilder(bufSize)
@@ -106,36 +107,72 @@ func (h *HttpContext) ToBytes() []byte {
 	reqMethodOffset := builder.CreateString(req.Method)
 	reqPathOffset := builder.CreateString(req.Path)
 	reqQueryOffset := builder.CreateString(req.Query.Encode())
+	reqBodyOffset := builder.CreateByteString(req.Body)
+
+	// Params
+	paramsOffsets := make([]flatbuffers.UOffsetT, 0, len(req.Params))
+	for k, v := range req.Params {
+		kStr := builder.CreateString(k)
+		vStr := builder.CreateString(v)
+		nylon_http_context.KeyValueStart(builder)
+		nylon_http_context.KeyValueAddKey(builder, kStr)
+		nylon_http_context.KeyValueAddValue(builder, vStr)
+		paramsOffsets = append(paramsOffsets, nylon_http_context.KeyValueEnd(builder))
+	}
+	nylon_http_context.NylonHttpRequestStartParamsVector(builder, len(paramsOffsets))
+	for i := len(paramsOffsets) - 1; i >= 0; i-- {
+		builder.PrependUOffsetT(paramsOffsets[i])
+	}
+	paramsVec := builder.EndVector(len(paramsOffsets))
+
+	// Headers
+	reqHeadersOffsets := make([]flatbuffers.UOffsetT, 0, len(req.Headers))
+	for k, v := range req.Headers {
+		kStr := builder.CreateString(k)
+		vStr := builder.CreateString(v)
+		nylon_http_context.KeyValueStart(builder)
+		nylon_http_context.KeyValueAddKey(builder, kStr)
+		nylon_http_context.KeyValueAddValue(builder, vStr)
+		reqHeadersOffsets = append(reqHeadersOffsets, nylon_http_context.KeyValueEnd(builder))
+	}
+	nylon_http_context.NylonHttpRequestStartHeadersVector(builder, len(reqHeadersOffsets))
+	for i := len(reqHeadersOffsets) - 1; i >= 0; i-- {
+		builder.PrependUOffsetT(reqHeadersOffsets[i])
+	}
+	reqHeadersVec := builder.EndVector(len(reqHeadersOffsets))
 
 	nylon_http_context.NylonHttpRequestStart(builder)
 	nylon_http_context.NylonHttpRequestAddMethod(builder, reqMethodOffset)
 	nylon_http_context.NylonHttpRequestAddPath(builder, reqPathOffset)
 	nylon_http_context.NylonHttpRequestAddQuery(builder, reqQueryOffset)
+	nylon_http_context.NylonHttpRequestAddParams(builder, paramsVec)
+	nylon_http_context.NylonHttpRequestAddHeaders(builder, reqHeadersVec)
+	nylon_http_context.NylonHttpRequestAddBody(builder, reqBodyOffset)
 	request := nylon_http_context.NylonHttpRequestEnd(builder)
 
 	// Build response
 	res := h.Response
-	headerOffsets := make([]flatbuffers.UOffsetT, 0, len(res.Headers))
+	resHeadersOffsets := make([]flatbuffers.UOffsetT, 0, len(res.Headers))
 	for k, v := range res.Headers {
 		kStr := builder.CreateString(k)
 		vStr := builder.CreateString(v)
-		nylon_http_context.HeaderStart(builder)
-		nylon_http_context.HeaderAddKey(builder, kStr)
-		nylon_http_context.HeaderAddValue(builder, vStr)
-		headerOffsets = append(headerOffsets, nylon_http_context.HeaderEnd(builder))
+		nylon_http_context.KeyValueStart(builder)
+		nylon_http_context.KeyValueAddKey(builder, kStr)
+		nylon_http_context.KeyValueAddValue(builder, vStr)
+		resHeadersOffsets = append(resHeadersOffsets, nylon_http_context.KeyValueEnd(builder))
 	}
 
-	nylon_http_context.NylonHttpResponseStartHeadersVector(builder, len(headerOffsets))
-	for i := len(headerOffsets) - 1; i >= 0; i-- {
-		builder.PrependUOffsetT(headerOffsets[i])
+	nylon_http_context.NylonHttpResponseStartHeadersVector(builder, len(resHeadersOffsets))
+	for i := len(resHeadersOffsets) - 1; i >= 0; i-- {
+		builder.PrependUOffsetT(resHeadersOffsets[i])
 	}
-	headersVec := builder.EndVector(len(headerOffsets))
+	resHeadersVec := builder.EndVector(len(resHeadersOffsets))
 
 	body := builder.CreateByteString(res.Body)
 
 	nylon_http_context.NylonHttpResponseStart(builder)
 	nylon_http_context.NylonHttpResponseAddStatus(builder, int32(res.Status))
-	nylon_http_context.NylonHttpResponseAddHeaders(builder, headersVec)
+	nylon_http_context.NylonHttpResponseAddHeaders(builder, resHeadersVec)
 	nylon_http_context.NylonHttpResponseAddBody(builder, body)
 	response := nylon_http_context.NylonHttpResponseEnd(builder)
 

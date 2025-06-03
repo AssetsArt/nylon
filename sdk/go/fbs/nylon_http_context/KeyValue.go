@@ -6,42 +6,42 @@ import (
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 
-type Header struct {
+type KeyValue struct {
 	_tab flatbuffers.Table
 }
 
-func GetRootAsHeader(buf []byte, offset flatbuffers.UOffsetT) *Header {
+func GetRootAsKeyValue(buf []byte, offset flatbuffers.UOffsetT) *KeyValue {
 	n := flatbuffers.GetUOffsetT(buf[offset:])
-	x := &Header{}
+	x := &KeyValue{}
 	x.Init(buf, n+offset)
 	return x
 }
 
-func FinishHeaderBuffer(builder *flatbuffers.Builder, offset flatbuffers.UOffsetT) {
+func FinishKeyValueBuffer(builder *flatbuffers.Builder, offset flatbuffers.UOffsetT) {
 	builder.Finish(offset)
 }
 
-func GetSizePrefixedRootAsHeader(buf []byte, offset flatbuffers.UOffsetT) *Header {
+func GetSizePrefixedRootAsKeyValue(buf []byte, offset flatbuffers.UOffsetT) *KeyValue {
 	n := flatbuffers.GetUOffsetT(buf[offset+flatbuffers.SizeUint32:])
-	x := &Header{}
+	x := &KeyValue{}
 	x.Init(buf, n+offset+flatbuffers.SizeUint32)
 	return x
 }
 
-func FinishSizePrefixedHeaderBuffer(builder *flatbuffers.Builder, offset flatbuffers.UOffsetT) {
+func FinishSizePrefixedKeyValueBuffer(builder *flatbuffers.Builder, offset flatbuffers.UOffsetT) {
 	builder.FinishSizePrefixed(offset)
 }
 
-func (rcv *Header) Init(buf []byte, i flatbuffers.UOffsetT) {
+func (rcv *KeyValue) Init(buf []byte, i flatbuffers.UOffsetT) {
 	rcv._tab.Bytes = buf
 	rcv._tab.Pos = i
 }
 
-func (rcv *Header) Table() flatbuffers.Table {
+func (rcv *KeyValue) Table() flatbuffers.Table {
 	return rcv._tab
 }
 
-func (rcv *Header) Key() []byte {
+func (rcv *KeyValue) Key() []byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(4))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
@@ -49,7 +49,7 @@ func (rcv *Header) Key() []byte {
 	return nil
 }
 
-func (rcv *Header) Value() []byte {
+func (rcv *KeyValue) Value() []byte {
 	o := flatbuffers.UOffsetT(rcv._tab.Offset(6))
 	if o != 0 {
 		return rcv._tab.ByteVector(o + rcv._tab.Pos)
@@ -57,15 +57,15 @@ func (rcv *Header) Value() []byte {
 	return nil
 }
 
-func HeaderStart(builder *flatbuffers.Builder) {
+func KeyValueStart(builder *flatbuffers.Builder) {
 	builder.StartObject(2)
 }
-func HeaderAddKey(builder *flatbuffers.Builder, key flatbuffers.UOffsetT) {
+func KeyValueAddKey(builder *flatbuffers.Builder, key flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(0, flatbuffers.UOffsetT(key), 0)
 }
-func HeaderAddValue(builder *flatbuffers.Builder, value flatbuffers.UOffsetT) {
+func KeyValueAddValue(builder *flatbuffers.Builder, value flatbuffers.UOffsetT) {
 	builder.PrependUOffsetTSlot(1, flatbuffers.UOffsetT(value), 0)
 }
-func HeaderEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
+func KeyValueEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {
 	return builder.EndObject()
 }
