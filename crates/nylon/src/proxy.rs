@@ -2,6 +2,7 @@ use crate::{backend, context::NylonContextExt, response::Response, runtime::Nylo
 use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_plugin::{MiddlewareContext, run_middleware, try_request_filter, try_response_filter};
+use nylon_sdk::fbs::dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher;
 use nylon_types::{context::NylonContext, services::ServiceType};
 use pingora::{
     ErrorType,
@@ -56,23 +57,9 @@ impl ProxyHttp for NylonRuntime {
                 false
             });
         for middleware in middleware_items {
-            let plugin_name = match &middleware.0.plugin {
-                Some(name) => name,
-                None => {
-                    return Err(pingora::Error::because(
-                        ErrorType::InternalError,
-                        "[request_filter]",
-                        NylonError::ConfigError(format!(
-                            "Middleware plugin not found: {:?}",
-                            middleware.0.plugin
-                        )),
-                    ));
-                }
-            };
-            // println!("plugin_name: {}", plugin_name);
             match run_middleware(
                 &MiddlewareContext {
-                    plugin_name: plugin_name.to_string(),
+                    middleware: middleware.0.clone(),
                     payload: middleware.0.payload.clone(),
                     payload_ast: middleware.1.clone(),
                     params: Some(params.clone()),
@@ -116,9 +103,17 @@ impl ProxyHttp for NylonRuntime {
                     }
                 };
             ctx.route = Some(route);
-            match nylon_plugin::dispatcher::http_service_dispatch(ctx, &http_context).await {
+            match nylon_plugin::dispatcher::http_service_dispatch(ctx, None, &http_context).await {
                 Ok(buf) => {
-                    return res.dispatcher_to_response(&buf)?.send(session, ctx).await;
+                    let dispatcher = root_as_nylon_dispatcher(&buf).map_err(|e| {
+                        pingora::Error::because(
+                            ErrorType::InternalError,
+                            "[request_filter]",
+                            e.to_string(),
+                        )
+                    })?;
+                    let data = dispatcher.data().bytes().to_vec();
+                    return res.dispatcher_to_response(&data)?.send(session, ctx).await;
                 }
                 Err(e) => {
                     return Err(pingora::Error::because(
@@ -204,22 +199,9 @@ impl ProxyHttp for NylonRuntime {
             });
 
         for middleware in middleware_items {
-            let plugin_name = match &middleware.0.plugin {
-                Some(name) => name,
-                None => {
-                    return Err(pingora::Error::because(
-                        ErrorType::InternalError,
-                        "[request_filter]",
-                        NylonError::ConfigError(format!(
-                            "Middleware plugin not found: {:?}",
-                            middleware.0.plugin
-                        )),
-                    ));
-                }
-            };
             match run_middleware(
                 &MiddlewareContext {
-                    plugin_name: plugin_name.to_string(),
+                    middleware: middleware.0.clone(),
                     payload: middleware.0.payload.clone(),
                     payload_ast: middleware.1.clone(),
                     params: None,

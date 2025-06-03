@@ -1,9 +1,6 @@
 use crate::runtime::NylonRuntime;
 use bytes::Bytes;
-use nylon_sdk::fbs::{
-    dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher,
-    http_context_generated::nylon_http_context::root_as_nylon_http_context,
-};
+use nylon_sdk::fbs::http_context_generated::nylon_http_context::root_as_nylon_http_context;
 use nylon_types::context::NylonContext;
 use pingora::{
     ErrorType,
@@ -121,17 +118,7 @@ impl<'a> Response<'a> {
     }
 
     pub fn dispatcher_to_response(&mut self, dispatcher: &[u8]) -> pingora::Result<&mut Self> {
-        let dispatcher = match root_as_nylon_dispatcher(dispatcher) {
-            Ok(d) => d,
-            Err(e) => {
-                return Err(pingora::Error::because(
-                    ErrorType::InternalError,
-                    "[Response]".to_string(),
-                    e.to_string(),
-                ));
-            }
-        };
-        let http_ctx = match root_as_nylon_http_context(dispatcher.data().bytes()) {
+        let http_ctx = match root_as_nylon_http_context(dispatcher) {
             Ok(d) => d,
             Err(e) => {
                 return Err(pingora::Error::because(

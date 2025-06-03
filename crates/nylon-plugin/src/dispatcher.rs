@@ -21,6 +21,7 @@ fn get_plugin(name: &str) -> Result<Arc<FfiPlugin>, NylonError> {
 
 pub async fn http_service_dispatch(
     ctx: &mut NylonContext,
+    entry: Option<&str>,
     dispatch_data: &[u8],
 ) -> Result<Vec<u8>, NylonError> {
     let request_id = &ctx.request_id;
@@ -30,7 +31,7 @@ pub async fn http_service_dispatch(
     let Some(plugin) = &route.service.plugin else {
         return Err(NylonError::ConfigError("Plugin not found".to_string()));
     };
-    let entry = &plugin.entry;
+    let entry = entry.unwrap_or(&plugin.entry);
     let plugin_name = &plugin.name;
     dispatch(request_id, plugin_name, entry, dispatch_data).await
 }
