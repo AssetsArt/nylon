@@ -82,7 +82,8 @@ pub async fn run_middleware(
         _ => {
             if let Some(request_filter) = &middleware.request_filter {
                 let http_context =
-                    nylon_sdk::proxy_http::build_http_context(session, params.clone(), ctx).await?;
+                    nylon_sdk::proxy_http::build_http_context(session, params.clone(), ctx, None)
+                        .await?;
                 let dispatcher = dispatcher::http_service_dispatch(
                     ctx,
                     Some(plugin_name.as_str()),
@@ -97,8 +98,20 @@ pub async fn run_middleware(
             } else if let (Some(response_filter), Some(upstream_response)) =
                 (&middleware.response_filter, upstream_response)
             {
-                let http_context =
-                    nylon_sdk::proxy_http::build_http_context(session, params.clone(), ctx).await?;
+                for h in ctx.headers.headers.clone() {
+                    if let Some(key) = h.0 {
+                        // println!("header: {}", key);
+                        // println!("value: {:?}", h.1);
+                        let _ = upstream_response.append_header(key, h.1);
+                    }
+                }
+                let http_context = nylon_sdk::proxy_http::build_http_context(
+                    session,
+                    params.clone(),
+                    ctx,
+                    Some(upstream_response),
+                )
+                .await?;
                 let dispatcher = dispatcher::http_service_dispatch(
                     ctx,
                     Some(plugin_name.as_str()),
@@ -117,10 +130,17 @@ pub async fn run_middleware(
                         )));
                     }
                 };
+
+                // clear all headers
+                for h in upstream_response.headers.clone() {
+                    if let Some(key) = h.0 {
+                        let _ = upstream_response.remove_header(key.as_str());
+                    }
+                }
+
                 let response = http_ctx.response();
                 let headers = response.headers();
                 for h in headers.iter().flatten() {
-                    // println!("header: {:?}, {:?}", h.key(), h.value());
                     let _ =
                         upstream_response.append_header(h.key().to_string(), h.value().to_string());
                 }

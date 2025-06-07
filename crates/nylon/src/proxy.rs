@@ -87,13 +87,13 @@ impl ProxyHttp for NylonRuntime {
             {
                 Ok((http_end, dispatcher)) if http_end => {
                     return res
-                        .dispatcher_to_response(session, &dispatcher, http_end)
+                        .dispatcher_to_response(session, ctx, &dispatcher, http_end)
                         .await?
                         .send(session, ctx)
                         .await;
                 }
                 Ok((http_end, dispatcher)) if !dispatcher.is_empty() => {
-                    res.dispatcher_to_response(session, &dispatcher, http_end)
+                    res.dispatcher_to_response(session, ctx, &dispatcher, http_end)
                         .await?;
                     continue;
                 }
@@ -104,13 +104,17 @@ impl ProxyHttp for NylonRuntime {
 
         // Handle plugin service type
         if route.service.service_type == ServiceType::Plugin {
-            let http_context =
-                match nylon_sdk::proxy_http::build_http_context(session, Some(params.clone()), ctx)
-                    .await
-                {
-                    Ok(context) => context,
-                    Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
-                };
+            let http_context = match nylon_sdk::proxy_http::build_http_context(
+                session,
+                Some(params.clone()),
+                ctx,
+                None,
+            )
+            .await
+            {
+                Ok(context) => context,
+                Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
+            };
 
             match nylon_plugin::dispatcher::http_service_dispatch(ctx, None, None, &http_context)
                 .await
@@ -124,7 +128,7 @@ impl ProxyHttp for NylonRuntime {
                         )
                     })?;
                     return res
-                        .dispatcher_to_response(session, dispatcher.data().bytes(), true)
+                        .dispatcher_to_response(session, ctx, dispatcher.data().bytes(), true)
                         .await?
                         .send(session, ctx)
                         .await;

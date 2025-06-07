@@ -121,6 +121,7 @@ impl<'a> Response<'a> {
     pub async fn dispatcher_to_response(
         &mut self,
         session: &mut Session,
+        ctx: &mut NylonContext,
         dispatcher: &[u8],
         end: bool,
     ) -> pingora::Result<&mut Self> {
@@ -161,6 +162,8 @@ impl<'a> Response<'a> {
                 .to_vec();
             self.body(Bytes::from(body));
         }
+
+        ctx.headers = self.headers.clone();
         Ok(self)
     }
 }

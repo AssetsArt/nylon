@@ -28,6 +28,10 @@ func sdk_go_mid_response_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
 	// set response header
 	res.SetHeader("x-response-filter", "true")
 
+	// if modify body, set transfer-encoding to chunked
+	res.SetHeader("transfer-encoding", "chunked")
+	res.RemoveHeader("content-length")
+
 	// set data to dispatcher
 	dispatcher.SetData(res.ToBytes()) // set data to http context
 
