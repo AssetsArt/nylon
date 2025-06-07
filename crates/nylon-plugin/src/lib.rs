@@ -1,5 +1,8 @@
 use nylon_error::NylonError;
-use nylon_sdk::fbs::dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher;
+use nylon_sdk::fbs::{
+    dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher,
+    http_context_generated::nylon_http_context::root_as_nylon_http_context,
+};
 use nylon_types::{context::NylonContext, route::MiddlewareItem, template::Expr};
 use pingora::{http::ResponseHeader, proxy::Session};
 use serde_json::Value;
@@ -91,8 +94,36 @@ pub async fn run_middleware(
                     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
                 let http_end = dispatcher.http_end();
                 return Ok((http_end, dispatcher.data().bytes().to_vec()));
-            } else if let Some(_response_filter) = &middleware.response_filter {
-                todo!("response_filter");
+            } else if let (Some(response_filter), Some(upstream_response)) =
+                (&middleware.response_filter, upstream_response)
+            {
+                let http_context =
+                    nylon_sdk::proxy_http::build_http_context(session, params.clone(), ctx).await?;
+                let dispatcher = dispatcher::http_service_dispatch(
+                    ctx,
+                    Some(plugin_name.as_str()),
+                    Some(response_filter),
+                    &http_context,
+                )
+                .await?;
+                let dispatcher = root_as_nylon_dispatcher(&dispatcher)
+                    .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
+                let http_ctx = match root_as_nylon_http_context(dispatcher.data().bytes()) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        return Err(NylonError::ConfigError(format!(
+                            "Invalid http context: {}",
+                            e
+                        )));
+                    }
+                };
+                let response = http_ctx.response();
+                let headers = response.headers();
+                for h in headers.iter().flatten() {
+                    // println!("header: {:?}, {:?}", h.key(), h.value());
+                    let _ =
+                        upstream_response.append_header(h.key().to_string(), h.value().to_string());
+                }
             } else if let Some(_response_body_filter) = &middleware.response_body_filter {
                 todo!("response_body_filter");
             } else if let Some(_logging) = &middleware.logging {

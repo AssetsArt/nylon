@@ -1,18 +1,29 @@
 package sdk
 
 type ResponseFilter struct {
-	Request  *Request
-	response *Response
+	http_ctx *HttpContext
+}
+
+func (r *ResponseFilter) ToBytes() []byte {
+	return r.http_ctx.ToBytes()
+}
+
+func (r *ResponseFilter) ReadRequest() Request {
+	return r.http_ctx.Request
 }
 
 func (r *ResponseFilter) Headers() map[string]string {
-	return r.response.Headers
+	return r.http_ctx.Response.Headers
 }
 
 func (r *ResponseFilter) SetHeader(key, value string) {
-	r.response.SetHeader(key, value)
+	r.http_ctx.Response.SetHeader(key, value)
 }
 
 func (r *ResponseFilter) RemoveHeader(key string) {
-	r.response.RemoveHeader(key)
+	r.http_ctx.Response.RemoveHeader(key)
+}
+
+func (r *ResponseFilter) GetHeader(key string) string {
+	return r.http_ctx.Response.Headers[key]
 }

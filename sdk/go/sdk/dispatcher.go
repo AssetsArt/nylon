@@ -89,6 +89,12 @@ func (d *Dispatcher) SwitchDataToHttpContext() *HttpContext {
 	}
 }
 
+func (d *Dispatcher) SwitchDataToResponseFilter() *ResponseFilter {
+	return &ResponseFilter{
+		http_ctx: d.SwitchDataToHttpContext(),
+	}
+}
+
 // func (d *Dispatcher) SwitchDataToRequestFilter() *RequestFilter {}
 
 func (h *HttpContext) ToBytes() []byte {

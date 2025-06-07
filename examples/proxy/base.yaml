@@ -20,7 +20,8 @@ plugins:
     file: ./target/examples/go/plugin_sdk.so
     entry:
       - sdk_go_service
-      - sdk_go_middleware
+      - sdk_go_mid_request_filter
+      - sdk_go_mid_response_filter
     # life_cycle:
     #   setup: true
     #   shutdown: true
@@ -47,10 +48,13 @@ services:
 middleware_groups:
   header-modifier:
     - plugin: plugin_sdk
-      request_filter: "sdk_go_middleware"
+      request_filter: "sdk_go_mid_request_filter"
       payload:
         client_ip: "${request(client_ip)}"
   
+    - plugin: plugin_sdk
+      response_filter: "sdk_go_mid_response_filter"
+
     - plugin: RequestHeaderModifier
       payload:
         remove:
