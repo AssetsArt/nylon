@@ -43,7 +43,7 @@ pub async fn build_http_context(
             .iter()
             .map(|(k, v)| {
                 let key = fbs.create_string(k.as_str());
-                let value = fbs.create_string(v.to_str().unwrap());
+                let value = fbs.create_string(v.to_str().unwrap_or_default());
                 KeyValue::create(
                     &mut fbs,
                     &KeyValueArgs {
@@ -74,7 +74,7 @@ pub async fn build_http_context(
             .map(|(k, v)| {
                 // println!("header: {:?}, {:?}", k, v);
                 let key = fbs.create_string(k.as_str());
-                let value = fbs.create_string(v.to_str().unwrap());
+                let value = fbs.create_string(v.to_str().unwrap_or_default());
                 KeyValue::create(
                     &mut fbs,
                     &KeyValueArgs {

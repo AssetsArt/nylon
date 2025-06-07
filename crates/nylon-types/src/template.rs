@@ -131,7 +131,9 @@ pub fn extract_and_parse_templates(input: &str) -> Result<Vec<Expr>, NylonError>
     let mut last = 0;
 
     for cap in re.captures_iter(input) {
-        let whole_match = cap.get(0).unwrap();
+        let whole_match = cap
+            .get(0)
+            .ok_or(NylonError::ConfigError(format!("Invalid regex: {re}")))?;
         let expr_str = &cap[1];
 
         // Push literal (if any)
