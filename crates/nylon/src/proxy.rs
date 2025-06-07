@@ -15,13 +15,12 @@ use pingora::{
 async fn handle_error_response<'a>(
     res: &'a mut Response<'a>,
     session: &'a mut Session,
-    ctx: &'a mut NylonContext,
     error: impl Into<NylonError>,
 ) -> pingora::Result<bool> {
     let error = error.into();
     res.status(error.http_status())
         .body_json(error.exception_json())?
-        .send(session, ctx)
+        .send(session)
         .await
 }
 
@@ -39,21 +38,22 @@ impl ProxyHttp for NylonRuntime {
         session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<bool> {
-        let mut res = Response::new(self).await?;
+        let mut res = Response::new(self, ctx).await?;
+        // let ctx = res.ctx;
 
         // Parse request and handle errors
-        if let Err(e) = ctx.parse_request(session).await {
-            return handle_error_response(&mut res, session, ctx, e).await;
+        if let Err(e) = res.ctx.parse_request(session).await {
+            return handle_error_response(&mut res, session, e).await;
         }
 
         // Find matching route
         let (route, params) = match nylon_store::routes::find_route(session) {
             Ok(route) => route,
-            Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
+            Err(e) => return handle_error_response(&mut res, session, e).await,
         };
 
-        ctx.route = Some(route.clone());
-        ctx.params = Some(params.clone());
+        res.ctx.route = Some(route.clone());
+        res.ctx.params = Some(params.clone());
 
         // Process middleware
         let middleware_items = route
@@ -79,26 +79,25 @@ impl ProxyHttp for NylonRuntime {
                     payload_ast: middleware.1.clone(),
                     params: Some(params.clone()),
                 },
-                ctx,
+                res.ctx,
                 session,
-                None,
             )
             .await
             {
                 Ok((http_end, dispatcher)) if http_end => {
                     return res
-                        .dispatcher_to_response(session, ctx, &dispatcher, http_end)
+                        .dispatcher_to_response(session, &dispatcher, http_end)
                         .await?
-                        .send(session, ctx)
+                        .send(session)
                         .await;
                 }
                 Ok((http_end, dispatcher)) if !dispatcher.is_empty() => {
-                    res.dispatcher_to_response(session, ctx, &dispatcher, http_end)
+                    res.dispatcher_to_response(session, &dispatcher, http_end)
                         .await?;
                     continue;
                 }
                 Ok((_, _)) => continue,
-                Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
+                Err(e) => return handle_error_response(&mut res, session, e).await,
             }
         }
 
@@ -107,17 +106,21 @@ impl ProxyHttp for NylonRuntime {
             let http_context = match nylon_sdk::proxy_http::build_http_context(
                 session,
                 Some(params.clone()),
-                ctx,
-                None,
+                res.ctx,
             )
             .await
             {
                 Ok(context) => context,
-                Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
+                Err(e) => return handle_error_response(&mut res, session, e).await,
             };
 
-            match nylon_plugin::dispatcher::http_service_dispatch(ctx, None, None, &http_context)
-                .await
+            match nylon_plugin::dispatcher::http_service_dispatch(
+                res.ctx,
+                None,
+                None,
+                &http_context,
+            )
+            .await
             {
                 Ok(buf) => {
                     let dispatcher = root_as_nylon_dispatcher(&buf).map_err(|e| {
@@ -128,9 +131,9 @@ impl ProxyHttp for NylonRuntime {
                         )
                     })?;
                     return res
-                        .dispatcher_to_response(session, ctx, dispatcher.data().bytes(), true)
+                        .dispatcher_to_response(session, dispatcher.data().bytes(), true)
                         .await?
-                        .send(session, ctx)
+                        .send(session)
                         .await;
                 }
                 Err(e) => {
@@ -146,12 +149,12 @@ impl ProxyHttp for NylonRuntime {
         // Handle regular service type
         let http_service = match nylon_store::lb_backends::get(&route.service.name).await {
             Ok(backend) => backend,
-            Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
+            Err(e) => return handle_error_response(&mut res, session, e).await,
         };
 
-        ctx.backend = match backend::selection(&http_service, session, ctx) {
+        res.ctx.backend = match backend::selection(&http_service, session, res.ctx) {
             Ok(b) => b,
-            Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
+            Err(e) => return handle_error_response(&mut res, session, e).await,
         };
 
         Ok(false)
@@ -187,6 +190,24 @@ impl ProxyHttp for NylonRuntime {
             return Ok(());
         };
 
+        // set response header
+        let _ = ctx
+            .response_header
+            .set_status(upstream_response.status.as_u16());
+        for h in upstream_response.headers.clone() {
+            if let Some(key) = h.0 {
+                let _ = ctx.response_header.remove_header(key.as_str());
+                let _ = ctx.response_header.append_header(key, h.1);
+            }
+        }
+
+        // clear all headers in upstream_response
+        for h in upstream_response.headers.clone() {
+            if let Some(key) = h.0 {
+                let _ = upstream_response.remove_header(key.as_str());
+            }
+        }
+
         let middleware_items = route
             .route_middleware
             .iter()
@@ -211,7 +232,6 @@ impl ProxyHttp for NylonRuntime {
                 },
                 ctx,
                 session,
-                Some(upstream_response),
             )
             .await
             {
@@ -222,6 +242,16 @@ impl ProxyHttp for NylonRuntime {
                 ));
             }
         }
+
+        // set response header to upstream_response
+        let _ = upstream_response.set_status(ctx.response_header.status.as_u16());
+        for h in ctx.response_header.headers.clone() {
+            if let Some(key) = h.0 {
+                let _ = upstream_response.remove_header(key.as_str());
+                let _ = upstream_response.append_header(key, h.1);
+            }
+        }
+
         Ok(())
     }
 

@@ -14,7 +14,7 @@ pub struct Route {
 
 #[derive(Debug, Clone)]
 pub struct NylonContext {
-    pub headers: ResponseHeader,
+    pub response_header: ResponseHeader,
     pub backend: Backend,
     pub client_ip: String,
     pub route: Option<Route>,
@@ -30,7 +30,8 @@ impl Default for NylonContext {
             route: None,
             params: None,
             request_id: Uuid::now_v7().to_string(),
-            headers: ResponseHeader::build(200, None).expect("Unable to create response header"),
+            response_header: ResponseHeader::build(200, None)
+                .expect("Unable to create response header"),
         }
     }
 }

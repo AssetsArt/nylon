@@ -22,6 +22,8 @@ func sdk_go_service(ptr *C.uchar, input_len C.int) C.FfiOutput {
 		"ts":          time.Now().Unix(),
 		"headers":     http_ctx.Request.Headers,
 	})
+	// http_ctx.Response.SetStatus(400)
+	http_ctx.Response.SetHeader("x-service", "true")
 
 	// set http end and data
 	dispatcher.SetHttpEnd(true)            // set http end to true

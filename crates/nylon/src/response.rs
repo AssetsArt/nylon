@@ -4,33 +4,23 @@ use nylon_sdk::fbs::http_context_generated::nylon_http_context::root_as_nylon_ht
 use nylon_types::context::NylonContext;
 use pingora::{
     ErrorType,
-    http::ResponseHeader,
     protocols::http::HttpTask,
     proxy::{ProxyHttp, Session},
 };
 use serde_json::Value;
 
 pub struct Response<'a> {
-    pub headers: ResponseHeader,
     pub body: Option<Bytes>,
     pub proxy: &'a NylonRuntime,
+    pub ctx: &'a mut NylonContext,
 }
 
 impl<'a> Response<'a> {
-    pub async fn new(proxy: &'a NylonRuntime) -> pingora::Result<Self> {
+    pub async fn new(proxy: &'a NylonRuntime, ctx: &'a mut NylonContext) -> pingora::Result<Self> {
         Ok(Self {
-            headers: match ResponseHeader::build(200, None) {
-                Ok(h) => h,
-                Err(e) => {
-                    return Err(pingora::Error::because(
-                        ErrorType::InternalError,
-                        "[Response]".to_string(),
-                        e.to_string(),
-                    ));
-                }
-            },
             body: None,
             proxy,
+            ctx,
         })
     }
 
@@ -49,14 +39,15 @@ impl<'a> Response<'a> {
     }
 
     pub fn status(&mut self, status: u16) -> &mut Self {
-        let _ = self.headers.set_status(status);
+        let _ = self.ctx.response_header.set_status(status);
         self
     }
 
     pub fn header(&mut self, key: &str, value: &str) -> &mut Self {
-        let _ = self.headers.remove_header(key);
+        let _ = self.ctx.response_header.remove_header(key);
         if let Err(e) = self
-            .headers
+            .ctx
+            .response_header
             .append_header(key.to_string(), value.to_string())
         {
             tracing::error!("Error adding header: {:?}", e);
@@ -87,18 +78,15 @@ impl<'a> Response<'a> {
         Ok(self)
     }
 
-    pub async fn send(
-        &mut self,
-        session: &mut Session,
-        ctx: &mut NylonContext,
-    ) -> pingora::Result<bool> {
+    pub async fn send(&mut self, session: &mut Session) -> pingora::Result<bool> {
+        let mut headers = self.ctx.response_header.clone();
         self.proxy
-            .response_filter(session, &mut self.headers, ctx)
+            .response_filter(session, &mut headers, self.ctx)
             .await?;
-        let mut tasks = vec![HttpTask::Header(Box::new(self.headers.clone()), false)];
+        let mut tasks = vec![HttpTask::Header(Box::new(headers), false)];
         let _ = self
             .proxy
-            .response_body_filter(session, &mut self.body, false, ctx)
+            .response_body_filter(session, &mut self.body, false, self.ctx)
             .is_ok();
         if let Some(body) = self.body.clone() {
             tasks.push(HttpTask::Body(Some(body), false));
@@ -121,7 +109,6 @@ impl<'a> Response<'a> {
     pub async fn dispatcher_to_response(
         &mut self,
         session: &mut Session,
-        ctx: &mut NylonContext,
         dispatcher: &[u8],
         end: bool,
     ) -> pingora::Result<&mut Self> {
@@ -146,7 +133,8 @@ impl<'a> Response<'a> {
         }
 
         // set response status and headers
-        self.status(http_ctx.response().status() as u16);
+        let status = http_ctx.response().status() as u16;
+        self.status(status);
         let headers = http_ctx.response().headers();
         for h in headers.iter().flatten() {
             self.header(h.key(), h.value());
@@ -162,8 +150,6 @@ impl<'a> Response<'a> {
                 .to_vec();
             self.body(Bytes::from(body));
         }
-
-        ctx.headers = self.headers.clone();
         Ok(self)
     }
 }

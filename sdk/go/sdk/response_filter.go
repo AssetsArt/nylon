@@ -12,6 +12,10 @@ func (r *ResponseFilter) ReadRequest() Request {
 	return r.http_ctx.Request
 }
 
+func (r *ResponseFilter) SetStatus(status int) {
+	r.http_ctx.Response.SetStatus(status)
+}
+
 func (r *ResponseFilter) Headers() map[string]string {
 	return r.http_ctx.Response.Headers
 }

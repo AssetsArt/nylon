@@ -3,7 +3,7 @@ use nylon_types::{
     context::NylonContext,
     template::{Expr, apply_payload_ast},
 };
-use pingora::{http::ResponseHeader, proxy::Session};
+use pingora::proxy::Session;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -60,7 +60,6 @@ pub fn request(
 pub fn response(
     ctx: &mut NylonContext,
     session: &mut Session,
-    upstream_response: &mut ResponseHeader,
     payload: &Option<Value>,
     payload_ast: &Option<HashMap<String, Vec<Expr>>>,
 ) -> Result<(), NylonError> {
@@ -79,7 +78,7 @@ pub fn response(
             set: None,
         },
     };
-    let headers = upstream_response;
+    let headers = &mut ctx.response_header;
     if let Some(set) = payload.set {
         for header in set {
             let _ = headers.remove_header(&header.name);

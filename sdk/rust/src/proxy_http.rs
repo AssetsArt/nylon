@@ -4,14 +4,13 @@ use crate::fbs::http_context_generated::nylon_http_context::{
 };
 use nylon_error::NylonError;
 use nylon_types::context::NylonContext;
-use pingora::{http::ResponseHeader, proxy::Session};
+use pingora::proxy::Session;
 use std::collections::HashMap;
 
 pub async fn build_http_context(
     session: &mut Session,
     params: Option<HashMap<String, String>>,
-    _ctx: &mut NylonContext,
-    upstream_response: Option<&mut ResponseHeader>,
+    ctx: &mut NylonContext,
 ) -> Result<Vec<u8>, NylonError> {
     let mut fbs = flatbuffers::FlatBufferBuilder::new();
     // params
@@ -97,21 +96,18 @@ pub async fn build_http_context(
     }
     let req_offset = NylonHttpRequest::create(&mut fbs, &request);
     let mut headers = Vec::new();
-    let mut status = 200;
-    if let Some(upstream_response) = upstream_response {
-        status = upstream_response.status.as_u16();
-        for h in upstream_response.headers.clone() {
-            if let Some(key) = h.0 {
-                let key = fbs.create_string(key.as_str());
-                let value = fbs.create_string(h.1.to_str().unwrap_or_default());
-                headers.push(KeyValue::create(
-                    &mut fbs,
-                    &KeyValueArgs {
-                        key: Some(key),
-                        value: Some(value),
-                    },
-                ));
-            }
+    let status = ctx.response_header.status.as_u16();
+    for h in ctx.response_header.headers.clone() {
+        if let Some(key) = h.0 {
+            let key = fbs.create_string(key.as_str());
+            let value = fbs.create_string(h.1.to_str().unwrap_or_default());
+            headers.push(KeyValue::create(
+                &mut fbs,
+                &KeyValueArgs {
+                    key: Some(key),
+                    value: Some(value),
+                },
+            ));
         }
     }
     let response = &NylonHttpResponseArgs {
