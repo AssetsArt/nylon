@@ -25,6 +25,8 @@ pub async fn http_service_dispatch(
     entry: Option<&str>,
     dispatch_data: &[u8],
 ) -> Result<Vec<u8>, NylonError> {
+    // println!("plugin: {:#?}", plugin);
+    // println!("entry: {:#?}", entry);
     let request_id = &ctx.request_id;
     let (plugin_name, entry) = match plugin {
         Some(p) => (

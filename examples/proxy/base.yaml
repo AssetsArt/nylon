@@ -19,18 +19,18 @@ plugins:
     type: ffi
     file: ./target/examples/go/plugin_sdk.so
     entry:
-      - sdk_handle_request
-      - sdk_handle_middleware
+      - sdk_go_service
+      - sdk_go_middleware
     # life_cycle:
     #   setup: true
     #   shutdown: true
 
 services:
-  - name: go-plugin
+  - name: go-service
     service_type: plugin
     plugin:
       name: plugin_sdk
-      entry: sdk_handle_request
+      entry: sdk_go_service
 
   - name: http-service
     service_type: http
@@ -43,19 +43,14 @@ services:
         port: 3002
         # weight: 1 # Optional
 
-  - name: http-service-2
-    service_type: http
-    algorithm: round_robin # Options: round_robin, random, consistent, weighted
-    endpoints:
-      - ip: 127.0.0.1
-        port: 3001
-      - ip: 127.0.0.1
-        port: 3002
-        weight: 3
-
 
 middleware_groups:
   header-modifier:
+    - plugin: plugin_sdk
+      request_filter: "sdk_go_middleware"
+      payload:
+        client_ip: "${request(client_ip)}"
+  
     - plugin: RequestHeaderModifier
       payload:
         remove:
@@ -71,6 +66,7 @@ middleware_groups:
             value: "${request(client_ip)}-${eq(request(client_ip), '127.0.0.1', 'local')}"
           - name: x-host
             value: "${header(host)}"
+
     - plugin: ResponseHeaderModifier
       payload:
         set:

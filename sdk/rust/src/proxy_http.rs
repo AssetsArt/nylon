@@ -71,6 +71,7 @@ pub async fn build_http_context(
         let headers_vec = headers
             .iter()
             .map(|(k, v)| {
+                // println!("header: {:?}, {:?}", k, v);
                 let key = fbs.create_string(k.as_str());
                 let value = fbs.create_string(v.to_str().unwrap());
                 KeyValue::create(

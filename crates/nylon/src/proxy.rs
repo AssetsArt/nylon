@@ -53,6 +53,7 @@ impl ProxyHttp for NylonRuntime {
         };
 
         ctx.route = Some(route.clone());
+        ctx.params = Some(params.clone());
 
         // Process middleware
         let middleware_items = route
@@ -70,6 +71,7 @@ impl ProxyHttp for NylonRuntime {
             });
 
         for middleware in middleware_items {
+            // println!("middleware: {:#?}", middleware);
             match run_middleware(
                 &MiddlewareContext {
                     middleware: middleware.0.clone(),
@@ -85,11 +87,17 @@ impl ProxyHttp for NylonRuntime {
             {
                 Ok((http_end, dispatcher)) if http_end => {
                     return res
-                        .dispatcher_to_response(&dispatcher)?
+                        .dispatcher_to_response(session, &dispatcher, http_end)
+                        .await?
                         .send(session, ctx)
                         .await;
                 }
-                Ok(_) => continue,
+                Ok((http_end, dispatcher)) if !dispatcher.is_empty() => {
+                    res.dispatcher_to_response(session, &dispatcher, http_end)
+                        .await?;
+                    continue;
+                }
+                Ok((_, _)) => continue,
                 Err(e) => return handle_error_response(&mut res, session, ctx, e).await,
             }
         }
@@ -116,7 +124,8 @@ impl ProxyHttp for NylonRuntime {
                         )
                     })?;
                     return res
-                        .dispatcher_to_response(dispatcher.data().bytes())?
+                        .dispatcher_to_response(session, dispatcher.data().bytes(), true)
+                        .await?
                         .send(session, ctx)
                         .await;
                 }
@@ -194,7 +203,7 @@ impl ProxyHttp for NylonRuntime {
                     middleware: middleware.0.clone(),
                     payload: middleware.0.payload.clone(),
                     payload_ast: middleware.1.clone(),
-                    params: None,
+                    params: ctx.params.clone(),
                 },
                 ctx,
                 session,

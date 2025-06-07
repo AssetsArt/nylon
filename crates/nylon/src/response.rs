@@ -54,6 +54,7 @@ impl<'a> Response<'a> {
     }
 
     pub fn header(&mut self, key: &str, value: &str) -> &mut Self {
+        let _ = self.headers.remove_header(key);
         if let Err(e) = self
             .headers
             .append_header(key.to_string(), value.to_string())
@@ -117,7 +118,12 @@ impl<'a> Response<'a> {
         Ok(true)
     }
 
-    pub fn dispatcher_to_response(&mut self, dispatcher: &[u8]) -> pingora::Result<&mut Self> {
+    pub async fn dispatcher_to_response(
+        &mut self,
+        session: &mut Session,
+        dispatcher: &[u8],
+        end: bool,
+    ) -> pingora::Result<&mut Self> {
         let http_ctx = match root_as_nylon_http_context(dispatcher) {
             Ok(d) => d,
             Err(e) => {
@@ -128,18 +134,33 @@ impl<'a> Response<'a> {
                 ));
             }
         };
+
+        // set request headers
+        let request = http_ctx.request();
+        let headers = request.headers();
+        for h in headers.iter().flatten() {
+            let _ = session
+                .req_header_mut()
+                .append_header(h.key().to_string(), h.value().to_string());
+        }
+
+        // set response status and headers
         self.status(http_ctx.response().status() as u16);
         let headers = http_ctx.response().headers();
         for h in headers.iter().flatten() {
             self.header(h.key(), h.value());
         }
-        let body = http_ctx
-            .response()
-            .body()
-            .unwrap_or_default()
-            .bytes()
-            .to_vec();
-        self.body(Bytes::from(body));
+
+        // set response body
+        if end {
+            let body = http_ctx
+                .response()
+                .body()
+                .unwrap_or_default()
+                .bytes()
+                .to_vec();
+            self.body(Bytes::from(body));
+        }
         Ok(self)
     }
 }

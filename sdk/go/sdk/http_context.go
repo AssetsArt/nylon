@@ -7,6 +7,11 @@ import (
 	"github.com/AssetsArt/easy-proxy/sdk/go/fbs/nylon_http_context"
 )
 
+type HttpContext struct {
+	Request  Request
+	Response Response
+}
+
 // Request
 type Request struct {
 	Method  string

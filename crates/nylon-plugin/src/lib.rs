@@ -77,7 +77,6 @@ pub async fn run_middleware(
             Ok((false, vec![]))
         }
         _ => {
-            // println!("middleware: {:?}", middleware);
             if let Some(request_filter) = &middleware.request_filter {
                 let http_context =
                     nylon_sdk::proxy_http::build_http_context(session, params.clone(), ctx).await?;

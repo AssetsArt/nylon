@@ -17,11 +17,6 @@ type Dispatcher struct {
 	Data       []byte
 }
 
-type HttpContext struct {
-	Request  Request
-	Response Response
-}
-
 // new dispatcher
 func NewDispatcher() *Dispatcher {
 	return &Dispatcher{
@@ -93,6 +88,8 @@ func (d *Dispatcher) SwitchDataToHttpContext() *HttpContext {
 		Response: *WrapResponse(ctx),
 	}
 }
+
+// func (d *Dispatcher) SwitchDataToRequestFilter() *RequestFilter {}
 
 func (h *HttpContext) ToBytes() []byte {
 	bufSize := len(h.Request.Body) + len(h.Response.Body) + 256

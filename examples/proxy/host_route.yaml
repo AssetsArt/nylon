@@ -1,0 +1,21 @@
+
+# https://github.com/ibraheemdev/matchit
+
+# host route
+routes:
+  - route:
+      type: host
+      value: localhost # domain.com|domain2.com|domain3.com
+    name: http-route-1
+    middleware:
+      - group: header-modifier
+    paths:
+      - path: 
+          - /
+          - /{*path}
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+        service:
+          name: go-service

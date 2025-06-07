@@ -17,6 +17,7 @@ pub struct NylonContext {
     pub backend: Backend,
     pub client_ip: String,
     pub route: Option<Route>,
+    pub params: Option<HashMap<String, String>>,
     pub request_id: String,
 }
 
@@ -26,6 +27,7 @@ impl Default for NylonContext {
             backend: Backend::new("127.0.0.1:80").expect("Unable to create backend"),
             client_ip: "127.0.0.1".to_string(),
             route: None,
+            params: None,
             request_id: Uuid::now_v7().to_string(),
         }
     }
