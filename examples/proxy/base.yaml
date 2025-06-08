@@ -46,7 +46,7 @@ services:
 
 
 middleware_groups:
-  header-modifier:
+  example:
     - plugin: plugin_sdk
       request_filter: "sdk_go_mid_request_filter"
       payload:
@@ -54,6 +54,9 @@ middleware_groups:
   
     - plugin: plugin_sdk
       response_filter: "sdk_go_mid_response_filter"
+
+    - plugin: plugin_sdk
+      response_body_filter: "sdk_go_mid_response_body_filter"
 
     - plugin: RequestHeaderModifier
       payload:

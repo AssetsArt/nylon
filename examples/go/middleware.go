@@ -13,7 +13,8 @@ func sdk_go_mid_request_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
 	// set request header
 	http_ctx.Request.SetHeader("x-middleware", "true")
 
-	// http_ctx.Response.SetStatus(201)
+	// set response header
+	http_ctx.Response.SetHeader("x-request-filter", "true")
 
 	// set http end and data
 	dispatcher.SetHttpEnd(false)           // set http end to false
@@ -39,6 +40,17 @@ func sdk_go_mid_response_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
 
 	// set data to dispatcher
 	dispatcher.SetData(res.ToBytes()) // set data to http context
+
+	return SendResponse(dispatcher)
+}
+
+// export sdk_go_mid_response_body_filter
+func sdk_go_mid_response_body_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
+	dispatcher := InputToDispatcher(ptr, input_len)
+	// res := dispatcher.SwitchDataToResponseBodyFilter()
+
+	// set response body
+	// res.SetBody([]byte("hello"))
 
 	return SendResponse(dispatcher)
 }

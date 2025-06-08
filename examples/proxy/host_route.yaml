@@ -8,7 +8,7 @@ routes:
       value: localhost # domain.com|domain2.com|domain3.com
     name: http-route-1
     middleware:
-      - group: header-modifier
+      - group: example
     paths:
       - path: 
           - /

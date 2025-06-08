@@ -127,12 +127,18 @@ impl<'a> Response<'a> {
         let request = http_ctx.request();
         let headers = request.headers();
         for h in headers.iter().flatten() {
+            let _ = session.req_header_mut().remove_header(h.key());
             let _ = session
                 .req_header_mut()
                 .append_header(h.key().to_string(), h.value().to_string());
         }
 
         // set response status and headers
+        for h in self.ctx.response_header.headers.clone() {
+            if let Some(key) = h.0 {
+                let _ = self.ctx.response_header.remove_header(key.as_str());
+            }
+        }
         let status = http_ctx.response().status() as u16;
         self.status(status);
         let headers = http_ctx.response().headers();

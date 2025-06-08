@@ -86,14 +86,6 @@ pub async fn run_middleware(
                 let http_end = dispatcher.http_end();
                 return Ok((http_end, dispatcher.data().bytes().to_vec()));
             } else if let Some(response_filter) = &middleware.response_filter {
-                // let _ = upstream_response.set_status(ctx.headers.status.as_u16());
-                // for h in ctx.headers.headers.clone() {
-                //     if let Some(key) = h.0 {
-                //         // println!("header: {}", key);
-                //         // println!("value: {:?}", h.1);
-                //         let _ = upstream_response.append_header(key, h.1);
-                //     }
-                // }
                 let http_context =
                     nylon_sdk::proxy_http::build_http_context(session, params.clone(), ctx).await?;
                 let dispatcher = dispatcher::http_service_dispatch(
