@@ -19,14 +19,12 @@ fn get_plugin(name: &str) -> Result<Arc<FfiPlugin>, NylonError> {
     Ok(plugin.clone())
 }
 
-pub async fn http_service_dispatch(
+pub fn http_service_dispatch(
     ctx: &mut NylonContext,
     plugin: Option<&str>,
     entry: Option<&str>,
     dispatch_data: &[u8],
 ) -> Result<Vec<u8>, NylonError> {
-    // println!("plugin: {:#?}", plugin);
-    // println!("entry: {:#?}", entry);
     let request_id = &ctx.request_id;
     let (plugin_name, entry) = match plugin {
         Some(p) => (
@@ -46,10 +44,10 @@ pub async fn http_service_dispatch(
             (plugin.name.as_str(), plugin.entry.as_ref())
         }
     };
-    dispatch(request_id, plugin_name, entry, dispatch_data).await
+    dispatch(request_id, plugin_name, entry, dispatch_data)
 }
 
-pub async fn dispatch(
+pub fn dispatch(
     request_id: &str,
     plugin_name: &str,
     entry_name: &str,

@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use bytes::Bytes;
 use nylon_error::NylonError;
 use nylon_types::context::NylonContext;
 use pingora::proxy::Session;
@@ -35,6 +36,8 @@ impl NylonContextExt for NylonContext {
                 ));
             }
         };
+        self.request_body = session.read_request_body().await.unwrap_or_default();
+        self.response_body = Some(Bytes::new());
         Ok(())
     }
 }

@@ -1,3 +1,4 @@
+use bytes::Bytes;
 use nylon_error::NylonError;
 use nylon_sdk::fbs::{
     dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher,
@@ -47,7 +48,7 @@ pub fn try_response_filter(name: &str) -> Option<BuiltinPlugin> {
     }
 }
 
-pub async fn run_middleware(
+pub fn run_middleware(
     middleware_context: &MiddlewareContext,
     ctx: &mut NylonContext,
     session: &mut Session,
@@ -73,28 +74,26 @@ pub async fn run_middleware(
         _ => {
             if let Some(request_filter) = &middleware.request_filter {
                 let http_context =
-                    nylon_sdk::proxy_http::build_http_context(session, params.clone(), ctx).await?;
+                    nylon_sdk::proxy_http::build_http_context(session, ctx, params.clone())?;
                 let dispatcher = dispatcher::http_service_dispatch(
                     ctx,
                     Some(plugin_name.as_str()),
                     Some(request_filter),
                     &http_context,
-                )
-                .await?;
+                )?;
                 let dispatcher = root_as_nylon_dispatcher(&dispatcher)
                     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
                 let http_end = dispatcher.http_end();
                 return Ok((http_end, dispatcher.data().bytes().to_vec()));
             } else if let Some(response_filter) = &middleware.response_filter {
                 let http_context =
-                    nylon_sdk::proxy_http::build_http_context(session, params.clone(), ctx).await?;
+                    nylon_sdk::proxy_http::build_http_context(session, ctx, params.clone())?;
                 let dispatcher = dispatcher::http_service_dispatch(
                     ctx,
                     Some(plugin_name.as_str()),
                     Some(response_filter),
                     &http_context,
-                )
-                .await?;
+                )?;
                 let dispatcher = root_as_nylon_dispatcher(&dispatcher)
                     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
                 let http_ctx = match root_as_nylon_http_context(dispatcher.data().bytes()) {
@@ -123,8 +122,30 @@ pub async fn run_middleware(
                 }
                 let status = response.status();
                 let _ = ctx.response_header.set_status(status as u16);
-            } else if let Some(_response_body_filter) = &middleware.response_body_filter {
-                todo!("response_body_filter");
+            } else if let Some(response_body_filter) = &middleware.response_body_filter {
+                // println!("response body filter {:?}", ctx.response_body);
+                let http_context =
+                    nylon_sdk::proxy_http::build_http_context(session, ctx, params.clone())?;
+                let dispatcher = dispatcher::http_service_dispatch(
+                    ctx,
+                    Some(plugin_name.as_str()),
+                    Some(response_body_filter),
+                    &http_context,
+                )?;
+                let dispatcher = root_as_nylon_dispatcher(&dispatcher)
+                    .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
+                let http_ctx = match root_as_nylon_http_context(dispatcher.data().bytes()) {
+                    Ok(d) => d,
+                    Err(e) => {
+                        return Err(NylonError::ConfigError(format!(
+                            "Invalid http context: {}",
+                            e
+                        )));
+                    }
+                };
+                let response = http_ctx.response();
+                let body = response.body().unwrap_or_default();
+                ctx.response_body = Some(Bytes::from(body.bytes().to_vec()));
             } else if let Some(_logging) = &middleware.logging {
                 todo!("logging");
             }

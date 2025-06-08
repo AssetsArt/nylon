@@ -1,5 +1,6 @@
 use crate::{backend, context::NylonContextExt, response::Response, runtime::NylonRuntime};
 use async_trait::async_trait;
+use bytes::Bytes;
 use nylon_error::NylonError;
 use nylon_plugin::{MiddlewareContext, run_middleware, try_request_filter, try_response_filter};
 use nylon_sdk::fbs::dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher;
@@ -10,6 +11,7 @@ use pingora::{
     prelude::HttpPeer,
     proxy::{ProxyHttp, Session},
 };
+use std::time::Duration;
 
 /// Helper function to handle error responses consistently
 async fn handle_error_response<'a>(
@@ -81,9 +83,7 @@ impl ProxyHttp for NylonRuntime {
                 },
                 res.ctx,
                 session,
-            )
-            .await
-            {
+            ) {
                 Ok((http_end, dispatcher)) if http_end => {
                     return res
                         .dispatcher_to_response(session, &dispatcher, http_end)
@@ -105,11 +105,9 @@ impl ProxyHttp for NylonRuntime {
         if route.service.service_type == ServiceType::Plugin {
             let http_context = match nylon_sdk::proxy_http::build_http_context(
                 session,
-                Some(params.clone()),
                 res.ctx,
-            )
-            .await
-            {
+                Some(params.clone()),
+            ) {
                 Ok(context) => context,
                 Err(e) => return handle_error_response(&mut res, session, e).await,
             };
@@ -119,9 +117,7 @@ impl ProxyHttp for NylonRuntime {
                 None,
                 None,
                 &http_context,
-            )
-            .await
-            {
+            ) {
                 Ok(buf) => {
                     let dispatcher = root_as_nylon_dispatcher(&buf).map_err(|e| {
                         pingora::Error::because(
@@ -232,9 +228,7 @@ impl ProxyHttp for NylonRuntime {
                 },
                 ctx,
                 session,
-            )
-            .await
-            {
+            ) {
                 return Err(pingora::Error::because(
                     ErrorType::InternalError,
                     "[response_filter]",
@@ -255,22 +249,66 @@ impl ProxyHttp for NylonRuntime {
         Ok(())
     }
 
-    /// Called when connected to upstream server
-    async fn connected_to_upstream(
+    /// Similar to [Self::response_filter()] but for response body chunks
+    fn response_body_filter(
         &self,
-        _session: &mut Session,
-        _reused: bool,
-        _peer: &HttpPeer,
-        #[cfg(unix)] _fd: std::os::unix::io::RawFd,
-        #[cfg(windows)] _sock: std::os::windows::io::RawSocket,
-        _digest: Option<&pingora::protocols::Digest>,
-        _ctx: &mut Self::CTX,
-    ) -> pingora::Result<()>
+        session: &mut Session,
+        body: &mut Option<Bytes>,
+        _end_of_stream: bool,
+        ctx: &mut Self::CTX,
+    ) -> pingora::Result<Option<Duration>>
     where
         Self::CTX: Send + Sync,
     {
-        Ok(())
+        ctx.response_body = body.clone();
+        let Some(route) = ctx.route.clone() else {
+            return Ok(None);
+        };
+        let middleware_items = route
+            .route_middleware
+            .iter()
+            .flatten()
+            .chain(route.path_middleware.iter().flatten())
+            .filter(|m| m.0.response_body_filter.is_some());
+
+        for middleware in middleware_items {
+            if let Err(e) = run_middleware(
+                &MiddlewareContext {
+                    middleware: middleware.0.clone(),
+                    payload: middleware.0.payload.clone(),
+                    payload_ast: middleware.1.clone(),
+                    params: ctx.params.clone(),
+                },
+                ctx,
+                session,
+            ) {
+                return Err(pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[response_body_filter]",
+                    e.to_string(),
+                ));
+            }
+        }
+        *body = ctx.response_body.clone();
+        Ok(None)
     }
+
+    // Called when connected to upstream server
+    // async fn connected_to_upstream(
+    //     &self,
+    //     _session: &mut Session,
+    //     _reused: bool,
+    //     _peer: &HttpPeer,
+    //     #[cfg(unix)] _fd: std::os::unix::io::RawFd,
+    //     #[cfg(windows)] _sock: std::os::windows::io::RawSocket,
+    //     _digest: Option<&pingora::protocols::Digest>,
+    //     _ctx: &mut Self::CTX,
+    // ) -> pingora::Result<()>
+    // where
+    //     Self::CTX: Send + Sync,
+    // {
+    //     Ok(())
+    // }
 
     /// Handles request logging
     async fn logging(

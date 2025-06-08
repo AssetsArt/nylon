@@ -7,14 +7,14 @@ use nylon_types::context::NylonContext;
 use pingora::proxy::Session;
 use std::collections::HashMap;
 
-pub async fn build_http_context(
+pub fn build_http_context(
     session: &mut Session,
-    params: Option<HashMap<String, String>>,
     ctx: &mut NylonContext,
+    request_params: Option<HashMap<String, String>>,
 ) -> Result<Vec<u8>, NylonError> {
     let mut fbs = flatbuffers::FlatBufferBuilder::new();
     // params
-    let params_vec = params
+    let params_vec = request_params
         .iter()
         .flatten()
         .map(|(k, v)| {
@@ -30,7 +30,7 @@ pub async fn build_http_context(
         })
         .collect::<Vec<_>>();
     let params_vec = fbs.create_vector(&params_vec);
-    let body = session.read_request_body().await.unwrap_or_default();
+    let body = ctx.request_body.clone();
     let request: NylonHttpRequestArgs;
     if let Some(v2) = session.as_http2() {
         let method = v2.req_header().method.as_str();
@@ -113,7 +113,11 @@ pub async fn build_http_context(
     let response = &NylonHttpResponseArgs {
         status: status as i32,
         headers: Some(fbs.create_vector(&headers)),
-        body: None,
+        body: if let Some(body) = &ctx.response_body {
+            Some(fbs.create_vector(body))
+        } else {
+            None
+        },
     };
     let resp_offset = NylonHttpResponse::create(&mut fbs, response);
     let dispatcher_args = &NylonHttpContextArgs {

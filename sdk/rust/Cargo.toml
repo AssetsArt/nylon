@@ -8,3 +8,4 @@ nylon-types = { path = "../../crates/nylon-types" }
 nylon-error = { path = "../../crates/nylon-error" }
 flatbuffers = { workspace = true }
 pingora = { workspace = true }
+bytes = { workspace = true }

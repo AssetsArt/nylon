@@ -11,3 +11,4 @@ pingora = { workspace = true }
 regex = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
+bytes = { workspace = true }

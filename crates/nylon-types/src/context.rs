@@ -1,5 +1,6 @@
 #![allow(clippy::type_complexity)]
 use crate::{route::MiddlewareItem, services::ServiceItem, template::Expr};
+use bytes::Bytes;
 use pingora::{http::ResponseHeader, lb::Backend};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -15,6 +16,8 @@ pub struct Route {
 #[derive(Debug, Clone)]
 pub struct NylonContext {
     pub response_header: ResponseHeader,
+    pub request_body: Option<Bytes>,
+    pub response_body: Option<Bytes>,
     pub backend: Backend,
     pub client_ip: String,
     pub route: Option<Route>,
@@ -32,6 +35,8 @@ impl Default for NylonContext {
             request_id: Uuid::now_v7().to_string(),
             response_header: ResponseHeader::build(200, None)
                 .expect("Unable to create response header"),
+            request_body: None,
+            response_body: None,
         }
     }
 }

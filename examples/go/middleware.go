@@ -4,6 +4,9 @@ package main
 #include "../../c/nylon.h"
 */
 import "C"
+import (
+	"encoding/json"
+)
 
 //export sdk_go_mid_request_filter
 func sdk_go_mid_request_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
@@ -44,13 +47,23 @@ func sdk_go_mid_response_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
 	return SendResponse(dispatcher)
 }
 
-// export sdk_go_mid_response_body_filter
+//export sdk_go_mid_response_body_filter
 func sdk_go_mid_response_body_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
 	dispatcher := InputToDispatcher(ptr, input_len)
-	// res := dispatcher.SwitchDataToResponseBodyFilter()
+	http_ctx := dispatcher.SwitchDataToHttpContext()
 
-	// set response body
-	// res.SetBody([]byte("hello"))
+	// Parse response body
+	jsonData := map[string]any{}
+	json.Unmarshal(http_ctx.Response.Body, &jsonData)
+
+	// Modify response body
+	jsonData["x-response-body-filter"] = "true"
+
+	jsonDataBytes, _ := json.Marshal(jsonData)
+	http_ctx.Response.Body = jsonDataBytes
+
+	// set data to dispatcher
+	dispatcher.SetData(http_ctx.ToBytes())
 
 	return SendResponse(dispatcher)
 }
