@@ -113,11 +113,10 @@ pub fn build_http_context(
     let response = &NylonHttpResponseArgs {
         status: status as i32,
         headers: Some(fbs.create_vector(&headers)),
-        body: if let Some(body) = &ctx.response_body {
-            Some(fbs.create_vector(body))
-        } else {
-            None
-        },
+        body: ctx
+            .response_body
+            .as_ref()
+            .map(|body| fbs.create_vector(body)),
     };
     let resp_offset = NylonHttpResponse::create(&mut fbs, response);
     let dispatcher_args = &NylonHttpContextArgs {
