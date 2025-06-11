@@ -45,7 +45,14 @@ pub fn http_service_dispatch(
             (plugin.name.as_str(), plugin.entry.as_ref())
         }
     };
-    dispatch(request_id, plugin_name, entry, dispatch_data, payload)
+    dispatch(
+        request_id,
+        plugin_name,
+        entry,
+        dispatch_data,
+        payload,
+        &ctx.plugin_store,
+    )
 }
 
 pub fn dispatch(
@@ -54,6 +61,7 @@ pub fn dispatch(
     entry_name: &str,
     dispatcher_data: &[u8],
     payload: &Option<Vec<u8>>,
+    store: &Option<Vec<u8>>,
 ) -> Result<Vec<u8>, NylonError> {
     let plugin = get_plugin(plugin_name)?;
     let Some(entry_fn) = plugin.entry.get(entry_name) else {
@@ -69,6 +77,7 @@ pub fn dispatch(
     let entry = fbs.create_string(entry_name);
     let data_vec = fbs.create_vector(dispatcher_data);
     let payload_vec = fbs.create_vector(payload.as_ref().unwrap_or(&vec![]));
+    let store_vec = fbs.create_vector(store.as_ref().unwrap_or(&vec![]));
     let dispatcher = NylonDispatcher::create(
         &mut fbs,
         &NylonDispatcherArgs {
@@ -78,6 +87,7 @@ pub fn dispatch(
             entry: Some(entry),
             data: Some(data_vec),
             payload: Some(payload_vec),
+            store: Some(store_vec),
         },
     );
     fbs.finish(dispatcher, None);

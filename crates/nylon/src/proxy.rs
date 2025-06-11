@@ -142,6 +142,8 @@ impl ProxyHttp for NylonRuntime {
                             e.to_string(),
                         )
                     })?;
+                    res.ctx.plugin_store =
+                        Some(dispatcher.store().unwrap_or_default().bytes().to_vec());
                     return res
                         .dispatcher_to_response(session, dispatcher.data().bytes(), true)
                         .await?

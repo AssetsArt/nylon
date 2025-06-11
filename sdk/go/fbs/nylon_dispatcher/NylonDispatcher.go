@@ -145,8 +145,42 @@ func (rcv *NylonDispatcher) MutatePayload(j int, n byte) bool {
 	return false
 }
 
+func (rcv *NylonDispatcher) Store(j int) byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
+	if o != 0 {
+		a := rcv._tab.Vector(o)
+		return rcv._tab.GetByte(a + flatbuffers.UOffsetT(j*1))
+	}
+	return 0
+}
+
+func (rcv *NylonDispatcher) StoreLength() int {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
+	if o != 0 {
+		return rcv._tab.VectorLen(o)
+	}
+	return 0
+}
+
+func (rcv *NylonDispatcher) StoreBytes() []byte {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
+	if o != 0 {
+		return rcv._tab.ByteVector(o + rcv._tab.Pos)
+	}
+	return nil
+}
+
+func (rcv *NylonDispatcher) MutateStore(j int, n byte) bool {
+	o := flatbuffers.UOffsetT(rcv._tab.Offset(16))
+	if o != 0 {
+		a := rcv._tab.Vector(o)
+		return rcv._tab.MutateByte(a+flatbuffers.UOffsetT(j*1), n)
+	}
+	return false
+}
+
 func NylonDispatcherStart(builder *flatbuffers.Builder) {
-	builder.StartObject(6)
+	builder.StartObject(7)
 }
 func NylonDispatcherAddHttpEnd(builder *flatbuffers.Builder, httpEnd bool) {
 	builder.PrependBoolSlot(0, httpEnd, false)
@@ -170,6 +204,12 @@ func NylonDispatcherAddPayload(builder *flatbuffers.Builder, payload flatbuffers
 	builder.PrependUOffsetTSlot(5, flatbuffers.UOffsetT(payload), 0)
 }
 func NylonDispatcherStartPayloadVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
+	return builder.StartVector(1, numElems, 1)
+}
+func NylonDispatcherAddStore(builder *flatbuffers.Builder, store flatbuffers.UOffsetT) {
+	builder.PrependUOffsetTSlot(6, flatbuffers.UOffsetT(store), 0)
+}
+func NylonDispatcherStartStoreVector(builder *flatbuffers.Builder, numElems int) flatbuffers.UOffsetT {
 	return builder.StartVector(1, numElems, 1)
 }
 func NylonDispatcherEnd(builder *flatbuffers.Builder) flatbuffers.UOffsetT {

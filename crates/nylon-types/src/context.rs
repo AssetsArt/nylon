@@ -24,6 +24,7 @@ pub struct NylonContext {
     pub route: Option<Route>,
     pub params: Option<HashMap<String, String>>,
     pub request_id: String,
+    pub plugin_store: Option<Vec<u8>>,
 }
 
 impl Default for NylonContext {
@@ -38,6 +39,7 @@ impl Default for NylonContext {
                 .expect("Unable to create response header"),
             request_body: None,
             response_body: None,
+            plugin_store: None,
         }
     }
 }

@@ -17,6 +17,7 @@ func sdk_go_service(ptr *C.uchar, input_len C.int) C.FfiOutput {
 	// payload
 	payload := dispatcher.SwitchPayloadToJson()
 	fmt.Println("payload", payload)
+	fmt.Println("store", string(dispatcher.Store))
 
 	// create response
 	http_ctx.Response.BodyJSON(map[string]any{

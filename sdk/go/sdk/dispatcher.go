@@ -17,6 +17,7 @@ type Dispatcher struct {
 	Entry      string
 	Data       []byte
 	Payload    []byte
+	Store      []byte
 }
 
 // new dispatcher
@@ -28,6 +29,7 @@ func NewDispatcher() *Dispatcher {
 		Entry:      "",
 		Data:       nil,
 		Payload:    nil,
+		Store:      nil,
 	}
 }
 
@@ -59,6 +61,7 @@ func WrapDispatcher(input []byte) *Dispatcher {
 		Entry:      string(raw.Entry()),
 		Data:       raw.DataBytes(),
 		Payload:    raw.PayloadBytes(),
+		Store:      raw.StoreBytes(),
 	}
 }
 
@@ -72,6 +75,7 @@ func (d *Dispatcher) ToBytes() []byte {
 	entryOffset := builder.CreateString(d.Entry)
 	dataOffset := builder.CreateByteVector(d.Data)
 	payloadOffset := builder.CreateByteVector(d.Payload)
+	storeOffset := builder.CreateByteVector(d.Store)
 	// Build dispatcher
 	nylon_dispatcher.NylonDispatcherStart(builder)
 	nylon_dispatcher.NylonDispatcherAddHttpEnd(builder, d.HttpEnd)
@@ -80,7 +84,7 @@ func (d *Dispatcher) ToBytes() []byte {
 	nylon_dispatcher.NylonDispatcherAddEntry(builder, entryOffset)
 	nylon_dispatcher.NylonDispatcherAddData(builder, dataOffset)
 	nylon_dispatcher.NylonDispatcherAddPayload(builder, payloadOffset)
-
+	nylon_dispatcher.NylonDispatcherAddStore(builder, storeOffset)
 	// Finish
 	dispatcher := nylon_dispatcher.NylonDispatcherEnd(builder)
 	builder.Finish(dispatcher)
@@ -94,6 +98,36 @@ func (d *Dispatcher) SwitchPayloadToJson() map[string]any {
 		return map[string]any{}
 	}
 	return jsonData
+}
+
+func (d *Dispatcher) SwitchStoreToJson() map[string]any {
+	var jsonData map[string]any
+	err := json.Unmarshal(d.Store, &jsonData)
+	if err != nil {
+		return map[string]any{}
+	}
+	return jsonData
+}
+
+func (d *Dispatcher) SwitchStoreJsonToBytes() []byte {
+	jsonData := d.SwitchStoreToJson()
+	jsonBytes, err := json.Marshal(jsonData)
+	if err != nil {
+		return nil
+	}
+	return jsonBytes
+}
+
+func (d *Dispatcher) SetStore(store []byte) {
+	d.Store = store
+}
+
+func (d *Dispatcher) SetJsonToStore(jsonData map[string]any) {
+	jsonBytes, err := json.Marshal(jsonData)
+	if err != nil {
+		return
+	}
+	d.Store = jsonBytes
 }
 
 func (d *Dispatcher) SwitchDataToHttpContext() *HttpContext {

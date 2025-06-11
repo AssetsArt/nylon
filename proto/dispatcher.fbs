@@ -7,6 +7,7 @@ table NylonDispatcher {
   entry: string;
   data: [ubyte] (required);
   payload: [ubyte];
+  store: [ubyte];
 }
 
 root_type NylonDispatcher;

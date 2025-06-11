@@ -100,6 +100,7 @@ pub fn run_middleware(
                 let dispatcher = root_as_nylon_dispatcher(&dispatcher)
                     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
                 let http_end = dispatcher.http_end();
+                ctx.plugin_store = Some(dispatcher.store().unwrap_or_default().bytes().to_vec());
                 return Ok((http_end, dispatcher.data().bytes().to_vec()));
             } else if let Some(response_filter) = &middleware.response_filter {
                 let http_context =
@@ -113,6 +114,7 @@ pub fn run_middleware(
                 )?;
                 let dispatcher = root_as_nylon_dispatcher(&dispatcher)
                     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
+                ctx.plugin_store = Some(dispatcher.store().unwrap_or_default().bytes().to_vec());
                 let http_ctx = match root_as_nylon_http_context(dispatcher.data().bytes()) {
                     Ok(d) => d,
                     Err(e) => {
@@ -152,6 +154,7 @@ pub fn run_middleware(
                 )?;
                 let dispatcher = root_as_nylon_dispatcher(&dispatcher)
                     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
+                ctx.plugin_store = Some(dispatcher.store().unwrap_or_default().bytes().to_vec());
                 let http_ctx = match root_as_nylon_http_context(dispatcher.data().bytes()) {
                     Ok(d) => d,
                     Err(e) => {
