@@ -4,9 +4,7 @@ package main
 #include "../../c/nylon.h"
 */
 import "C"
-import (
-	"encoding/json"
-)
+import "fmt"
 
 //export sdk_go_mid_request_filter
 func sdk_go_mid_request_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
@@ -29,20 +27,20 @@ func sdk_go_mid_request_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
 //export sdk_go_mid_response_filter
 func sdk_go_mid_response_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
 	dispatcher := InputToDispatcher(ptr, input_len)
-	res := dispatcher.SwitchDataToResponseFilter()
+	ctx := dispatcher.SwitchDataToResponseFilter()
 
 	// set response header
-	res.SetHeader("x-response-filter", "true")
+	ctx.SetHeader("x-response-filter", "true")
 
 	// if modify body, set transfer-encoding to chunked
-	res.SetHeader("transfer-encoding", "chunked")
-	res.RemoveHeader("content-length")
+	ctx.SetHeader("transfer-encoding", "chunked")
+	ctx.RemoveHeader("content-length")
 
 	// set response status
-	res.SetStatus(201)
+	ctx.SetStatus(201)
 
 	// set data to dispatcher
-	dispatcher.SetData(res.ToBytes()) // set data to http context
+	dispatcher.SetData(ctx.ToBytes()) // set data to http context
 
 	return SendResponse(dispatcher)
 }
@@ -50,20 +48,18 @@ func sdk_go_mid_response_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
 //export sdk_go_mid_response_body_filter
 func sdk_go_mid_response_body_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
 	dispatcher := InputToDispatcher(ptr, input_len)
-	http_ctx := dispatcher.SwitchDataToHttpContext()
+	ctx := dispatcher.SwitchDataToResponseBodyFilter()
 
-	// Parse response body
-	jsonData := map[string]any{}
-	json.Unmarshal(http_ctx.Response.Body, &jsonData)
-
-	// Modify response body
-	jsonData["x-response-body-filter"] = "true"
-
-	jsonDataBytes, _ := json.Marshal(jsonData)
-	http_ctx.Response.Body = jsonDataBytes
+	oldBody, err := ctx.BodyJSON()
+	if err != nil {
+		fmt.Println("[sdk_go_mid_response_body_filter] error", err)
+		return SendResponse(dispatcher)
+	}
+	oldBody["x-response-body-filter"] = "true"
+	ctx.SetBodyJSON(oldBody)
 
 	// set data to dispatcher
-	dispatcher.SetData(http_ctx.ToBytes())
+	dispatcher.SetData(ctx.ToBytes())
 
 	return SendResponse(dispatcher)
 }

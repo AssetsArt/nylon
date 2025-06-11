@@ -95,7 +95,11 @@ func (d *Dispatcher) SwitchDataToResponseFilter() *ResponseFilter {
 	}
 }
 
-// func (d *Dispatcher) SwitchDataToRequestFilter() *RequestFilter {}
+func (d *Dispatcher) SwitchDataToResponseBodyFilter() *ResponseBodyFilter {
+	return &ResponseBodyFilter{
+		http_ctx: d.SwitchDataToHttpContext(),
+	}
+}
 
 func (h *HttpContext) ToBytes() []byte {
 	bufSize := len(h.Request.Body) + len(h.Response.Body) + 256
