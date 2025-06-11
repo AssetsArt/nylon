@@ -4,7 +4,11 @@ use nylon_sdk::fbs::{
     dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher,
     http_context_generated::nylon_http_context::root_as_nylon_http_context,
 };
-use nylon_types::{context::NylonContext, route::MiddlewareItem, template::Expr};
+use nylon_types::{
+    context::NylonContext,
+    route::MiddlewareItem,
+    template::{Expr, apply_payload_ast},
+};
 use pingora::proxy::Session;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -72,6 +76,17 @@ pub fn run_middleware(
             Ok((false, vec![]))
         }
         _ => {
+            let headers = session.req_header_mut();
+            let payload: Option<Vec<u8>> = match payload.as_ref() {
+                Some(payload) => {
+                    let mut payload = payload.clone();
+                    if let Some(payload_ast) = payload_ast {
+                        apply_payload_ast(&mut payload, payload_ast, headers, ctx);
+                    }
+                    serde_json::to_vec(&payload).ok()
+                }
+                None => None,
+            };
             if let Some(request_filter) = &middleware.request_filter {
                 let http_context =
                     nylon_sdk::proxy_http::build_http_context(session, ctx, params.clone())?;
@@ -80,6 +95,7 @@ pub fn run_middleware(
                     Some(plugin_name.as_str()),
                     Some(request_filter),
                     &http_context,
+                    &payload,
                 )?;
                 let dispatcher = root_as_nylon_dispatcher(&dispatcher)
                     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
@@ -93,6 +109,7 @@ pub fn run_middleware(
                     Some(plugin_name.as_str()),
                     Some(response_filter),
                     &http_context,
+                    &payload,
                 )?;
                 let dispatcher = root_as_nylon_dispatcher(&dispatcher)
                     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
@@ -131,6 +148,7 @@ pub fn run_middleware(
                     Some(plugin_name.as_str()),
                     Some(response_body_filter),
                     &http_context,
+                    &payload,
                 )?;
                 let dispatcher = root_as_nylon_dispatcher(&dispatcher)
                     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;

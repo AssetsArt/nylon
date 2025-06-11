@@ -40,6 +40,7 @@ pub mod nylon_dispatcher {
         pub const VT_NAME: flatbuffers::VOffsetT = 8;
         pub const VT_ENTRY: flatbuffers::VOffsetT = 10;
         pub const VT_DATA: flatbuffers::VOffsetT = 12;
+        pub const VT_PAYLOAD: flatbuffers::VOffsetT = 14;
 
         #[inline]
         pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -56,6 +57,9 @@ pub mod nylon_dispatcher {
             args: &'args NylonDispatcherArgs<'args>,
         ) -> flatbuffers::WIPOffset<NylonDispatcher<'bldr>> {
             let mut builder = NylonDispatcherBuilder::new(_fbb);
+            if let Some(x) = args.payload {
+                builder.add_payload(x);
+            }
             if let Some(x) = args.data {
                 builder.add_data(x);
             }
@@ -128,6 +132,19 @@ pub mod nylon_dispatcher {
                     .unwrap()
             }
         }
+        #[inline]
+        pub fn payload(&self) -> Option<flatbuffers::Vector<'a, u8>> {
+            // Safety:
+            // Created from valid Table for this object
+            // which contains a valid value in this slot
+            unsafe {
+                self._tab
+                    .get::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'a, u8>>>(
+                        NylonDispatcher::VT_PAYLOAD,
+                        None,
+                    )
+            }
+        }
     }
 
     impl flatbuffers::Verifiable for NylonDispatcher<'_> {
@@ -151,6 +168,11 @@ pub mod nylon_dispatcher {
                     Self::VT_DATA,
                     true,
                 )?
+                .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, u8>>>(
+                    "payload",
+                    Self::VT_PAYLOAD,
+                    false,
+                )?
                 .finish();
             Ok(())
         }
@@ -161,6 +183,7 @@ pub mod nylon_dispatcher {
         pub name: Option<flatbuffers::WIPOffset<&'a str>>,
         pub entry: Option<flatbuffers::WIPOffset<&'a str>>,
         pub data: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, u8>>>,
+        pub payload: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, u8>>>,
     }
     impl<'a> Default for NylonDispatcherArgs<'a> {
         #[inline]
@@ -171,6 +194,7 @@ pub mod nylon_dispatcher {
                 name: None,
                 entry: None,
                 data: None, // required field
+                payload: None,
             }
         }
     }
@@ -208,6 +232,16 @@ pub mod nylon_dispatcher {
                 .push_slot_always::<flatbuffers::WIPOffset<_>>(NylonDispatcher::VT_DATA, data);
         }
         #[inline]
+        pub fn add_payload(
+            &mut self,
+            payload: flatbuffers::WIPOffset<flatbuffers::Vector<'b, u8>>,
+        ) {
+            self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(
+                NylonDispatcher::VT_PAYLOAD,
+                payload,
+            );
+        }
+        #[inline]
         pub fn new(
             _fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
         ) -> NylonDispatcherBuilder<'a, 'b, A> {
@@ -235,6 +269,7 @@ pub mod nylon_dispatcher {
             ds.field("name", &self.name());
             ds.field("entry", &self.entry());
             ds.field("data", &self.data());
+            ds.field("payload", &self.payload());
             ds.finish()
         }
     }

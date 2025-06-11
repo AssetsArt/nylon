@@ -166,11 +166,30 @@ fn create_route_service(
         .ok_or_else(|| {
             NylonError::ConfigError(format!("Service {} not found", path.service.name))
         })?;
+
+    let mut payload_ast = HashMap::<String, Vec<Expr>>::new();
+    if let Some(plugin) = &service.plugin {
+        if let Some(payload) = &plugin.payload {
+            walk_json(payload, "".to_string(), &mut |path, val| {
+                if let Some(s) = val.as_str() {
+                    let ast = extract_and_parse_templates(s).unwrap_or_default();
+                    if !ast.is_empty() {
+                        payload_ast.insert(path, ast);
+                    }
+                }
+            });
+        }
+    }
     let mut route = Route {
         service: service.to_owned().clone(),
         rewrite: path.service.rewrite.clone(),
         route_middleware: Some(route_middleware.to_vec()),
         path_middleware: None,
+        payload_ast: if payload_ast.is_empty() {
+            None
+        } else {
+            Some(payload_ast)
+        },
     };
 
     if let Some(middleware) = &path.middleware {

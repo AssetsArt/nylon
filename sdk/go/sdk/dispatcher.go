@@ -2,6 +2,7 @@ package sdk
 
 import "C"
 import (
+	"encoding/json"
 	"net/url"
 
 	"github.com/AssetsArt/easy-proxy/sdk/go/fbs/nylon_dispatcher"
@@ -15,6 +16,7 @@ type Dispatcher struct {
 	PluginName string
 	Entry      string
 	Data       []byte
+	Payload    []byte
 }
 
 // new dispatcher
@@ -25,6 +27,7 @@ func NewDispatcher() *Dispatcher {
 		PluginName: "",
 		Entry:      "",
 		Data:       nil,
+		Payload:    nil,
 	}
 }
 
@@ -55,6 +58,7 @@ func WrapDispatcher(input []byte) *Dispatcher {
 		PluginName: string(raw.Name()),
 		Entry:      string(raw.Entry()),
 		Data:       raw.DataBytes(),
+		Payload:    raw.PayloadBytes(),
 	}
 }
 
@@ -67,7 +71,7 @@ func (d *Dispatcher) ToBytes() []byte {
 	pluginNameOffset := builder.CreateString(d.PluginName)
 	entryOffset := builder.CreateString(d.Entry)
 	dataOffset := builder.CreateByteVector(d.Data)
-
+	payloadOffset := builder.CreateByteVector(d.Payload)
 	// Build dispatcher
 	nylon_dispatcher.NylonDispatcherStart(builder)
 	nylon_dispatcher.NylonDispatcherAddHttpEnd(builder, d.HttpEnd)
@@ -75,9 +79,21 @@ func (d *Dispatcher) ToBytes() []byte {
 	nylon_dispatcher.NylonDispatcherAddName(builder, pluginNameOffset)
 	nylon_dispatcher.NylonDispatcherAddEntry(builder, entryOffset)
 	nylon_dispatcher.NylonDispatcherAddData(builder, dataOffset)
+	nylon_dispatcher.NylonDispatcherAddPayload(builder, payloadOffset)
+
+	// Finish
 	dispatcher := nylon_dispatcher.NylonDispatcherEnd(builder)
 	builder.Finish(dispatcher)
 	return builder.FinishedBytes()
+}
+
+func (d *Dispatcher) SwitchPayloadToJson() map[string]any {
+	var jsonData map[string]any
+	err := json.Unmarshal(d.Payload, &jsonData)
+	if err != nil {
+		return map[string]any{}
+	}
+	return jsonData
 }
 
 func (d *Dispatcher) SwitchDataToHttpContext() *HttpContext {

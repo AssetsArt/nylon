@@ -11,6 +11,7 @@ pub struct Route {
     pub rewrite: Option<String>,
     pub route_middleware: Option<Vec<(MiddlewareItem, Option<HashMap<String, Vec<Expr>>>)>>,
     pub path_middleware: Option<Vec<(MiddlewareItem, Option<HashMap<String, Vec<Expr>>>)>>,
+    pub payload_ast: Option<HashMap<String, Vec<Expr>>>,
 }
 
 #[derive(Debug, Clone)]

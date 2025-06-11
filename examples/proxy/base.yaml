@@ -33,6 +33,8 @@ services:
     plugin:
       name: plugin_sdk
       entry: sdk_go_service
+      payload:
+        client_ip: "${request(client_ip)}"
 
   - name: http-service
     service_type: http

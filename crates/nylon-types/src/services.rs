@@ -1,5 +1,4 @@
 use serde::Deserialize;
-use std::collections::HashMap;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct HealthCheck {
@@ -42,7 +41,7 @@ pub enum Algorithm {
 pub struct Plugin {
     pub name: String,
     pub entry: String,
-    pub payload: Option<HashMap<String, serde_json::Value>>,
+    pub payload: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

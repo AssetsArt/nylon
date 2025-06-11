@@ -5,6 +5,7 @@ package main
 */
 import "C"
 import (
+	"fmt"
 	"time"
 )
 
@@ -12,6 +13,10 @@ import (
 func sdk_go_service(ptr *C.uchar, input_len C.int) C.FfiOutput {
 	dispatcher := InputToDispatcher(ptr, input_len)
 	http_ctx := dispatcher.SwitchDataToHttpContext()
+
+	// payload
+	payload := dispatcher.SwitchPayloadToJson()
+	fmt.Println("payload", payload)
 
 	// create response
 	http_ctx.Response.BodyJSON(map[string]any{

@@ -4,7 +4,7 @@ use bytes::Bytes;
 use nylon_error::NylonError;
 use nylon_plugin::{MiddlewareContext, run_middleware, try_request_filter, try_response_filter};
 use nylon_sdk::fbs::dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher;
-use nylon_types::{context::NylonContext, services::ServiceType};
+use nylon_types::{context::NylonContext, services::ServiceType, template::apply_payload_ast};
 use pingora::{
     ErrorType,
     http::ResponseHeader,
@@ -111,18 +111,34 @@ impl ProxyHttp for NylonRuntime {
                 Ok(context) => context,
                 Err(e) => return handle_error_response(&mut res, session, e).await,
             };
-
+            let headers = session.req_header_mut();
+            let payload = match (route.service.plugin, route.payload_ast) {
+                (Some(plugin), Some(payload_ast)) => {
+                    let Some(payload) = plugin.payload else {
+                        return Err(pingora::Error::because(
+                            ErrorType::InternalError,
+                            "[plugin_service_dispatch]",
+                            "Plugin payload not found",
+                        ));
+                    };
+                    let mut payload = payload.clone();
+                    apply_payload_ast(&mut payload, &payload_ast, headers, res.ctx);
+                    serde_json::to_vec(&payload).ok()
+                }
+                _ => None,
+            };
             match nylon_plugin::dispatcher::http_service_dispatch(
                 res.ctx,
                 None,
                 None,
                 &http_context,
+                &payload,
             ) {
                 Ok(buf) => {
                     let dispatcher = root_as_nylon_dispatcher(&buf).map_err(|e| {
                         pingora::Error::because(
                             ErrorType::InternalError,
-                            "[request_filter]",
+                            "[plugin_service_dispatch]",
                             e.to_string(),
                         )
                     })?;
@@ -135,7 +151,7 @@ impl ProxyHttp for NylonRuntime {
                 Err(e) => {
                     return Err(pingora::Error::because(
                         ErrorType::InternalError,
-                        "[request_filter]",
+                        "[plugin_service_dispatch]",
                         e.to_string(),
                     ));
                 }

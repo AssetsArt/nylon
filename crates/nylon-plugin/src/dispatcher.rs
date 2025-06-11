@@ -24,6 +24,7 @@ pub fn http_service_dispatch(
     plugin: Option<&str>,
     entry: Option<&str>,
     dispatch_data: &[u8],
+    payload: &Option<Vec<u8>>,
 ) -> Result<Vec<u8>, NylonError> {
     let request_id = &ctx.request_id;
     let (plugin_name, entry) = match plugin {
@@ -44,7 +45,7 @@ pub fn http_service_dispatch(
             (plugin.name.as_str(), plugin.entry.as_ref())
         }
     };
-    dispatch(request_id, plugin_name, entry, dispatch_data)
+    dispatch(request_id, plugin_name, entry, dispatch_data, payload)
 }
 
 pub fn dispatch(
@@ -52,6 +53,7 @@ pub fn dispatch(
     plugin_name: &str,
     entry_name: &str,
     dispatcher_data: &[u8],
+    payload: &Option<Vec<u8>>,
 ) -> Result<Vec<u8>, NylonError> {
     let plugin = get_plugin(plugin_name)?;
     let Some(entry_fn) = plugin.entry.get(entry_name) else {
@@ -61,12 +63,12 @@ pub fn dispatch(
         )));
     };
     let plugin_free = plugin.plugin_free.clone();
-
     let mut fbs = flatbuffers::FlatBufferBuilder::new();
     let request_id = fbs.create_string(request_id);
     let name = fbs.create_string(plugin_name);
     let entry = fbs.create_string(entry_name);
     let data_vec = fbs.create_vector(dispatcher_data);
+    let payload_vec = fbs.create_vector(payload.as_ref().unwrap_or(&vec![]));
     let dispatcher = NylonDispatcher::create(
         &mut fbs,
         &NylonDispatcherArgs {
@@ -75,6 +77,7 @@ pub fn dispatch(
             name: Some(name),
             entry: Some(entry),
             data: Some(data_vec),
+            payload: Some(payload_vec),
         },
     );
     fbs.finish(dispatcher, None);
