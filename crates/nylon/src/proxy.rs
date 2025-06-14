@@ -54,6 +54,25 @@ impl ProxyHttp for NylonRuntime {
             Err(e) => return handle_error_response(&mut res, session, e).await,
         };
 
+        // acme request
+        // todo: handle acme request
+
+        // check if tls route
+        if let Ok(Some(redirect)) = nylon_store::routes::get_tls_route(&res.ctx.host) {
+            if !res.ctx.tls {
+                // todo: handle tls route
+                // println!("tls route redirect: {}", redirect);
+                // ${host}
+                let redirect = redirect.replace("${host}", &res.ctx.host);
+                let redirect = redirect.replace("http://", "");
+                let redirect = redirect.replace("https://", "");
+
+                res.redirect(format!("https://{}", redirect));
+                return res.send(session).await;
+            }
+        }
+
+        // clone route and params
         res.ctx.route = Some(route.clone());
         res.ctx.params = Some(params.clone());
 

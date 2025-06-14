@@ -25,6 +25,8 @@ pub struct NylonContext {
     pub params: Option<HashMap<String, String>>,
     pub request_id: String,
     pub plugin_store: Option<Vec<u8>>,
+    pub host: String,
+    pub tls: bool,
 }
 
 impl Default for NylonContext {
@@ -40,6 +42,8 @@ impl Default for NylonContext {
             request_body: None,
             response_body: None,
             plugin_store: None,
+            host: "".to_string(),
+            tls: false,
         }
     }
 }

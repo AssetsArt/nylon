@@ -7,6 +7,9 @@ routes:
       type: host
       value: localhost # domain.com|domain2.com|domain3.com
     name: http-route-1
+    tls:
+      enabled: true
+      redirect: "${host}:8443"
     middleware:
       - group: example
     paths:

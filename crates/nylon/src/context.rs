@@ -38,6 +38,24 @@ impl NylonContextExt for NylonContext {
         };
         self.request_body = session.read_request_body().await.unwrap_or_default();
         self.response_body = Some(Bytes::new());
+        self.tls = match session.digest() {
+            Some(d) => d.ssl_digest.is_some(),
+            None => false,
+        };
+
+        match session.as_http2() {
+            Some(session) => {
+                let host = session.req_header().uri.host().unwrap_or("");
+                self.host = host.to_string();
+            }
+            None => {
+                let host = match session.req_header().headers.get("Host") {
+                    Some(h) => h.to_str().unwrap_or("").split(':').next().unwrap_or(""),
+                    None => "",
+                };
+                self.host = host.to_string();
+            }
+        }
         Ok(())
     }
 }

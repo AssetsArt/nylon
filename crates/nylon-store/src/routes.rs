@@ -39,8 +39,15 @@ pub fn store(
     let middleware_groups = middleware_groups.clone().unwrap_or_default();
     let mut store_route = HashMap::new();
     let mut globa_routes_matchit = HashMap::new();
-
+    let mut tls_routes = HashMap::new();
     for route in routes {
+        if let Some(tls) = &route.tls {
+            if tls.enabled {
+                for host in route.route.value.split('|') {
+                    tls_routes.insert(host.to_string(), tls.redirect.clone());
+                }
+            }
+        }
         process_route_matcher(route, &mut store_route)?;
         let route_middleware = process_route_middleware(route, &middleware_groups)?;
         let matchit_route =
@@ -50,7 +57,17 @@ pub fn store(
 
     store::insert(store::KEY_ROUTES_MATCHIT, globa_routes_matchit);
     store::insert(store::KEY_ROUTES, store_route);
+    store::insert(store::KEY_TLS_ROUTES, tls_routes);
     Ok(())
+}
+
+pub fn get_tls_route(host: &str) -> Result<Option<String>, NylonError> {
+    let tls_routes = store::get::<HashMap<String, Option<String>>>(store::KEY_TLS_ROUTES)
+        .ok_or_else(|| NylonError::ShouldNeverHappen("TLS routes not found in store".into()))?;
+    let tls_route = tls_routes.get(host).ok_or_else(|| {
+        NylonError::RouteNotFound(format!("TLS route not found for host: {}", host))
+    })?;
+    Ok(tls_route.clone())
 }
 
 fn process_route_matcher(

@@ -24,16 +24,9 @@ impl<'a> Response<'a> {
         })
     }
 
-    pub fn _redirect_https(
-        &mut self,
-        host: String,
-        path: String,
-        port: Option<String>,
-    ) -> &mut Self {
+    pub fn redirect(&mut self, redirect: String) -> &mut Self {
         self.status(301);
-        let port_str = port.unwrap_or_default();
-        let location = format!("https://{}{}{}", host, port_str, path);
-        self.header("Location", &location);
+        self.header("Location", &redirect);
         self.header("Content-Length", "0");
         self
     }

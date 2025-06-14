@@ -30,8 +30,8 @@ pub struct RouteMatcher {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct TlsRoute {
-    pub name: String,
-    pub redirect: Option<bool>,
+    pub enabled: bool,
+    pub redirect: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

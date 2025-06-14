@@ -29,6 +29,7 @@ chrono = "0.4"
 uuid = { version = "1.13", features = ["v4", "v7"] }
 flatbuffers = { version = "25.2", features = ["serde"] }
 libloading = "0.8"
+instant-acme = "0.7"
 
 [profile.release]
 overflow-checks = true

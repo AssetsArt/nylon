@@ -1,0 +1,14 @@
+tls:
+  - type: custom
+    cert: ./examples/cert/localhost.crt
+    key: ./examples/cert/localhost.key
+    # chain: # Optional
+    #   - ./examples/cert/chain.pem
+    domains:
+      - localhost
+
+  # - type: acme
+  #   email: test@example.com
+  #   provider: letsencrypt # Options: letsencrypt, buypass
+  #   domains:
+  #     - localhost

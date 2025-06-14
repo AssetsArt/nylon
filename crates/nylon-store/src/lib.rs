@@ -1,5 +1,6 @@
 pub mod lb_backends;
 pub mod routes;
+pub mod tls;
 
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
@@ -13,10 +14,12 @@ pub const KEY_RUNTIME_CONFIG: &str = "runtime_config";
 pub const KEY_COMMAND_SOCKET_PATH: &str = "/tmp/_nylon.sock";
 pub const KEY_LB_BACKENDS: &str = "lb_backends";
 pub const KEY_ROUTES: &str = "routes";
+pub const KEY_TLS_ROUTES: &str = "tls_routes";
 pub const KEY_ROUTES_MATCHIT: &str = "routes_matchit";
 pub const KEY_HEADER_SELECTOR: &str = "header_selector";
 pub const KEY_LIBRARY_FILE: &str = "library_file";
 pub const KEY_PLUGINS: &str = "plugins";
+pub const KEY_TLS: &str = "tls";
 
 // storage for global variables
 static GLOBAL_STORE: Lazy<DashMap<String, Box<dyn Any + Send + Sync>>> = Lazy::new(DashMap::new);

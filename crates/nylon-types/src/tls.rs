@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, PartialEq)]
 pub enum TlsKind {
     #[serde(rename = "custom")]
     Custom,
@@ -10,13 +10,13 @@ pub enum TlsKind {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct TlsConfig {
-    pub name: String,
     #[serde(rename = "type")]
     pub kind: TlsKind, // "custom" or "acme"
     pub key: Option<String>,
     pub cert: Option<String>,
     pub chain: Option<Vec<String>>,
     pub acme: Option<AcmeConfig>,
+    pub domains: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]

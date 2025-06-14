@@ -2,8 +2,14 @@ use nylon_error::NylonError;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, str::FromStr};
 
+const DEFAULT_NYLON_DIR: &str = "/etc/nylon";
+
 fn default_config_dir() -> PathBuf {
-    PathBuf::from("/etc/nylon/config")
+    PathBuf::from(format!("{}/config", DEFAULT_NYLON_DIR))
+}
+
+fn default_acme_dir() -> PathBuf {
+    PathBuf::from(format!("{}/acme", DEFAULT_NYLON_DIR))
 }
 
 fn default_daemon() -> bool {
@@ -47,6 +53,10 @@ pub struct RuntimeConfig {
     /// Path to directory containing service and route definitions
     #[serde(default = "default_config_dir")]
     pub config_dir: PathBuf,
+
+    /// Path to directory containing ACME certificates
+    #[serde(default = "default_acme_dir")]
+    pub acme: PathBuf,
 
     /// Pingora runtime configuration
     #[serde(default)]
@@ -111,6 +121,7 @@ impl Default for RuntimeConfig {
             https: vec![],
             metrics: vec![],
             config_dir: default_config_dir(),
+            acme: default_acme_dir(),
             pingora: PingoraConfig::default(),
         }
     }
