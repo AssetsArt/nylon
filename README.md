@@ -11,7 +11,7 @@
       * **Path Matching:** Supports `Exact`, `Prefix`, and `Wildcard` (e.g., `/{*path}`, `/hello/{name}`) matching.
       * **Routing Types:** Implement `Host-based` and `Header-based` routing logic.
   * **🔐 TLS Management:**
-      * Automatic certificate provisioning via **ACME**.
+      * Automatic certificate provisioning via **ACME** (powered by the [`instant-acme`](https://crates.io/crates/instant-acme) library).
       * Support for **Custom SSL/TLS certificates**.
   * **⚖️ Load Balancing:**
       * Algorithms: `Round Robin`, `Random`, `Consistent Hashing` (Ketama), and `Weighted`.

@@ -4,3 +4,9 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+instant-acme = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+nylon-error = { path = "../nylon-error" }
+nylon-types = { path = "../nylon-types" }
+

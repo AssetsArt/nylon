@@ -10,8 +10,12 @@ pub struct TlsStore {
     pub chain: Vec<Vec<u8>>,
 }
 
-pub fn store(tls: Vec<&TlsConfig>) -> Result<(), NylonError> {
+use std::path::Path;
+
+pub fn store(tls: Vec<&TlsConfig>, acme_dir: &Path) -> Result<(), NylonError> {
     let mut tls_store = HashMap::new();
+    let rt = tokio::runtime::Runtime::new()
+        .map_err(|e| NylonError::AcmeClientError(e.to_string()))?;
     for t in tls {
         if t.kind == TlsKind::Custom {
             // store custom tls
@@ -44,6 +48,24 @@ pub fn store(tls: Vec<&TlsConfig>) -> Result<(), NylonError> {
                         cert: cert.clone(),
                         key: key.clone(),
                         chain: chain.clone(),
+                    },
+                );
+            }
+        } else if t.kind == TlsKind::Acme {
+            rt.block_on(nylon_tls::acme::ensure_certs(t, acme_dir))?;
+            for domain in &t.domains {
+                let cert_path = acme_dir.join(domain).join("cert.pem");
+                let key_path = acme_dir.join(domain).join("key.pem");
+                let cert = std::fs::read(&cert_path)
+                    .map_err(|e| NylonError::ConfigError(e.to_string()))?;
+                let key = std::fs::read(&key_path)
+                    .map_err(|e| NylonError::ConfigError(e.to_string()))?;
+                tls_store.insert(
+                    domain.clone(),
+                    TlsStore {
+                        cert,
+                        key,
+                        chain: vec![],
                     },
                 );
             }

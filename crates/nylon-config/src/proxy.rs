@@ -6,6 +6,7 @@ use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_plugin::loaders;
 use nylon_store as store;
+use crate::runtime::RuntimeConfig;
 use nylon_types::{
     proxy::ProxyConfig,
     route::RouteConfig,
@@ -200,7 +201,11 @@ impl ProxyConfigExt for ProxyConfig {
         self.validate()?;
 
         // store tls
-        store::tls::store(self.tls.iter().flatten().collect::<Vec<&TlsConfig>>())?;
+        let rt_cfg = RuntimeConfig::get()?;
+        store::tls::store(
+            self.tls.iter().flatten().collect::<Vec<&TlsConfig>>(),
+            &rt_cfg.acme,
+        )?;
 
         // store lb backends
         let services = self
