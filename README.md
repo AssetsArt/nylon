@@ -7,7 +7,7 @@
 
 ---
 
-## 🚀 Why Nylon?
+## 🚀 Overview
 
 - **Extensible**: Write plugins in Go, Rust, Zig, C, and more. Extend routing, filtering, and business logic without patching the core.
 - **Modern Configuration**: Manage everything with a single, declarative YAML file. GitOps-friendly.
