@@ -1,4 +1,4 @@
-# 🧬 Nylon
+# 🧬 Nylon: The Extensible Proxy Server
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-online-blue)](https://nylon.sh/)
@@ -21,7 +21,7 @@
 
 ```sh
 # Download or build Nylon binary (see Releases or build instructions below)
-nylon -c config.yaml
+nylon run -c config.yaml
 ````
 
 See the [Getting Started Guide](https://nylon.sh/getting-started/installation) for detailed setup.
@@ -62,14 +62,8 @@ func sdk_go_mid_request_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
 ```sh
 git clone https://github.com/AssetsArt/nylon.git
 cd nylon
-make build-release
+make build
 ```
-
----
-
-## 📝 License
-
-[MIT](LICENSE)
 
 ---
 
