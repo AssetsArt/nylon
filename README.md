@@ -1,24 +1,76 @@
-# 🛡️ Nylon: The Extensible Proxy Server
+# 🧬 Nylon
 
-**Nylon** is a lightweight, high-performance, and extensible proxy server built on top of the robust [Cloudflare Pingora](https://github.com/cloudflare/pingora) framework. Designed for modern infrastructure, Nylon empowers you with advanced routing capabilities, seamless TLS management, versatile load balancing, and a powerful plugin system to tailor its behavior to your exact needs.
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-online-blue)](https://nylon.sh/)
 
------
+**Nylon** is a lightweight, high-performance, and extensible proxy server built on top of the robust [Cloudflare Pingora](https://blog.cloudflare.com/introducing-pingora/) framework. Designed for modern infrastructure.
 
-## ✨ Key Features
+---
 
-  * **🚀 High-Performance Core:** Leverages Pingora for a fast and reliable foundation.
-  * **Flexible Routing:**
-      * **Path Matching:** Supports `Exact`, `Prefix`, and `Wildcard` (e.g., `/{*path}`, `/hello/{name}`) matching.
-      * **Routing Types:** Implement `Host-based` and `Header-based` routing logic.
-  * **🔐 TLS Management:**
-      * Automatic certificate provisioning via **ACME**.
-      * Support for **Custom SSL/TLS certificates**.
-  * **⚖️ Load Balancing:**
-      * Algorithms: `Round Robin`, `Random`, `Consistent Hashing` (Ketama), and `Weighted`.
-  * **🔌 Extensible Plugin System:**
-      * Interface via **FlatBuffers FFI**, compatible with Go, Rust, Zig, and other languages supporting C interop.
-      * Plugins can act as **Middleware** (transforming requests/responses) or **Service Handlers** (generating full responses).
-  * **📝 YAML Configuration:** Clean, intuitive, and powerful YAML-based setup.
-      * Supports dynamic value templating (e.g., `${env(VAR)}`, `${uuid(v7)}`, `${request(client_ip)}`).
-  * **🧩 Middleware Groups:** Define reusable sets of middleware for cleaner route configurations.
-  * **📊 Observability:** (Implicit via Pingora, can be explicitly stated if Nylon adds more) logging capabilities.
+## 🚀 Why Nylon?
+
+- **Extensible**: Write plugins in Go, Rust, Zig, C, and more. Extend routing, filtering, and business logic without patching the core.
+- **Modern Configuration**: Manage everything with a single, declarative YAML file. GitOps-friendly.
+- **Advanced Routing & Load Balancing**: Route by host, header, path (wildcard support), and balance traffic with round robin, random, or consistent hashing.
+- **Automatic TLS Management**: ACME (Let's Encrypt, Buypass, etc.) and custom certs supported.
+- **Cloud-Native**: Designed for scale, reliability, and observability.
+
+---
+
+## 🛠️ Quick Start
+
+```sh
+# Download or build Nylon binary (see Releases or build instructions below)
+nylon -c config.yaml
+````
+
+See the [Getting Started Guide](https://nylon.sh/getting-started/installation) for detailed setup.
+
+---
+
+## 🧩 Extending Nylon
+
+Nylon features a **powerful plugin system** — use any language with FFI & FlatBuffers.
+
+**Example: Minimal Go Middleware Plugin**
+
+```go
+//export sdk_go_mid_request_filter
+func sdk_go_mid_request_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
+    dispatcher := InputToDispatcher(ptr, input_len)
+    ctx := dispatcher.SwitchDataToHttpContext()
+    ctx.Request.SetHeader("x-nylon-middleware", "true")
+    dispatcher.SetHttpEnd(false)
+    dispatcher.SetData(ctx.ToBytes())
+    return SendResponse(dispatcher)
+}
+```
+
+> See [plugin docs](https://nylon.sh/plugin-system/go) and [real-world examples](https://github.com/AssetsArt/nylon/tree/main/examples/go)
+
+## 📚 Documentation
+
+* **[nylon.sh](https://nylon.sh/)** — Full documentation & guides
+* **[Getting Started](https://nylon.sh/getting-started/installation)**
+* **[Plugin System](https://nylon.sh/plugin-system)**
+* **[Config Reference](https://nylon.sh/config-reference)**
+
+---
+
+## 📦 Building from Source
+
+```sh
+git clone https://github.com/AssetsArt/nylon.git
+cd nylon
+make build-release
+```
+
+---
+
+## 📝 License
+
+[MIT](LICENSE)
+
+---
+
+Nylon is an open-source project by [AssetsArt](https://github.com/AssetsArt).
