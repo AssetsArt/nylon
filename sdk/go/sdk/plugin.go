@@ -78,6 +78,9 @@ var (
 	// Global mutexes
 	sessionMu sync.Mutex
 	handlerMu sync.Mutex
+
+	// shutdown handler
+	shutdownHandler func() = nil
 )
 
 // ====================
@@ -87,6 +90,13 @@ var (
 // NewNylonPlugin creates a new NylonPlugin
 func NewNylonPlugin() *NylonPlugin {
 	return &NylonPlugin{}
+}
+
+// Shutdown registers a function to be called when the plugin is shutting down
+func (plugin *NylonPlugin) Shutdown(fn func()) {
+	handlerMu.Lock()
+	defer handlerMu.Unlock()
+	shutdownHandler = fn
 }
 
 // Register a Go handler for an entry name
@@ -105,6 +115,13 @@ func (plugin *NylonPlugin) HttpPlugin(entry string, handler HttpPluginFunc) {
 // ====================
 // FFI Exported Functions
 // ====================
+
+//export shutdown
+func shutdown() {
+	if shutdownHandler != nil {
+		shutdownHandler()
+	}
+}
 
 //export plugin_free
 func plugin_free(ptr *C.uchar) {

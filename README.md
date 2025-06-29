@@ -100,20 +100,13 @@ import (
 
 func main() {}
 
-//export shutdown
-func shutdown() {
-	fmt.Println("[NylonPlugin] Plugin shutdown")
-}
-
 //export initialize
 func initialize(config *C.char, length C.int) {
 	configBytes := C.GoBytes(unsafe.Pointer(config), C.int(length))
 	configData := struct {
 		Debug bool `json:"debug"`
-		// ... other config
 	}{
 		Debug: false,
-		// ... other config
 	}
 	err := json.Unmarshal(configBytes, &configData)
 	if err != nil {
@@ -126,6 +119,11 @@ func initialize(config *C.char, length C.int) {
 
 	// Create a new plugin
 	plugin := sdk.NewNylonPlugin()
+
+	// Register shutdown handler
+	plugin.Shutdown(func() {
+		fmt.Println("[NylonPlugin] Plugin shutdown")
+	})
 
 	// Register middleware
 	plugin.HttpPlugin("authz", func(ctx *sdk.NylonHttpPluginCtx) {
