@@ -78,18 +78,14 @@ pub fn response(
             set: None,
         },
     };
-    let headers = &mut ctx.response_header;
     if let Some(set) = payload.set {
         for header in set {
-            let _ = headers.remove_header(&header.name);
-            let name = header.name.to_ascii_uppercase();
-            let _ = headers.append_header(name, &header.value);
+            let _ = ctx.add_response_header.insert(header.name, header.value);
         }
     }
     if let Some(remove) = payload.remove {
-        let headers = session.req_header_mut();
         for header in remove {
-            let _ = headers.remove_header(&header);
+            ctx.remove_response_header.push(header);
         }
     }
     Ok(())

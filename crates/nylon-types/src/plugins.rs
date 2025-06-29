@@ -1,4 +1,6 @@
+use libloading::{Library, Symbol};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum PluginType {
@@ -22,4 +24,27 @@ pub struct PluginItem {
     pub plugin_type: PluginType,
     pub entry: Option<Vec<String>>,
     pub life_cycle: Option<LifeCycle>,
+}
+
+// FFI Plugin
+pub type FfiPluginFreeFn = unsafe extern "C" fn(*mut u8);
+pub type FfiRegisterSessionFn =
+    unsafe extern "C" fn(u32, *const u8, i32, extern "C" fn(u32, u32, *const u8, i32)) -> bool;
+pub type FfiEventStreamFn = unsafe extern "C" fn(u32, u32, *const u8, i32);
+pub type FfiCloseSessionFn = unsafe extern "C" fn(u32);
+
+#[derive(Debug)]
+pub struct FfiPlugin {
+    pub _lib: Arc<Library>,
+    pub plugin_free: Symbol<'static, FfiPluginFreeFn>,
+    pub register_session: Symbol<'static, FfiRegisterSessionFn>,
+    pub event_stream: Symbol<'static, FfiEventStreamFn>,
+    pub close_session: Symbol<'static, FfiCloseSessionFn>,
+}
+
+// Plugin Session Stream
+#[derive(Debug, Clone)]
+pub struct SessionStream {
+    pub plugin: Arc<FfiPlugin>,
+    pub session_id: u32,
 }

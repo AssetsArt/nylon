@@ -1,41 +1,11 @@
 header_selector: x-nylon-proxy
 
-# logs:
-#   - name: access
-#     path: ./logs/access.log
-#     format:
-#       timestamp: "${timestamp()}"
-#       client_ip: "${request(client_ip)}"
-#       method: "${request(method)}"
-#       path: "${request(path)}"
-#       status: "${response(status)}"
-#       response_time: "${response(duration)}"
-#       response_size: "${response(size)}"
-#       referer: "${header(referer)}"
-#       user_agent: "${header(user-agent)}"
-    
 plugins:
   - name: plugin_sdk
     type: ffi
     file: ./target/examples/go/plugin_sdk.so
-    entry:
-      - sdk_go_service
-      - sdk_go_mid_request_filter
-      - sdk_go_mid_response_filter
-      - sdk_go_mid_response_body_filter
-    # life_cycle:
-    #   setup: true
-    #   shutdown: true
 
 services:
-  - name: go-service
-    service_type: plugin
-    plugin:
-      name: plugin_sdk
-      entry: sdk_go_service
-      payload:
-        client_ip: "${request(client_ip)}"
-
   - name: http-service
     service_type: http
     algorithm: round_robin # Options: round_robin, random, consistent, weighted
@@ -51,38 +21,32 @@ services:
 middleware_groups:
   example:
     - plugin: plugin_sdk
-      request_filter: "sdk_go_mid_request_filter"
+      request_filter: "authz"
       payload:
         client_ip: "${request(client_ip)}"
-  
-    - plugin: plugin_sdk
-      response_filter: "sdk_go_mid_response_filter"
 
-    - plugin: plugin_sdk
-      response_body_filter: "sdk_go_mid_response_body_filter"
+    # - plugin: RequestHeaderModifier
+    #   payload:
+    #     remove:
+    #       - x-version
+    #     set:
+    #       - name: x-hb-conf
+    #         value: "prefix->${env(HOMEBREW_PREFIX)}-${or(env(MY_APP_NAME), 'default')}"
+    #       - name: x-request-id
+    #         value: "${uuid(v7)}"
+    #       - name: x-timestamp
+    #         value: "${timestamp()}"
+    #       - name: x-forwarded-for
+    #         value: "${request(client_ip)}-${eq(request(client_ip), '127.0.0.1', 'local')}"
+    #       - name: x-host
+    #         value: "${header(host)}"
 
-    - plugin: RequestHeaderModifier
-      payload:
-        remove:
-          - x-version
-        set:
-          - name: x-hb-conf
-            value: "prefix->${env(HOMEBREW_PREFIX)}-${or(env(MY_APP_NAME), 'default')}"
-          - name: x-request-id
-            value: "${uuid(v7)}"
-          - name: x-timestamp
-            value: "${timestamp()}"
-          - name: x-forwarded-for
-            value: "${request(client_ip)}-${eq(request(client_ip), '127.0.0.1', 'local')}"
-          - name: x-host
-            value: "${header(host)}"
-
-    - plugin: ResponseHeaderModifier
-      payload:
-        set:
-          - name: x-request-id-false
-            value: "${or(header(x-request-id-false), concat('foo', '-', uuid(v4)))}"
-          - name: x-request-id
-            value: "${header(x-request-id)}"
-          - name: x-server
-            value: ${or(env(SERVER_NAME), 'my-server')}
+    # - plugin: ResponseHeaderModifier
+    #   payload:
+    #     set:
+    #       - name: x-request-id-false
+    #         value: "${or(header(x-request-id-false), concat('foo', '-', uuid(v4)))}"
+    #       - name: x-request-id
+    #         value: "${header(x-request-id)}"
+    #       - name: x-server
+    #         value: ${or(env(SERVER_NAME), 'my-server')}
