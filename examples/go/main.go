@@ -25,10 +25,12 @@ func init() {
 	plugin := sdk.NewNylonPlugin()
 
 	// Register middleware
-	plugin.HandleRequest("authz", func(ctx *sdk.NylonPluginCtx) {
+	plugin.HttpPlugin("authz", func(ctx *sdk.NylonHttpPluginCtx) {
 		// fmt.Println("Ctx", ctx)
-		payload := ctx.GetPayload()
-		fmt.Println("Payload", payload)
+		_ = ctx.GetPayload()
+		// fmt.Println("Payload", payload)
+
+		ctx.SetResponseHeader("X-Test", "test")
 
 		// next middleware
 		ctx.Next()

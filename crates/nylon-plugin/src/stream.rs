@@ -16,7 +16,10 @@ static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
 
 // method
 pub const METHOD_NEXT: u32 = 1;
-pub const METHOD_GET_PAYLOAD: u32 = 2;
+pub const METHOD_END: u32 = 2;
+pub const METHOD_GET_PAYLOAD: u32 = 3;
+// response method
+pub const METHOD_SET_RESPONSE_HEADER: u32 = 100;
 
 extern "C" fn handle_ffi_event(session_id: u32, method: u32, data_ptr: *const u8, len: i32) {
     let mut data = Vec::new();
@@ -37,14 +40,9 @@ extern "C" fn handle_ffi_event(session_id: u32, method: u32, data_ptr: *const u8
     }
 }
 
-// pub struct SessionStream {
-//     plugin: Arc<FfiPlugin>,
-//     session_id: u32,
-// }
-
 #[async_trait]
 pub trait PluginSessionStream {
-    fn new(plugin: Arc<FfiPlugin>) -> SessionStream;
+    fn new(plugin: Arc<FfiPlugin>) -> Self;
     async fn open(
         &self,
         entry: &str,
@@ -55,9 +53,9 @@ pub trait PluginSessionStream {
 
 #[async_trait]
 impl PluginSessionStream for SessionStream {
-    fn new(plugin: Arc<FfiPlugin>) -> SessionStream {
+    fn new(plugin: Arc<FfiPlugin>) -> Self {
         let session_id = NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed);
-        SessionStream { plugin, session_id }
+        Self { plugin, session_id }
     }
 
     async fn open(

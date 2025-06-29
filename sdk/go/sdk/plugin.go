@@ -18,13 +18,21 @@ type NylonMethods string
 
 const (
 	NylonMethodNext       NylonMethods = "next"
+	NylonMethodEnd        NylonMethods = "end"
 	NylonMethodGetPayload NylonMethods = "get_payload"
+
+	// response
+	NylonMethodSetResponseHeader NylonMethods = "set_response_header"
 )
 
 // Mapping of NylonMethods to IDs used in FFI
 var mapMethod = map[NylonMethods]uint32{
 	NylonMethodNext:       1,
-	NylonMethodGetPayload: 2,
+	NylonMethodEnd:        2,
+	NylonMethodGetPayload: 3,
+
+	// response
+	NylonMethodSetResponseHeader: 100,
 }
 
 // ====================
@@ -32,13 +40,13 @@ var mapMethod = map[NylonMethods]uint32{
 // ====================
 
 // User-defined request handler
-type HandlerFunc func(ctx *NylonPluginCtx)
+type HttpPluginFunc func(ctx *NylonHttpPluginCtx)
 
 // NylonPlugin represents the plugin itself
 type NylonPlugin struct{}
 
 // NylonPluginCtx represents a per-session context
-type NylonPluginCtx struct {
+type NylonHttpPluginCtx struct {
 	sessionID uint32
 
 	mu      sync.Mutex
@@ -55,13 +63,13 @@ var (
 	sessionCallbacks = make(map[uint32]C.data_event_fn)
 
 	// sessionID -> session context
-	streamSessions = make(map[uint32]*NylonPluginCtx)
+	streamSessions = make(map[uint32]*NylonHttpPluginCtx)
 
 	// sessionID -> true if open
 	sessionIsOpen = make(map[uint32]bool)
 
 	// name -> Go-side handler
-	handlerMap = make(map[string]HandlerFunc)
+	handlerMap = make(map[string]HttpPluginFunc)
 
 	// Global mutexes
 	sessionMu sync.Mutex
@@ -78,9 +86,15 @@ func NewNylonPlugin() *NylonPlugin {
 }
 
 // Register a Go handler for an entry name
-func (plugin *NylonPlugin) HandleRequest(entry string, handler HandlerFunc) {
+func (plugin *NylonPlugin) HttpPlugin(entry string, handler HttpPluginFunc) {
 	handlerMu.Lock()
 	defer handlerMu.Unlock()
+	// handlerMap[entry] = handler
+	_, exists := handlerMap[entry]
+	if exists {
+		fmt.Printf("[NylonPlugin] HttpPlugin already registered for entry=%s\n", entry)
+		return
+	}
 	handlerMap[entry] = handler
 }
 
@@ -120,7 +134,7 @@ func register_session_stream(sessionID C.uint32_t, entry *C.char, length C.int32
 	// Create context if new
 	ctx, exists := streamSessions[uint32(sessionID)]
 	if !exists {
-		ctx = &NylonPluginCtx{
+		ctx = &NylonHttpPluginCtx{
 			sessionID: uint32(sessionID),
 			dataMap:   make(map[uint32][]byte),
 		}
@@ -165,13 +179,19 @@ func event_stream(sessionID C.uint32_t, method C.uint32_t, data *C.char, length 
 // ====================
 
 // RequestMethod calls into Rust using the FFI callback
-func RequestMethod(sessionID uint32, method NylonMethods) (string, error) {
+func RequestMethod(sessionID uint32, method NylonMethods, data []byte) error {
 	sessionMu.Lock()
 	cb := sessionCallbacks[sessionID]
 	sessionMu.Unlock()
 
 	if cb == nil {
-		return "", fmt.Errorf("session %d not open", sessionID)
+		return fmt.Errorf("session %d not open", sessionID)
+	}
+
+	var dataPtr *C.char
+	dataLen := len(data)
+	if dataLen > 0 {
+		dataPtr = (*C.char)(unsafe.Pointer(&data[0]))
 	}
 
 	methodID := mapMethod[method]
@@ -179,19 +199,19 @@ func RequestMethod(sessionID uint32, method NylonMethods) (string, error) {
 		cb,
 		C.uint32_t(sessionID),
 		C.uint32_t(methodID),
-		nil,
-		0,
+		dataPtr,
+		C.int32_t(dataLen),
 	)
-	return "", nil
+	return nil
 }
 
 // Next sends a 'next' request to Rust
-func (ctx *NylonPluginCtx) Next() {
-	RequestMethod(ctx.sessionID, NylonMethodNext)
+func (ctx *NylonHttpPluginCtx) Next() {
+	RequestMethod(ctx.sessionID, NylonMethodNext, nil)
 }
 
 // GetPayload requests and waits for payload from Rust
-func (ctx *NylonPluginCtx) GetPayload() map[string]any {
+func (ctx *NylonHttpPluginCtx) GetPayload() map[string]any {
 	methodID := mapMethod[NylonMethodGetPayload]
 
 	ctx.mu.Lock()
@@ -201,7 +221,7 @@ func (ctx *NylonPluginCtx) GetPayload() map[string]any {
 	payload, exists := ctx.dataMap[methodID]
 	if !exists {
 		// Ask Rust to send payload
-		RequestMethod(ctx.sessionID, NylonMethodGetPayload)
+		RequestMethod(ctx.sessionID, NylonMethodGetPayload, nil)
 
 		// Wait for response
 		ctx.cond.Wait()
@@ -219,4 +239,23 @@ func (ctx *NylonPluginCtx) GetPayload() map[string]any {
 	}
 
 	return payloadMap
+}
+
+// SetResponseHeader sets the response header
+func (ctx *NylonHttpPluginCtx) SetResponseHeader(key string, value string) {
+	type SetResponseHeaderData struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	}
+	data := SetResponseHeaderData{
+		Key:   key,
+		Value: value,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		fmt.Println("[NylonPlugin] SetResponseHeader JSON marshal error:", err)
+		return
+	}
+	// fmt.Println("[NylonPlugin] SetResponseHeader jsonData:", jsonData)
+	RequestMethod(ctx.sessionID, NylonMethodSetResponseHeader, jsonData)
 }

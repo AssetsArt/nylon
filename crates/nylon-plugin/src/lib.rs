@@ -1,5 +1,4 @@
 use crate::stream::PluginSessionStream;
-use bytes::Bytes;
 use dashmap::DashMap;
 use nylon_error::NylonError;
 use nylon_types::{
@@ -9,10 +8,10 @@ use nylon_types::{
     template::{Expr, apply_payload_ast},
 };
 use pingora::proxy::Session;
+use serde::Deserialize;
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 
-pub mod dispatcher;
 pub mod loaders;
 mod native;
 pub mod stream;
@@ -64,6 +63,69 @@ pub fn get_plugin(name: &str) -> Result<Arc<FfiPlugin>, NylonError> {
     Ok(plugin.clone())
 }
 
+pub async fn session_stream(
+    plugin_name: &str,
+    entry: &str,
+    payload: &Option<Vec<u8>>,
+    _params: &Option<HashMap<String, String>>,
+    ctx: &mut NylonContext,
+    _session: &mut Session,
+) -> Result<bool, NylonError> {
+    let mut http_end = false;
+    let session_stream = match ctx.session_stream.get(plugin_name) {
+        Some(session_stream) => session_stream,
+        None => {
+            let plugin = get_plugin(plugin_name)?;
+            let session_stream = SessionStream::new(plugin.clone());
+            ctx.session_stream
+                .insert(plugin_name.to_string(), session_stream);
+            match ctx.session_stream.get(plugin_name) {
+                Some(session_stream) => session_stream,
+                None => {
+                    return Err(NylonError::ConfigError(
+                        "Failed to get session stream".to_string(),
+                    ));
+                }
+            }
+        }
+    };
+    let (_session_id, mut rx) = session_stream.open(entry).await?;
+    while let Some((method, data)) = rx.recv().await {
+        if method == stream::METHOD_GET_PAYLOAD {
+            let payload = payload.as_ref().unwrap_or(&vec![]).clone();
+            session_stream.event_stream(method, &payload).await?;
+        } else if method == stream::METHOD_NEXT {
+            break;
+        } else if method == stream::METHOD_END {
+            http_end = true;
+            break;
+        }
+        // response
+        else if method == stream::METHOD_SET_RESPONSE_HEADER {
+            #[derive(Deserialize, Debug)]
+            struct SetResponseHeaderData {
+                key: String,
+                value: String,
+            }
+            let headers = match serde_json::from_slice::<SetResponseHeaderData>(&data) {
+                Ok(headers) => headers,
+                Err(e) => {
+                    return Err(NylonError::ConfigError(format!("Invalid headers: {}", e)));
+                }
+            };
+            ctx.add_response_header.insert(headers.key, headers.value);
+        }
+        // unknown method
+        else {
+            return Err(NylonError::ConfigError(format!(
+                "Invalid method: {}",
+                method
+            )));
+        }
+    }
+    Ok(http_end)
+}
+
 pub async fn run_middleware(
     middleware_context: &MiddlewareContext,
     ctx: &mut NylonContext,
@@ -100,104 +162,12 @@ pub async fn run_middleware(
                 None => None,
             };
             if let Some(request_filter) = &middleware.request_filter {
-                // try to get plugin
-                let session_stream = match ctx.session_stream.get(plugin_name) {
-                    Some(session_stream) => session_stream,
-                    None => {
-                        let plugin = get_plugin(plugin_name)?;
-                        let session_stream = SessionStream::new(plugin.clone());
-                        ctx.session_stream
-                            .insert(plugin_name.to_string(), session_stream);
-                        match ctx.session_stream.get(plugin_name) {
-                            Some(session_stream) => session_stream,
-                            None => {
-                                return Err(NylonError::ConfigError(
-                                    "Failed to get session stream".to_string(),
-                                ));
-                            }
-                        }
-                    }
-                };
-                let (_session_id, mut rx) = session_stream.open(request_filter).await?;
-                while let Some((method, _)) = rx.recv().await {
-                    if method == stream::METHOD_GET_PAYLOAD {
-                        let payload = payload.as_ref().unwrap_or(&vec![]).clone();
-                        session_stream.event_stream(method, &payload).await?;
-                    } else if method == stream::METHOD_NEXT {
-                        break;
-                    } else {
-                        return Err(NylonError::ConfigError(format!(
-                            "Invalid method: {}",
-                            method
-                        )));
-                    }
-                }
-                return Ok(false);
+                return session_stream(plugin_name, request_filter, &payload, params, ctx, session)
+                    .await;
             } else if let Some(_response_filter) = &middleware.response_filter {
-                // let http_context =
-                //     nylon_sdk::proxy_http::build_http_context(session, ctx, params.clone())?;
-                // let dispatcher = dispatcher::http_service_dispatch(
-                //     ctx,
-                //     Some(plugin_name.as_str()),
-                //     Some(response_filter),
-                //     &http_context,
-                //     &payload,
-                // )?;
-                // let dispatcher = root_as_nylon_dispatcher(&dispatcher)
-                //     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
-                // ctx.plugin_store = Some(dispatcher.store().unwrap_or_default().bytes().to_vec());
-                // let http_ctx = match root_as_nylon_http_context(dispatcher.data().bytes()) {
-                //     Ok(d) => d,
-                //     Err(e) => {
-                //         return Err(NylonError::ConfigError(format!(
-                //             "Invalid http context: {}",
-                //             e
-                //         )));
-                //     }
-                // };
-
-                // // clear all headers
-                // for h in ctx.response_header.headers.clone() {
-                //     if let Some(key) = h.0 {
-                //         let _ = ctx.response_header.remove_header(key.as_str());
-                //     }
-                // }
-
-                // let response = http_ctx.response();
-                // let headers = response.headers();
-                // for h in headers.iter().flatten() {
-                //     let _ = ctx
-                //         .response_header
-                //         .append_header(h.key().to_string(), h.value().to_string());
-                // }
-                // let status = response.status();
-                // let _ = ctx.response_header.set_status(status as u16);
+                // todo!("response filter");
             } else if let Some(_response_body_filter) = &middleware.response_body_filter {
-                // // println!("response body filter {:?}", ctx.response_body);
-                // let http_context =
-                //     nylon_sdk::proxy_http::build_http_context(session, ctx, params.clone())?;
-                // let dispatcher = dispatcher::http_service_dispatch(
-                //     ctx,
-                //     Some(plugin_name.as_str()),
-                //     Some(response_body_filter),
-                //     &http_context,
-                //     &payload,
-                // )?;
-                // let dispatcher = root_as_nylon_dispatcher(&dispatcher)
-                //     .map_err(|e| NylonError::ConfigError(format!("Invalid dispatcher: {}", e)))?;
-                // ctx.plugin_store = Some(dispatcher.store().unwrap_or_default().bytes().to_vec());
-                // let http_ctx = match root_as_nylon_http_context(dispatcher.data().bytes()) {
-                //     Ok(d) => d,
-                //     Err(e) => {
-                //         return Err(NylonError::ConfigError(format!(
-                //             "Invalid http context: {}",
-                //             e
-                //         )));
-                //     }
-                // };
-                // let response = http_ctx.response();
-                // let body = response.body().unwrap_or_default();
-                // ctx.response_body = Some(Bytes::from(body.bytes().to_vec()));
+                // todo!("response body filter");
             } else if let Some(_logging) = &middleware.logging {
                 // todo!("logging");
             }

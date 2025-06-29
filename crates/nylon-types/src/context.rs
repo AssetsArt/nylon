@@ -1,7 +1,6 @@
 #![allow(clippy::type_complexity)]
 use crate::{plugins::SessionStream, route::MiddlewareItem, services::ServiceItem, template::Expr};
-use bytes::Bytes;
-use pingora::{http::ResponseHeader, lb::Backend};
+use pingora::lb::Backend;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -16,9 +15,10 @@ pub struct Route {
 
 #[derive(Debug, Clone)]
 pub struct NylonContext {
-    pub response_header: ResponseHeader,
-    pub request_body: Option<Bytes>,
-    pub response_body: Option<Bytes>,
+    pub add_response_header: HashMap<String, String>,
+    pub remove_response_header: Vec<String>,
+    pub set_response_status: u16,
+
     pub backend: Backend,
     pub client_ip: String,
     pub route: Option<Route>,
@@ -38,13 +38,12 @@ impl Default for NylonContext {
             route: None,
             params: None,
             request_id: Uuid::now_v7().to_string(),
-            response_header: ResponseHeader::build(200, None)
-                .expect("Unable to create response header"),
-            request_body: None,
-            response_body: None,
+            add_response_header: HashMap::new(),
+            remove_response_header: Vec::new(),
             plugin_store: None,
             host: "".to_string(),
             tls: false,
+            set_response_status: 200,
             session_stream: HashMap::new(),
         }
     }

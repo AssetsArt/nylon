@@ -3,8 +3,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use nylon_error::NylonError;
 use nylon_plugin::{MiddlewareContext, run_middleware, try_request_filter};
-use nylon_sdk::fbs::dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher;
-use nylon_types::{context::NylonContext, services::ServiceType, template::apply_payload_ast};
+use nylon_types::{context::NylonContext, services::ServiceType};
 use pingora::{
     ErrorType,
     http::ResponseHeader,
@@ -116,63 +115,7 @@ impl ProxyHttp for NylonRuntime {
 
         // Handle plugin service type
         if route.service.service_type == ServiceType::Plugin {
-            let http_context = match nylon_sdk::proxy_http::build_http_context(
-                session,
-                res.ctx,
-                Some(params.clone()),
-            ) {
-                Ok(context) => context,
-                Err(e) => return handle_error_response(&mut res, session, e).await,
-            };
-            let headers = session.req_header_mut();
-            let payload = match (route.service.plugin, route.payload_ast) {
-                (Some(plugin), Some(payload_ast)) => {
-                    let Some(payload) = plugin.payload else {
-                        return Err(pingora::Error::because(
-                            ErrorType::InternalError,
-                            "[plugin_service_dispatch]",
-                            "Plugin payload not found",
-                        ));
-                    };
-                    let mut payload = payload.clone();
-                    apply_payload_ast(&mut payload, &payload_ast, headers, res.ctx);
-                    serde_json::to_vec(&payload).ok()
-                }
-                _ => None,
-            };
-            match nylon_plugin::dispatcher::http_service_dispatch(
-                res.ctx,
-                None,
-                None,
-                &http_context,
-                &payload,
-            )
-            .await
-            {
-                Ok(buf) => {
-                    let dispatcher = root_as_nylon_dispatcher(&buf).map_err(|e| {
-                        pingora::Error::because(
-                            ErrorType::InternalError,
-                            "[plugin_service_dispatch]",
-                            e.to_string(),
-                        )
-                    })?;
-                    res.ctx.plugin_store =
-                        Some(dispatcher.store().unwrap_or_default().bytes().to_vec());
-                    return res
-                        .dispatcher_to_response(session, dispatcher.data().bytes(), true)
-                        .await?
-                        .send(session)
-                        .await;
-                }
-                Err(e) => {
-                    return Err(pingora::Error::because(
-                        ErrorType::InternalError,
-                        "[plugin_service_dispatch]",
-                        e.to_string(),
-                    ));
-                }
-            }
+            // todo: handle plugin service type
         }
 
         // Handle regular service type
@@ -209,12 +152,19 @@ impl ProxyHttp for NylonRuntime {
     async fn response_filter(
         &self,
         _session: &mut Session,
-        _upstream_response: &mut ResponseHeader,
-        _ctx: &mut Self::CTX,
+        upstream_response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
     ) -> pingora::Result<()>
     where
         Self::CTX: Send + Sync,
     {
+        for (key, value) in ctx.add_response_header.iter() {
+            let _ = upstream_response.append_header(key.to_ascii_uppercase(), value);
+        }
+        for key in ctx.remove_response_header.iter() {
+            upstream_response.remove_header(key);
+        }
+        upstream_response.set_status(ctx.set_response_status)?;
         Ok(())
     }
 
@@ -231,23 +181,6 @@ impl ProxyHttp for NylonRuntime {
     {
         Ok(None)
     }
-
-    // Called when connected to upstream server
-    // async fn connected_to_upstream(
-    //     &self,
-    //     _session: &mut Session,
-    //     _reused: bool,
-    //     _peer: &HttpPeer,
-    //     #[cfg(unix)] _fd: std::os::unix::io::RawFd,
-    //     #[cfg(windows)] _sock: std::os::windows::io::RawSocket,
-    //     _digest: Option<&pingora::protocols::Digest>,
-    //     _ctx: &mut Self::CTX,
-    // ) -> pingora::Result<()>
-    // where
-    //     Self::CTX: Send + Sync,
-    // {
-    //     Ok(())
-    // }
 
     /// Handles request logging
     async fn logging(

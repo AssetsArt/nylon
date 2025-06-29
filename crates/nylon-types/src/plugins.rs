@@ -1,9 +1,6 @@
-use async_trait::async_trait;
 use libloading::{Library, Symbol};
-use nylon_error::NylonError;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::mpsc;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum PluginType {
