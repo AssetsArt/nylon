@@ -19,5 +19,5 @@ pingora:
   # user: nobody
   # group: webusers
   # ca_file: /etc/ssl/certs/ca-certificates.crt
-  grace_period_seconds: 5
-  graceful_shutdown_timeout_seconds: 5
+  grace_period_seconds: 1
+  graceful_shutdown_timeout_seconds: 1
