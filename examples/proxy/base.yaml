@@ -4,6 +4,8 @@ plugins:
   - name: plugin_sdk
     type: ffi
     file: ./target/examples/go/plugin_sdk.so
+    config:
+      debug: true
 
 services:
   - name: http-service

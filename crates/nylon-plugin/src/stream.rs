@@ -2,31 +2,33 @@ use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_types::plugins::{FfiPlugin, SessionStream};
 use once_cell::sync::Lazy;
-use std::sync::{Arc, Mutex};
 use std::{
     collections::HashMap,
-    sync::atomic::{AtomicU32, Ordering},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use tokio::sync::mpsc;
 
-type SessionSender = mpsc::UnboundedSender<(u32, Vec<u8>)>;
-static ACTIVE_SESSIONS: Lazy<Mutex<HashMap<u32, SessionSender>>> =
+type SessionSender = mpsc::UnboundedSender<(usize, Vec<u8>)>;
+static ACTIVE_SESSIONS: Lazy<Mutex<HashMap<usize, SessionSender>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
-static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
+static NEXT_SESSION_ID: AtomicUsize = AtomicUsize::new(1);
 
 // method
-pub const METHOD_NEXT: u32 = 1;
-pub const METHOD_END: u32 = 2;
-pub const METHOD_GET_PAYLOAD: u32 = 3;
+pub const METHOD_NEXT: usize = 1;
+pub const METHOD_END: usize = 2;
+pub const METHOD_GET_PAYLOAD: usize = 3;
 // response method
-pub const METHOD_SET_RESPONSE_HEADER: u32 = 100;
-pub const METHOD_REMOVE_RESPONSE_HEADER: u32 = 101;
-pub const METHOD_SET_RESPONSE_STATUS: u32 = 102;
+pub const METHOD_SET_RESPONSE_HEADER: usize = 100;
+pub const METHOD_REMOVE_RESPONSE_HEADER: usize = 101;
+pub const METHOD_SET_RESPONSE_STATUS: usize = 102;
 
-extern "C" fn handle_ffi_event(session_id: u32, method: u32, data_ptr: *const u8, len: i32) {
+extern "C" fn handle_ffi_event(session_id: usize, method: usize, data_ptr: *const u8, len: usize) {
     let mut data = Vec::new();
     if len > 0 {
-        data = unsafe { std::slice::from_raw_parts(data_ptr, len as usize) }.to_vec();
+        data = unsafe { std::slice::from_raw_parts(data_ptr, len) }.to_vec();
     }
     let sessions = match ACTIVE_SESSIONS.lock() {
         Ok(sessions) => sessions,
@@ -48,8 +50,8 @@ pub trait PluginSessionStream {
     async fn open(
         &self,
         entry: &str,
-    ) -> Result<(u32, mpsc::UnboundedReceiver<(u32, Vec<u8>)>), NylonError>;
-    async fn event_stream(&self, method: u32, data: &[u8]) -> Result<(), NylonError>;
+    ) -> Result<(usize, mpsc::UnboundedReceiver<(usize, Vec<u8>)>), NylonError>;
+    async fn event_stream(&self, method: usize, data: &[u8]) -> Result<(), NylonError>;
     async fn close(&self) -> Result<(), NylonError>;
 }
 
@@ -63,7 +65,7 @@ impl PluginSessionStream for SessionStream {
     async fn open(
         &self,
         entry: &str,
-    ) -> Result<(u32, mpsc::UnboundedReceiver<(u32, Vec<u8>)>), NylonError> {
+    ) -> Result<(usize, mpsc::UnboundedReceiver<(usize, Vec<u8>)>), NylonError> {
         let (tx, rx) = mpsc::unbounded_channel();
         ACTIVE_SESSIONS
             .lock()
@@ -75,7 +77,7 @@ impl PluginSessionStream for SessionStream {
             let ok = (*self.plugin.register_session)(
                 self.session_id,
                 entry.as_ptr(),
-                entry.len() as i32,
+                entry.len(),
                 handle_ffi_event,
             );
             if !ok {
@@ -87,9 +89,9 @@ impl PluginSessionStream for SessionStream {
         Ok((self.session_id, rx))
     }
 
-    async fn event_stream(&self, method: u32, data: &[u8]) -> Result<(), NylonError> {
+    async fn event_stream(&self, method: usize, data: &[u8]) -> Result<(), NylonError> {
         unsafe {
-            (*self.plugin.event_stream)(self.session_id, method, data.as_ptr(), data.len() as i32);
+            (*self.plugin.event_stream)(self.session_id, method, data.as_ptr(), data.len());
         }
         Ok(())
     }
@@ -99,7 +101,7 @@ impl PluginSessionStream for SessionStream {
     }
 }
 
-pub async fn close_session(plugin: Arc<FfiPlugin>, session_id: u32) -> Result<(), NylonError> {
+pub async fn close_session(plugin: Arc<FfiPlugin>, session_id: usize) -> Result<(), NylonError> {
     unsafe {
         (*plugin.close_session)(session_id);
     }

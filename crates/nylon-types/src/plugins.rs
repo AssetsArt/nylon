@@ -23,15 +23,20 @@ pub struct PluginItem {
     #[serde(rename = "type")]
     pub plugin_type: PluginType,
     pub entry: Option<Vec<String>>,
-    pub life_cycle: Option<LifeCycle>,
+    pub config: Option<serde_json::Value>,
 }
 
 // FFI Plugin
+pub type FfiInitializeFn = unsafe extern "C" fn(*const u8, usize);
 pub type FfiPluginFreeFn = unsafe extern "C" fn(*mut u8);
-pub type FfiRegisterSessionFn =
-    unsafe extern "C" fn(u32, *const u8, i32, extern "C" fn(u32, u32, *const u8, i32)) -> bool;
-pub type FfiEventStreamFn = unsafe extern "C" fn(u32, u32, *const u8, i32);
-pub type FfiCloseSessionFn = unsafe extern "C" fn(u32);
+pub type FfiRegisterSessionFn = unsafe extern "C" fn(
+    usize,
+    *const u8,
+    usize,
+    extern "C" fn(usize, usize, *const u8, usize),
+) -> bool;
+pub type FfiEventStreamFn = unsafe extern "C" fn(usize, usize, *const u8, usize);
+pub type FfiCloseSessionFn = unsafe extern "C" fn(usize);
 
 #[derive(Debug)]
 pub struct FfiPlugin {
@@ -46,5 +51,5 @@ pub struct FfiPlugin {
 #[derive(Debug, Clone)]
 pub struct SessionStream {
     pub plugin: Arc<FfiPlugin>,
-    pub session_id: u32,
+    pub session_id: usize,
 }

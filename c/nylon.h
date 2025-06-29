@@ -9,10 +9,10 @@ typedef struct {
     unsigned long len;
 } FfiOutput;
 
-typedef void (*data_event_fn)(uint32_t session_id, uint32_t method, const char* data, int32_t len);
+typedef void (*data_event_fn)(size_t session_id, uint32_t method, const char* data, size_t len);
 
 // C wrapper function to actually call the function pointer
-static inline void call_event_method(data_event_fn cb, uint32_t session_id, uint32_t method, const char* data, int32_t len) {
+static inline void call_event_method(data_event_fn cb, size_t session_id, uint32_t method, const char* data, size_t len) {
     cb(session_id, method, data, len);
 }
 

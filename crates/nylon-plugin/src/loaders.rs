@@ -1,30 +1,16 @@
 use dashmap::DashMap;
 use libloading::{Library, Symbol};
 use nylon_types::plugins::{
-    FfiCloseSessionFn, FfiEventStreamFn, FfiPlugin, FfiPluginFreeFn, FfiRegisterSessionFn,
-    PluginItem,
+    FfiCloseSessionFn, FfiEventStreamFn, FfiInitializeFn, FfiPlugin, FfiPluginFreeFn,
+    FfiRegisterSessionFn, PluginItem,
 };
 use std::sync::Arc;
 
+const FFI_INITIALIZE: &str = "initialize";
 const FFI_PLUGIN_FREE: &str = "plugin_free";
 const FFI_REGISTER_SESSION: &str = "register_session_stream";
 const FFI_EVENT_STREAM: &str = "event_stream";
 const FFI_CLOSE_SESSION: &str = "close_session_stream";
-
-// type FfiPluginFreeFn = unsafe extern "C" fn(*mut u8);
-// type FfiRegisterSessionFn =
-//     unsafe extern "C" fn(u32, *const u8, i32, extern "C" fn(u32, u32, *const u8, i32)) -> bool;
-// type FfiEventStreamFn = unsafe extern "C" fn(u32, u32, *const u8, i32);
-// type FfiCloseSessionFn = unsafe extern "C" fn(u32);
-
-// #[derive(Debug)]
-// pub struct FfiPlugin {
-//     _lib: Arc<Library>,
-//     pub plugin_free: Symbol<'static, FfiPluginFreeFn>,
-//     pub register_session: Symbol<'static, FfiRegisterSessionFn>,
-//     pub event_stream: Symbol<'static, FfiEventStreamFn>,
-//     pub close_session: Symbol<'static, FfiCloseSessionFn>,
-// }
 
 pub fn load(plugin: &PluginItem) {
     let file = plugin.file.clone();
@@ -110,4 +96,22 @@ pub fn load(plugin: &PluginItem) {
         };
     plugins.insert(plugin.name.clone(), Arc::new(ffi_item));
     nylon_store::insert(nylon_store::KEY_PLUGINS, plugins);
+
+    // initialize
+    let initialize = unsafe {
+        let symbol: Symbol<FfiInitializeFn> =
+            lib.get(FFI_INITIALIZE.as_bytes()).unwrap_or_else(|_| {
+                panic!("Failed to load symbol: {}", FFI_INITIALIZE);
+            });
+        std::mem::transmute::<Symbol<FfiInitializeFn>, Symbol<'static, FfiInitializeFn>>(symbol)
+    };
+    let config = match &plugin.config {
+        Some(config) => serde_json::to_string(&config).unwrap_or_default(),
+        None => "".to_string(),
+    };
+    let config_ptr = config.as_ptr();
+    let config_len = config.len();
+    unsafe {
+        initialize(config_ptr, config_len);
+    }
 }

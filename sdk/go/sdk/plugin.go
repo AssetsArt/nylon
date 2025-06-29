@@ -51,7 +51,7 @@ type NylonPlugin struct{}
 
 // NylonPluginCtx represents a per-session context
 type NylonHttpPluginCtx struct {
-	sessionID uint32
+	sessionID int
 
 	mu      sync.Mutex
 	cond    *sync.Cond
@@ -64,13 +64,13 @@ type NylonHttpPluginCtx struct {
 
 var (
 	// sessionID -> FFI callback
-	sessionCallbacks = make(map[uint32]C.data_event_fn)
+	sessionCallbacks = make(map[int]C.data_event_fn)
 
 	// sessionID -> session context
-	streamSessions = make(map[uint32]*NylonHttpPluginCtx)
+	streamSessions = make(map[int]*NylonHttpPluginCtx)
 
 	// sessionID -> true if open
-	sessionIsOpen = make(map[uint32]bool)
+	sessionIsOpen = make(map[int]bool)
 
 	// name -> Go-side handler
 	handlerMap = make(map[string]HttpPluginFunc)
@@ -112,18 +112,18 @@ func plugin_free(ptr *C.uchar) {
 }
 
 //export close_session_stream
-func close_session_stream(sessionID C.uint32_t) {
+func close_session_stream(sessionID C.int) {
 	sessionMu.Lock()
-	delete(sessionCallbacks, uint32(sessionID))
-	delete(streamSessions, uint32(sessionID))
-	delete(sessionIsOpen, uint32(sessionID))
+	delete(sessionCallbacks, int(sessionID))
+	delete(streamSessions, int(sessionID))
+	delete(sessionIsOpen, int(sessionID))
 	sessionMu.Unlock()
 
 	fmt.Printf("[NylonPlugin] Closed session %d\n", sessionID)
 }
 
 //export register_session_stream
-func register_session_stream(sessionID C.uint32_t, entry *C.char, length C.int32_t, cb C.data_event_fn) bool {
+func register_session_stream(sessionID C.int, entry *C.char, length C.int, cb C.data_event_fn) bool {
 	entryName := C.GoStringN(entry, length)
 
 	// Lookup Go handler
@@ -138,19 +138,19 @@ func register_session_stream(sessionID C.uint32_t, entry *C.char, length C.int32
 
 	// Store FFI callback
 	sessionMu.Lock()
-	sessionCallbacks[uint32(sessionID)] = cb
+	sessionCallbacks[int(sessionID)] = cb
 
 	// Create context if new
-	ctx, exists := streamSessions[uint32(sessionID)]
+	ctx, exists := streamSessions[int(sessionID)]
 	if !exists {
 		ctx = &NylonHttpPluginCtx{
-			sessionID: uint32(sessionID),
+			sessionID: int(sessionID),
 			dataMap:   make(map[uint32][]byte),
 		}
 		ctx.cond = sync.NewCond(&ctx.mu)
-		streamSessions[uint32(sessionID)] = ctx
+		streamSessions[int(sessionID)] = ctx
 	}
-	sessionIsOpen[uint32(sessionID)] = true
+	sessionIsOpen[int(sessionID)] = true
 	sessionMu.Unlock()
 
 	// Invoke Go handler
@@ -159,9 +159,9 @@ func register_session_stream(sessionID C.uint32_t, entry *C.char, length C.int32
 }
 
 //export event_stream
-func event_stream(sessionID C.uint32_t, method C.uint32_t, data *C.char, length C.int32_t) {
+func event_stream(sessionID C.int, method C.uint32_t, data *C.char, length C.int) {
 	sessionMu.Lock()
-	ctx, exists := streamSessions[uint32(sessionID)]
+	ctx, exists := streamSessions[int(sessionID)]
 	sessionMu.Unlock()
 
 	if !exists {
@@ -188,9 +188,9 @@ func event_stream(sessionID C.uint32_t, method C.uint32_t, data *C.char, length 
 // ====================
 
 // RequestMethod calls into Rust using the FFI callback
-func RequestMethod(sessionID uint32, method NylonMethods, data []byte) error {
+func RequestMethod(sessionID int, method NylonMethods, data []byte) error {
 	sessionMu.Lock()
-	cb := sessionCallbacks[sessionID]
+	cb := sessionCallbacks[int(sessionID)]
 	sessionMu.Unlock()
 
 	if cb == nil {
@@ -206,10 +206,10 @@ func RequestMethod(sessionID uint32, method NylonMethods, data []byte) error {
 	methodID := mapMethod[method]
 	C.call_event_method(
 		cb,
-		C.uint32_t(sessionID),
+		C.size_t(sessionID),
 		C.uint32_t(methodID),
 		dataPtr,
-		C.int32_t(dataLen),
+		C.size_t(dataLen),
 	)
 	return nil
 }
