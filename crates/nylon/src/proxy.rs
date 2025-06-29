@@ -102,7 +102,9 @@ impl ProxyHttp for NylonRuntime {
                 },
                 res.ctx,
                 session,
-            ) {
+            )
+            .await
+            {
                 Ok((http_end, dispatcher)) if http_end => {
                     return res
                         .dispatcher_to_response(session, &dispatcher, http_end)
@@ -152,7 +154,9 @@ impl ProxyHttp for NylonRuntime {
                 None,
                 &http_context,
                 &payload,
-            ) {
+            )
+            .await
+            {
                 Ok(buf) => {
                     let dispatcher = root_as_nylon_dispatcher(&buf).map_err(|e| {
                         pingora::Error::because(
@@ -212,121 +216,27 @@ impl ProxyHttp for NylonRuntime {
     /// Processes response filters for the request
     async fn response_filter(
         &self,
-        session: &mut Session,
-        upstream_response: &mut ResponseHeader,
-        ctx: &mut Self::CTX,
+        _session: &mut Session,
+        _upstream_response: &mut ResponseHeader,
+        _ctx: &mut Self::CTX,
     ) -> pingora::Result<()>
     where
         Self::CTX: Send + Sync,
     {
-        let Some(route) = ctx.route.clone() else {
-            return Ok(());
-        };
-
-        // set response header
-        let _ = ctx
-            .response_header
-            .set_status(upstream_response.status.as_u16());
-        for h in upstream_response.headers.clone() {
-            if let Some(key) = h.0 {
-                let _ = ctx.response_header.remove_header(key.as_str());
-                let _ = ctx.response_header.append_header(key, h.1);
-            }
-        }
-
-        // clear all headers in upstream_response
-        for h in upstream_response.headers.clone() {
-            if let Some(key) = h.0 {
-                let _ = upstream_response.remove_header(key.as_str());
-            }
-        }
-
-        let middleware_items = route
-            .route_middleware
-            .iter()
-            .flatten()
-            .chain(route.path_middleware.iter().flatten())
-            .filter(|m| {
-                m.0.response_filter.is_some()
-                    || m.0
-                        .plugin
-                        .as_ref()
-                        .map(|name| try_response_filter(name).is_some())
-                        .unwrap_or(false)
-            });
-
-        for middleware in middleware_items {
-            if let Err(e) = run_middleware(
-                &MiddlewareContext {
-                    middleware: middleware.0.clone(),
-                    payload: middleware.0.payload.clone(),
-                    payload_ast: middleware.1.clone(),
-                    params: ctx.params.clone(),
-                },
-                ctx,
-                session,
-            ) {
-                return Err(pingora::Error::because(
-                    ErrorType::InternalError,
-                    "[response_filter]",
-                    e.to_string(),
-                ));
-            }
-        }
-
-        // set response header to upstream_response
-        let _ = upstream_response.set_status(ctx.response_header.status.as_u16());
-        for h in ctx.response_header.headers.clone() {
-            if let Some(key) = h.0 {
-                let _ = upstream_response.remove_header(key.as_str());
-                let _ = upstream_response.append_header(key, h.1);
-            }
-        }
-
         Ok(())
     }
 
     /// Similar to [Self::response_filter()] but for response body chunks
     fn response_body_filter(
         &self,
-        session: &mut Session,
-        body: &mut Option<Bytes>,
+        _session: &mut Session,
+        _body: &mut Option<Bytes>,
         _end_of_stream: bool,
-        ctx: &mut Self::CTX,
+        _ctx: &mut Self::CTX,
     ) -> pingora::Result<Option<Duration>>
     where
         Self::CTX: Send + Sync,
     {
-        ctx.response_body = body.clone();
-        let Some(route) = ctx.route.clone() else {
-            return Ok(None);
-        };
-        let middleware_items = route
-            .route_middleware
-            .iter()
-            .flatten()
-            .chain(route.path_middleware.iter().flatten())
-            .filter(|m| m.0.response_body_filter.is_some());
-
-        for middleware in middleware_items {
-            if let Err(e) = run_middleware(
-                &MiddlewareContext {
-                    middleware: middleware.0.clone(),
-                    payload: middleware.0.payload.clone(),
-                    payload_ast: middleware.1.clone(),
-                    params: ctx.params.clone(),
-                },
-                ctx,
-                session,
-            ) {
-                return Err(pingora::Error::because(
-                    ErrorType::InternalError,
-                    "[response_body_filter]",
-                    e.to_string(),
-                ));
-            }
-        }
-        *body = ctx.response_body.clone();
         Ok(None)
     }
 

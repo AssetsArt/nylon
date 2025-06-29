@@ -4,7 +4,11 @@ package main
 #include "../../c/nylon.h"
 */
 import "C"
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/AssetsArt/easy-proxy/sdk/go/sdk"
+)
 
 //export sdk_go_mid_request_filter
 func sdk_go_mid_request_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
@@ -21,6 +25,9 @@ func sdk_go_mid_request_filter(ptr *C.uchar, input_len C.int) C.FfiOutput {
 	dispatcher.SetJsonToStore(map[string]any{
 		"my_store": "Hello, World!",
 	})
+
+	fmt.Println("sdk_go_mid_request_filter")
+	// time.Sleep(3 * time.Second)
 
 	// set http end and data
 	dispatcher.SetHttpEnd(false)           // set http end to false
@@ -67,4 +74,18 @@ func sdk_go_mid_response_body_filter(ptr *C.uchar, input_len C.int) C.FfiOutput 
 	dispatcher.SetData(ctx.ToBytes())
 
 	return SendResponse(dispatcher)
+}
+
+// Test
+func init() {
+	fmt.Println("init")
+	plugin := sdk.NewNylonPlugin()
+	plugin.HandleRequest("sdk_go_mid_request_filter", func(ctx *sdk.NylonPluginCtx) {
+		fmt.Println("Ctx", ctx)
+		payload := ctx.GetPayload()
+		fmt.Println("Payload", payload)
+
+		// next middleware
+		ctx.Next()
+	})
 }

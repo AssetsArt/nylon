@@ -1,4 +1,4 @@
-use crate::loaders::FfiPlugin;
+use crate::{loaders::FfiPlugin, stream};
 use dashmap::DashMap;
 use nylon_error::NylonError;
 use nylon_sdk::fbs::dispatcher_generated::nylon_dispatcher::{
@@ -19,7 +19,7 @@ fn get_plugin(name: &str) -> Result<Arc<FfiPlugin>, NylonError> {
     Ok(plugin.clone())
 }
 
-pub fn http_service_dispatch(
+pub async fn http_service_dispatch(
     ctx: &mut NylonContext,
     plugin: Option<&str>,
     entry: Option<&str>,
@@ -53,9 +53,10 @@ pub fn http_service_dispatch(
         payload,
         &ctx.plugin_store,
     )
+    .await
 }
 
-pub fn dispatch(
+pub async fn dispatch(
     request_id: &str,
     plugin_name: &str,
     entry_name: &str,
@@ -70,7 +71,10 @@ pub fn dispatch(
             plugin_name, entry_name
         )));
     };
+    let entry_fn = entry_fn.clone();
     let plugin_free = plugin.plugin_free.clone();
+    let plugin_name_str = plugin_name.to_string();
+
     let mut fbs = flatbuffers::FlatBufferBuilder::new();
     let request_id = fbs.create_string(request_id);
     let name = fbs.create_string(plugin_name);
@@ -91,9 +95,7 @@ pub fn dispatch(
         },
     );
     fbs.finish(dispatcher, None);
-    let ctx_dispatcher = fbs.finished_data();
-    let ptr = ctx_dispatcher.as_ptr();
-    let len = ctx_dispatcher.len();
+    /*
     std::panic::catch_unwind(move || {
         // println!("dispatch: {:?}", ctx_dispatcher);
         let output = unsafe { entry_fn(ptr, len) };
@@ -118,4 +120,71 @@ pub fn dispatch(
             plugin_name, entry_name, e
         )))
     })
+    */
+
+    // let (session_id, mut rx) = stream::open_session_stream().await?;
+
+    // // Spawn task to consume
+    // tokio::spawn(async move {
+    //     while let Some(chunk) = rx.recv().await {
+    //         println!("Rust received chunk: {:?}", String::from_utf8_lossy(&chunk));
+    //     }
+    // });
+
+    // // Send data to Go
+    // for i in 0..3 {
+    //     let msg = format!("Rust msg {}", i);
+    //     stream::send_to_stream(session_id, msg.as_bytes()).await;
+    //     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    // }
+
+    // stream::close_session_stream(session_id).await;
+
+    let session_stream = stream::SessionStream::new(plugin.clone());
+    let (_session_id, mut rx) = session_stream.open(entry_name).await?;
+
+    while let Some((method, _)) = rx.recv().await {
+        // TODO: handle event
+        if method == stream::METHOD_GET_PAYLOAD {
+            let payload = payload.as_ref().unwrap_or(&vec![]).clone();
+            session_stream
+                .event_stream(method, &payload)
+                .await?;
+        }
+        if method == stream::METHOD_NEXT {
+            break;
+        }
+        println!("method: {:?}", method);
+    }
+
+    tokio::task::spawn_blocking(move || {
+        let ctx_dispatcher = fbs.finished_data();
+        let ptr = ctx_dispatcher.as_ptr();
+        let len = ctx_dispatcher.len();
+        let output = unsafe { entry_fn(ptr, len) };
+        if output.ptr.is_null() {
+            return Err(NylonError::ConfigError(
+                "Plugin entry function returned null".to_string(),
+            ));
+        }
+        let ptr = output.ptr;
+        let copied = unsafe { std::slice::from_raw_parts(ptr, output.len) }.to_vec();
+        std::panic::catch_unwind(move || unsafe {
+            (plugin_free)(ptr);
+        })
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "plugin_free panic for plugin '{}': {:?}",
+                plugin_name_str, e
+            );
+        });
+        Ok(copied)
+    })
+    .await
+    .map_err(|e| {
+        NylonError::ConfigError(format!(
+            "Plugin {} entry {} panicked: {:?}",
+            plugin_name, entry_name, e
+        ))
+    })?
 }
