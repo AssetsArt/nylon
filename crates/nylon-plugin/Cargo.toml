@@ -18,3 +18,4 @@ flatbuffers = { workspace = true }
 bytes = { workspace = true }
 tokio = { workspace = true }
 once_cell = { workspace = true }
+async-trait = { workspace = true }

@@ -1,10 +1,13 @@
-use crate::{loaders::FfiPlugin, stream};
+use crate::stream::{self, PluginSessionStream};
 use dashmap::DashMap;
 use nylon_error::NylonError;
 use nylon_sdk::fbs::dispatcher_generated::nylon_dispatcher::{
     NylonDispatcher, NylonDispatcherArgs,
 };
-use nylon_types::context::NylonContext;
+use nylon_types::{
+    context::NylonContext,
+    plugins::{FfiPlugin, SessionStream},
+};
 use std::sync::Arc;
 
 fn get_plugin(name: &str) -> Result<Arc<FfiPlugin>, NylonError> {
@@ -132,23 +135,6 @@ pub async fn dispatch(
     // }
 
     // stream::close_session_stream(session_id).await;
-
-    let session_stream = stream::SessionStream::new(plugin.clone());
-    let (_session_id, mut rx) = session_stream.open(entry_name).await?;
-
-    while let Some((method, _)) = rx.recv().await {
-        // TODO: handle event
-        if method == stream::METHOD_GET_PAYLOAD {
-            let payload = payload.as_ref().unwrap_or(&vec![]).clone();
-            session_stream
-                .event_stream(method, &payload)
-                .await?;
-        }
-        if method == stream::METHOD_NEXT {
-            break;
-        }
-        println!("method: {:?}", method);
-    }
 
     // tokio::task::spawn_blocking(move || {
     //     let ctx_dispatcher = fbs.finished_data();

@@ -2,7 +2,7 @@ use crate::{backend, context::NylonContextExt, response::Response, runtime::Nylo
 use async_trait::async_trait;
 use bytes::Bytes;
 use nylon_error::NylonError;
-use nylon_plugin::{MiddlewareContext, run_middleware, try_request_filter, try_response_filter};
+use nylon_plugin::{MiddlewareContext, run_middleware, try_request_filter};
 use nylon_sdk::fbs::dispatcher_generated::nylon_dispatcher::root_as_nylon_dispatcher;
 use nylon_types::{context::NylonContext, services::ServiceType, template::apply_payload_ast};
 use pingora::{
@@ -91,8 +91,9 @@ impl ProxyHttp for NylonRuntime {
                         .unwrap_or(false)
             });
 
+        // let session_stream = stream::SessionStream::new(plugin.clone());
+
         for middleware in middleware_items {
-            // println!("middleware: {:#?}", middleware);
             match run_middleware(
                 &MiddlewareContext {
                     middleware: middleware.0.clone(),
@@ -105,19 +106,10 @@ impl ProxyHttp for NylonRuntime {
             )
             .await
             {
-                Ok((http_end, dispatcher)) if http_end => {
-                    return res
-                        .dispatcher_to_response(session, &dispatcher, http_end)
-                        .await?
-                        .send(session)
-                        .await;
+                Ok(http_end) if http_end => {
+                    return res.send(session).await;
                 }
-                Ok((http_end, dispatcher)) if !dispatcher.is_empty() => {
-                    res.dispatcher_to_response(session, &dispatcher, http_end)
-                        .await?;
-                    continue;
-                }
-                Ok((_, _)) => continue,
+                Ok(_) => continue,
                 Err(e) => return handle_error_response(&mut res, session, e).await,
             }
         }

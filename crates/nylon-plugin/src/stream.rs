@@ -1,5 +1,6 @@
-use crate::loaders::FfiPlugin;
+use async_trait::async_trait;
 use nylon_error::NylonError;
+use nylon_types::plugins::{FfiPlugin, SessionStream};
 use once_cell::sync::Lazy;
 use std::sync::{Arc, Mutex};
 use std::{
@@ -17,12 +18,7 @@ static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
 pub const METHOD_NEXT: u32 = 1;
 pub const METHOD_GET_PAYLOAD: u32 = 2;
 
-extern "C" fn handle_ffi_event(
-    session_id: u32,
-    method: u32,
-    data_ptr: *const u8,
-    len: i32,
-) {
+extern "C" fn handle_ffi_event(session_id: u32, method: u32, data_ptr: *const u8, len: i32) {
     let mut data = Vec::new();
     if len > 0 {
         data = unsafe { std::slice::from_raw_parts(data_ptr, len as usize) }.to_vec();
@@ -41,22 +37,40 @@ extern "C" fn handle_ffi_event(
     }
 }
 
-pub struct SessionStream {
-    plugin: Arc<FfiPlugin>,
-    session_id: u32,
+// pub struct SessionStream {
+//     plugin: Arc<FfiPlugin>,
+//     session_id: u32,
+// }
+
+#[async_trait]
+pub trait PluginSessionStream {
+    fn new(plugin: Arc<FfiPlugin>) -> SessionStream;
+    async fn open(
+        &self,
+        entry: &str,
+    ) -> Result<(u32, mpsc::UnboundedReceiver<(u32, Vec<u8>)>), NylonError>;
+    async fn event_stream(&self, method: u32, data: &[u8]) -> Result<(), NylonError>;
+    async fn close(&self) -> Result<(), NylonError>;
 }
 
-impl SessionStream {
-    pub fn new(plugin: Arc<FfiPlugin>) -> Self {
+#[async_trait]
+impl PluginSessionStream for SessionStream {
+    fn new(plugin: Arc<FfiPlugin>) -> SessionStream {
         let session_id = NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed);
-        Self { plugin, session_id }
+        SessionStream { plugin, session_id }
     }
 
-    pub async fn open(
+    async fn open(
         &self,
         entry: &str,
     ) -> Result<(u32, mpsc::UnboundedReceiver<(u32, Vec<u8>)>), NylonError> {
         let (tx, rx) = mpsc::unbounded_channel();
+        ACTIVE_SESSIONS
+            .lock()
+            .map_err(|e| {
+                NylonError::ConfigError(format!("Failed to lock ACTIVE_SESSIONS: {:?}", e))
+            })?
+            .insert(self.session_id, tx);
         unsafe {
             let ok = (*self.plugin.register_session)(
                 self.session_id,
@@ -70,32 +84,17 @@ impl SessionStream {
                 ));
             }
         }
-        ACTIVE_SESSIONS
-            .lock()
-            .map_err(|e| {
-                NylonError::ConfigError(format!("Failed to lock ACTIVE_SESSIONS: {:?}", e))
-            })?
-            .insert(self.session_id, tx);
         Ok((self.session_id, rx))
     }
 
-    pub async fn event_stream(
-        &self,
-        method: u32,
-        data: &[u8],
-    ) -> Result<(), NylonError> {
+    async fn event_stream(&self, method: u32, data: &[u8]) -> Result<(), NylonError> {
         unsafe {
-            (*self.plugin.event_stream)(
-                self.session_id,
-                method,
-                data.as_ptr(),
-                data.len() as i32,
-            );
+            (*self.plugin.event_stream)(self.session_id, method, data.as_ptr(), data.len() as i32);
         }
         Ok(())
     }
 
-    pub async fn close(&self) -> Result<(), NylonError> {
+    async fn close(&self) -> Result<(), NylonError> {
         close_session(self.plugin.clone(), self.session_id).await
     }
 }

@@ -26,7 +26,7 @@ func init() {
 
 	// Register middleware
 	plugin.HandleRequest("authz", func(ctx *sdk.NylonPluginCtx) {
-		fmt.Println("Ctx", ctx)
+		// fmt.Println("Ctx", ctx)
 		payload := ctx.GetPayload()
 		fmt.Println("Payload", payload)
 

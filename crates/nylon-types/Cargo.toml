@@ -12,3 +12,6 @@ regex = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 bytes = { workspace = true }
+libloading = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
