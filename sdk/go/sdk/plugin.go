@@ -102,6 +102,11 @@ func (plugin *NylonPlugin) HttpPlugin(entry string, handler HttpPluginFunc) {
 // FFI Exported Functions
 // ====================
 
+//export plugin_free
+func plugin_free(ptr *C.uchar) {
+	C.free(unsafe.Pointer(ptr))
+}
+
 //export close_session_stream
 func close_session_stream(sessionID C.uint32_t) {
 	sessionMu.Lock()
