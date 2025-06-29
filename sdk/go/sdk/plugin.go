@@ -22,7 +22,9 @@ const (
 	NylonMethodGetPayload NylonMethods = "get_payload"
 
 	// response
-	NylonMethodSetResponseHeader NylonMethods = "set_response_header"
+	NylonMethodSetResponseHeader    NylonMethods = "set_response_header"
+	NylonMethodRemoveResponseHeader NylonMethods = "remove_response_header"
+	NylonMethodSetResponseStatus    NylonMethods = "set_response_status"
 )
 
 // Mapping of NylonMethods to IDs used in FFI
@@ -32,7 +34,9 @@ var mapMethod = map[NylonMethods]uint32{
 	NylonMethodGetPayload: 3,
 
 	// response
-	NylonMethodSetResponseHeader: 100,
+	NylonMethodSetResponseHeader:    100,
+	NylonMethodRemoveResponseHeader: 101,
+	NylonMethodSetResponseStatus:    102,
 }
 
 // ====================
@@ -215,6 +219,11 @@ func (ctx *NylonHttpPluginCtx) Next() {
 	RequestMethod(ctx.sessionID, NylonMethodNext, nil)
 }
 
+// End sends a 'end' request to Rust
+func (ctx *NylonHttpPluginCtx) End() {
+	RequestMethod(ctx.sessionID, NylonMethodEnd, nil)
+}
+
 // GetPayload requests and waits for payload from Rust
 func (ctx *NylonHttpPluginCtx) GetPayload() map[string]any {
 	methodID := mapMethod[NylonMethodGetPayload]
@@ -246,21 +255,8 @@ func (ctx *NylonHttpPluginCtx) GetPayload() map[string]any {
 	return payloadMap
 }
 
-// SetResponseHeader sets the response header
-func (ctx *NylonHttpPluginCtx) SetResponseHeader(key string, value string) {
-	type SetResponseHeaderData struct {
-		Key   string `json:"key"`
-		Value string `json:"value"`
+func (ctx *NylonHttpPluginCtx) Response() *Response {
+	return &Response{
+		_ctx: ctx,
 	}
-	data := SetResponseHeaderData{
-		Key:   key,
-		Value: value,
-	}
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		fmt.Println("[NylonPlugin] SetResponseHeader JSON marshal error:", err)
-		return
-	}
-	// fmt.Println("[NylonPlugin] SetResponseHeader jsonData:", jsonData)
-	RequestMethod(ctx.sessionID, NylonMethodSetResponseHeader, jsonData)
 }

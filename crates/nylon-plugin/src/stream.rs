@@ -20,6 +20,8 @@ pub const METHOD_END: u32 = 2;
 pub const METHOD_GET_PAYLOAD: u32 = 3;
 // response method
 pub const METHOD_SET_RESPONSE_HEADER: u32 = 100;
+pub const METHOD_REMOVE_RESPONSE_HEADER: u32 = 101;
+pub const METHOD_SET_RESPONSE_STATUS: u32 = 102;
 
 extern "C" fn handle_ffi_event(session_id: u32, method: u32, data_ptr: *const u8, len: i32) {
     let mut data = Vec::new();

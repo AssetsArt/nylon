@@ -2,142 +2,49 @@ package sdk
 
 import (
 	"encoding/json"
-	"net/url"
-
-	"github.com/AssetsArt/easy-proxy/sdk/go/fbs/nylon_http_context"
+	"fmt"
+	"strconv"
 )
 
 type HttpContext struct {
-	Request  Request
+	// Request  Request
 	Response Response
-}
-
-// Request
-type Request struct {
-	Method  string
-	Path    string
-	Query   url.Values
-	Headers map[string]string
-	Body    []byte
-	Params  map[string]string
-}
-
-func WrapRequest(ctx *nylon_http_context.NylonHttpContext) *Request {
-	raw := ctx.Request(nil)
-
-	// Headers
-	headers := map[string]string{}
-	for i := range raw.HeadersLength() {
-		var h nylon_http_context.KeyValue
-		if raw.Headers(&h, i) {
-			headers[string(h.Key())] = string(h.Value())
-		}
-	}
-
-	// Query
-	q, _ := url.ParseQuery(string(raw.Query()))
-
-	// Params
-	params := map[string]string{}
-	for i := range raw.ParamsLength() {
-		var p nylon_http_context.KeyValue
-		if raw.Params(&p, i) {
-			params[string(p.Key())] = string(p.Value())
-		}
-	}
-
-	return &Request{
-		Method:  string(raw.Method()),
-		Path:    string(raw.Path()),
-		Query:   q,
-		Headers: headers,
-		Body:    raw.BodyBytes(),
-		Params:  params,
-	}
-}
-
-func (r *Request) ParamsAll() map[string]string {
-	return r.Params
-}
-
-func (r *Request) ParamsGet(key string) string {
-	return r.Params[key]
-}
-
-func (r *Request) QueryGet(key string) string {
-	return r.Query.Get(key)
-}
-
-func (r *Request) QueryRaw() string {
-	return r.Query.Encode()
-}
-
-func (r *Request) Header(key string) string {
-	return r.Headers[key]
-}
-
-func (r *Request) HeadersAll() map[string]string {
-	return r.Headers
-}
-
-func (r *Request) BodyRaw() []byte {
-	return r.Body
-}
-
-func (r *Request) BodyJSON(v any) error {
-	return json.Unmarshal(r.Body, v)
-}
-
-// Headers modify
-func (r *Request) SetHeader(key, value string) {
-	r.Headers[key] = value
-}
-
-func (r *Request) RemoveHeader(key string) {
-	delete(r.Headers, key)
 }
 
 // Response
 type Response struct {
-	Status  int
-	Headers map[string]string
-	Body    []byte
-}
-
-func WrapResponse(ctx *nylon_http_context.NylonHttpContext) *Response {
-	raw := ctx.Response(nil)
-
-	// Headers
-	headers := map[string]string{}
-	for i := range raw.HeadersLength() {
-		var h nylon_http_context.KeyValue
-		if raw.Headers(&h, i) {
-			headers[string(h.Key())] = string(h.Value())
-		}
-	}
-
-	return &Response{
-		Status:  int(raw.Status()),
-		Headers: headers,
-		Body:    raw.BodyBytes(),
-	}
+	_ctx *NylonHttpPluginCtx
 }
 
 // Builder
 func (r *Response) SetHeader(key, value string) {
-	r.Headers[key] = value
+	type SetResponseHeaderData struct {
+		Key   string `json:"key"`
+		Value string `json:"value"`
+	}
+	data := SetResponseHeaderData{
+		Key:   key,
+		Value: value,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		fmt.Println("[NylonPlugin] SetResponseHeader JSON marshal error:", err)
+		return
+	}
+	RequestMethod(r._ctx.sessionID, NylonMethodSetResponseHeader, jsonData)
 }
 
 func (r *Response) RemoveHeader(key string) {
-	delete(r.Headers, key)
+	// delete(r.Headers, key)
+	RequestMethod(r._ctx.sessionID, NylonMethodRemoveResponseHeader, []byte(key))
 }
 
 func (r *Response) SetStatus(status int) {
-	r.Status = status
+	RequestMethod(r._ctx.sessionID, NylonMethodSetResponseStatus, []byte(strconv.Itoa(status)))
 }
 
 func (r *Response) BodyRaw(body []byte) {
-	r.Body = body
+	panic("not implemented")
 }
 
 func (r *Response) BodyJSON(v any) *Response {

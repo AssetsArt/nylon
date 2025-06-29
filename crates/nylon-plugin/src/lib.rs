@@ -90,39 +90,54 @@ pub async fn session_stream(
         }
     };
     let (_session_id, mut rx) = session_stream.open(entry).await?;
-    while let Some((method, data)) = rx.recv().await {
-        if method == stream::METHOD_GET_PAYLOAD {
-            let payload = payload.as_ref().unwrap_or(&vec![]).clone();
-            session_stream.event_stream(method, &payload).await?;
-        } else if method == stream::METHOD_NEXT {
-            break;
-        } else if method == stream::METHOD_END {
-            http_end = true;
-            break;
-        }
-        // response
-        else if method == stream::METHOD_SET_RESPONSE_HEADER {
-            #[derive(Deserialize, Debug)]
-            struct SetResponseHeaderData {
-                key: String,
-                value: String,
-            }
-            let headers = match serde_json::from_slice::<SetResponseHeaderData>(&data) {
-                Ok(headers) => headers,
-                Err(e) => {
-                    return Err(NylonError::ConfigError(format!("Invalid headers: {}", e)));
+    loop {
+        tokio::select! {
+            Some((method, data)) = rx.recv() => {
+                if method == stream::METHOD_GET_PAYLOAD {
+                    let payload = payload.as_ref().unwrap_or(&vec![]).clone();
+                    session_stream.event_stream(method, &payload).await?;
+                } else if method == stream::METHOD_NEXT {
+                    break;
+                } else if method == stream::METHOD_END {
+                    http_end = true;
+                    break;
                 }
-            };
-            ctx.add_response_header.insert(headers.key, headers.value);
-        }
-        // unknown method
-        else {
-            return Err(NylonError::ConfigError(format!(
-                "Invalid method: {}",
-                method
-            )));
+                // response
+                else if method == stream::METHOD_SET_RESPONSE_HEADER {
+                    #[derive(Deserialize, Debug)]
+                    struct SetResponseHeaderData {
+                        key: String,
+                        value: String,
+                    }
+                    let headers = match serde_json::from_slice::<SetResponseHeaderData>(&data) {
+                        Ok(headers) => headers,
+                        Err(e) => {
+                            return Err(NylonError::ConfigError(format!("Invalid headers: {}", e)));
+                        }
+                    };
+                    ctx.add_response_header.insert(headers.key, headers.value);
+                } else if method == stream::METHOD_REMOVE_RESPONSE_HEADER {
+                    ctx.remove_response_header.push(String::from_utf8_lossy(&data).to_string());
+                } else if method == stream::METHOD_SET_RESPONSE_STATUS {
+                    let status = match String::from_utf8_lossy(&data).parse::<u16>() {
+                        Ok(status) => status,
+                        Err(e) => {
+                            return Err(NylonError::ConfigError(format!("Invalid status: {}", e)));
+                        }
+                    };
+                    ctx.set_response_status = status;
+                }
+                // unknown method
+                else {
+                    return Err(NylonError::ConfigError(format!(
+                        "Invalid method: {}",
+                        method
+                    )));
+                }
+            }
         }
     }
+
     Ok(http_end)
 }
 
@@ -162,6 +177,8 @@ pub async fn run_middleware(
                 None => None,
             };
             if let Some(request_filter) = &middleware.request_filter {
+                // return session_stream(plugin_name, request_filter, &payload, params, ctx, session)
+                //     .await;
                 return session_stream(plugin_name, request_filter, &payload, params, ctx, session)
                     .await;
             } else if let Some(_response_filter) = &middleware.response_filter {

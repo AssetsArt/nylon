@@ -159,10 +159,11 @@ impl ProxyHttp for NylonRuntime {
         Self::CTX: Send + Sync,
     {
         for (key, value) in ctx.add_response_header.iter() {
-            let _ = upstream_response.append_header(key.to_ascii_uppercase(), value);
+            let _ = upstream_response.append_header(key.to_ascii_lowercase(), value);
         }
         for key in ctx.remove_response_header.iter() {
-            upstream_response.remove_header(key);
+            let key = key.to_ascii_lowercase();
+            let _ = upstream_response.remove_header(&key);
         }
         upstream_response.set_status(ctx.set_response_status)?;
         Ok(())
