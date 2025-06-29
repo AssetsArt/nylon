@@ -11,6 +11,9 @@ import (
 	"unsafe"
 )
 
+// ====================
+// Nylon Method Types
+// ====================
 type NylonMethods string
 
 const (
@@ -18,45 +21,79 @@ const (
 	NylonMethodGetPayload NylonMethods = "get_payload"
 )
 
-var (
-	// mutex for session
-	sessionMu sync.Mutex
-	// mutex for handler
-	handlerMu sync.Mutex
-	// name -> handler
-	handlerMap = make(map[string]HandlerFunc)
+// Mapping of NylonMethods to IDs used in FFI
+var mapMethod = map[NylonMethods]uint32{
+	NylonMethodNext:       1,
+	NylonMethodGetPayload: 2,
+}
 
-	// sessionID -> callback
-	sessionCallbacks = make(map[uint32]C.data_event_fn)
-	// sessionID -> ctx
-	streamSession = make(map[uint32]NylonPluginCtx)
-	// sessionID -> true or false
-	sessionIsOpen = make(map[uint32]bool)
+// ====================
+// NylonPlugin Core Types
+// ====================
 
-	// mapMethod
-	mapMethod = map[NylonMethods]uint32{
-		NylonMethodNext:       1,
-		NylonMethodGetPayload: 2,
-	}
-)
-
+// User-defined request handler
 type HandlerFunc func(ctx *NylonPluginCtx)
+
+// NylonPlugin represents the plugin itself
 type NylonPlugin struct{}
+
+// NylonPluginCtx represents a per-session context
 type NylonPluginCtx struct {
 	sessionID uint32
-	mu        sync.Mutex
-	cond      *sync.Cond
-	dataMap   map[uint32][]byte
+
+	mu      sync.Mutex
+	cond    *sync.Cond
+	dataMap map[uint32][]byte
 }
+
+// ====================
+// Session State
+// ====================
+
+var (
+	// sessionID -> FFI callback
+	sessionCallbacks = make(map[uint32]C.data_event_fn)
+
+	// sessionID -> session context
+	streamSessions = make(map[uint32]*NylonPluginCtx)
+
+	// sessionID -> true if open
+	sessionIsOpen = make(map[uint32]bool)
+
+	// name -> Go-side handler
+	handlerMap = make(map[string]HandlerFunc)
+
+	// Global mutexes
+	sessionMu sync.Mutex
+	handlerMu sync.Mutex
+)
+
+// ====================
+// NylonPlugin API
+// ====================
+
+// NewNylonPlugin creates a new NylonPlugin
+func NewNylonPlugin() *NylonPlugin {
+	return &NylonPlugin{}
+}
+
+// Register a Go handler for an entry name
+func (plugin *NylonPlugin) HandleRequest(entry string, handler HandlerFunc) {
+	handlerMu.Lock()
+	defer handlerMu.Unlock()
+	handlerMap[entry] = handler
+}
+
+// ====================
+// FFI Exported Functions
+// ====================
 
 //export close_session_stream
 func close_session_stream(sessionID C.uint32_t) {
 	sessionMu.Lock()
 	delete(sessionCallbacks, uint32(sessionID))
-	sessionMu.Unlock()
-
-	sessionMu.Lock()
-	delete(streamSession, uint32(sessionID))
+	delete(streamSessions, uint32(sessionID))
+	delete(sessionIsOpen, uint32(sessionID))
 	sessionMu.Unlock()
 
 	fmt.Printf("[NylonPlugin] Closed session %d\n", sessionID)
@@ -64,75 +101,79 @@ func close_session_stream(sessionID C.uint32_t) {
 
 //export register_session_stream
 func register_session_stream(sessionID C.uint32_t, entry *C.char, length C.int32_t, cb C.data_event_fn) bool {
-	// call handler
 	entryName := C.GoStringN(entry, length)
+
+	// Lookup Go handler
 	handlerMu.Lock()
-	handler, handlerOk := handlerMap[entryName]
+	handler, exists := handlerMap[entryName]
 	handlerMu.Unlock()
 
-	if !handlerOk {
+	if !exists {
+		fmt.Printf("[NylonPlugin] No handler registered for entry=%s\n", entryName)
 		return false
 	}
 
-	// register callback
+	// Store FFI callback
 	sessionMu.Lock()
 	sessionCallbacks[uint32(sessionID)] = cb
-	sessionMu.Unlock()
-	sessionMu.Lock()
-	ctx, ok := streamSession[uint32(sessionID)]
-	if !ok {
-		ctx = NylonPluginCtx{
+
+	// Create context if new
+	ctx, exists := streamSessions[uint32(sessionID)]
+	if !exists {
+		ctx = &NylonPluginCtx{
 			sessionID: uint32(sessionID),
-			// dataReady: make(map[uint32]bool),
-			dataMap: make(map[uint32][]byte),
-			mu:      sync.Mutex{},
-			cond:    sync.NewCond(&ctx.mu),
+			dataMap:   make(map[uint32][]byte),
 		}
-		streamSession[uint32(sessionID)] = ctx
+		ctx.cond = sync.NewCond(&ctx.mu)
+		streamSessions[uint32(sessionID)] = ctx
 	}
 	sessionIsOpen[uint32(sessionID)] = true
 	sessionMu.Unlock()
 
-	go handler(&ctx)
+	// Invoke Go handler
+	go handler(ctx)
 	return true
 }
 
 //export event_stream
 func event_stream(sessionID C.uint32_t, method C.uint32_t, data *C.char, length C.int32_t) {
 	sessionMu.Lock()
-	ctx, ok := streamSession[uint32(sessionID)]
+	ctx, exists := streamSessions[uint32(sessionID)]
 	sessionMu.Unlock()
-	if !ok {
+
+	if !exists {
 		return
 	}
 
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
+	// Special case: notify without data
+	if length == 0 {
+		ctx.cond.Broadcast()
+		return
+	}
+
+	// Store payload
 	dataBytes := C.GoBytes(unsafe.Pointer(data), length)
 	ctx.dataMap[uint32(method)] = dataBytes
-	ctx.cond.Broadcast() // notify waiters
+	ctx.cond.Broadcast()
 }
 
-// NewNylonPlugin
-func NewNylonPlugin() *NylonPlugin {
-	return &NylonPlugin{}
-}
+// ====================
+// NylonPluginCtx Methods
+// ====================
 
-func (plugin *NylonPlugin) HandleRequest(entry string, handler HandlerFunc) {
-	handlerMu.Lock()
-	handlerMap[entry] = handler
-	handlerMu.Unlock()
-}
-
-// NylonPluginCtx
+// RequestMethod calls into Rust using the FFI callback
 func RequestMethod(sessionID uint32, method NylonMethods) (string, error) {
 	sessionMu.Lock()
 	cb := sessionCallbacks[sessionID]
 	sessionMu.Unlock()
+
 	if cb == nil {
 		return "", fmt.Errorf("session %d not open", sessionID)
 	}
+
 	methodID := mapMethod[method]
 	C.call_event_method(
 		cb,
@@ -144,28 +185,38 @@ func RequestMethod(sessionID uint32, method NylonMethods) (string, error) {
 	return "", nil
 }
 
+// Next sends a 'next' request to Rust
 func (ctx *NylonPluginCtx) Next() {
 	RequestMethod(ctx.sessionID, NylonMethodNext)
 }
 
+// GetPayload requests and waits for payload from Rust
 func (ctx *NylonPluginCtx) GetPayload() map[string]any {
 	methodID := mapMethod[NylonMethodGetPayload]
+
 	ctx.mu.Lock()
-	payload, ok := ctx.dataMap[methodID]
-	if !ok {
+	defer ctx.mu.Unlock()
+
+	// Check if data is already available
+	payload, exists := ctx.dataMap[methodID]
+	if !exists {
+		// Ask Rust to send payload
 		RequestMethod(ctx.sessionID, NylonMethodGetPayload)
+
+		// Wait for response
 		ctx.cond.Wait()
-		payload, ok = ctx.dataMap[methodID]
-		if !ok {
+		payload, exists = ctx.dataMap[methodID]
+		if !exists {
 			return nil
 		}
 	}
-	ctx.mu.Unlock()
+
+	// Decode JSON
 	var payloadMap map[string]any
-	err := json.Unmarshal(payload, &payloadMap)
-	if err != nil {
+	if err := json.Unmarshal(payload, &payloadMap); err != nil {
 		fmt.Println("[NylonPlugin] JSON unmarshal error:", err)
 		return nil
 	}
+
 	return payloadMap
 }
