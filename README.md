@@ -35,6 +35,7 @@ Nylon features a **powerful plugin system** — use any language with FFI.
 **Example: Minimal Go Middleware Plugin**
 
 ```yaml
+# proxy/my-config.yaml
 plugins:
   - name: plugin_sdk
     type: ffi
@@ -42,7 +43,47 @@ plugins:
     config:
       debug: true
       # ... other config
+
+middleware_groups:
+  example:
+    - plugin: plugin_sdk
+      request_filter: "authz"
+      payload:
+        client_ip: "${request(client_ip)}"
+
+services:
+  - name: http-service
+    service_type: http
+    algorithm: round_robin # Options: round_robin, random, consistent, weighted
+    endpoints:
+      - ip: 127.0.0.1
+        port: 3001
+        # weight: 10 # Optional
+      - ip: 127.0.0.1
+        port: 3002
+        # weight: 1 # Optional
+
+routes:
+  - route:
+      type: host
+      value: localhost # domain.com|domain2.com|domain3.com
+    name: http-route-1
+    middleware:
+      - group: example
+    paths:
+      - path: 
+          - /
+          - /{*path}
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+        service:
+          name: http-service
 ```
+
+**Go & SDK**
+
 ```go
 //go:build cgo
 
