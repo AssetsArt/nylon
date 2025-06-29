@@ -37,6 +37,7 @@ pub type FfiRegisterSessionFn = unsafe extern "C" fn(
 ) -> bool;
 pub type FfiEventStreamFn = unsafe extern "C" fn(usize, usize, *const u8, usize);
 pub type FfiCloseSessionFn = unsafe extern "C" fn(usize);
+pub type FfiShutdownFn = unsafe extern "C" fn();
 
 #[derive(Debug)]
 pub struct FfiPlugin {
@@ -45,6 +46,7 @@ pub struct FfiPlugin {
     pub register_session: Symbol<'static, FfiRegisterSessionFn>,
     pub event_stream: Symbol<'static, FfiEventStreamFn>,
     pub close_session: Symbol<'static, FfiCloseSessionFn>,
+    pub shutdown: Symbol<'static, FfiShutdownFn>,
 }
 
 // Plugin Session Stream

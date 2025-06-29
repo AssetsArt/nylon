@@ -4,6 +4,7 @@ package main
 
 import "C"
 import (
+	"encoding/json"
 	"fmt"
 	"unsafe"
 
@@ -12,10 +13,29 @@ import (
 
 func main() {}
 
+//export shutdown
+func shutdown() {
+	fmt.Println("[NylonPlugin] Plugin shutdown")
+}
+
 //export initialize
 func initialize(config *C.char, length C.int) {
-	configData := C.GoBytes(unsafe.Pointer(config), C.int(length))
-	fmt.Println("[NylonPlugin] Plugin initialized", string(configData))
+	configBytes := C.GoBytes(unsafe.Pointer(config), C.int(length))
+	configData := struct {
+		Debug bool `json:"debug"`
+	}{
+		Debug: false,
+	}
+	err := json.Unmarshal(configBytes, &configData)
+	if err != nil {
+		fmt.Println("[NylonPlugin] Error unmarshalling config", err)
+		return
+	}
+
+	// Print the config data
+	fmt.Println("[NylonPlugin] Plugin initialized", string(configBytes))
+
+	// Create a new plugin
 	plugin := sdk.NewNylonPlugin()
 
 	// Register middleware

@@ -34,29 +34,75 @@ Nylon features a **powerful plugin system** — use any language with FFI.
 
 **Example: Minimal Go Middleware Plugin**
 
+```yaml
+plugins:
+  - name: plugin_sdk
+    type: ffi
+    file: ./target/examples/go/plugin_sdk.so
+    config:
+      debug: true
+      # ... other config
+```
 ```go
-plugin := sdk.NewNylonPlugin()
-// Register middleware
-plugin.HttpPlugin("authz", func(ctx *sdk.NylonHttpPluginCtx) {
-	// fmt.Println("authz")
-	// fmt.Println("Ctx", ctx)
-	// payload := ctx.GetPayload()
-	// fmt.Println("Payload", payload)
-	// set headers
-	ctx.Response().SetHeader("x-test", "test")
-	ctx.Response().SetHeader("Transfer-Encoding", "chunked")
-	// set Basic Auth
-	// ctx.Response().SetHeader("WWW-Authenticate", "Basic realm=\"Restricted\"")
-	// remove  headers
-	ctx.Response().RemoveHeader("Content-Type")
-	ctx.Response().RemoveHeader("Content-Length")
-	// set status
-	// ctx.Response().SetStatus(401)
-	// sleep 3 second
-	// time.Sleep(3 * time.Second)
-	// next middleware
-	ctx.Next()
-})
+//go:build cgo
+
+package main
+
+import "C"
+import (
+	"encoding/json"
+	"fmt"
+	"unsafe"
+
+	"github.com/AssetsArt/easy-proxy/sdk/go/sdk"
+)
+
+func main() {}
+
+//export shutdown
+func shutdown() {
+	fmt.Println("[NylonPlugin] Plugin shutdown")
+}
+
+//export initialize
+func initialize(config *C.char, length C.int) {
+	configBytes := C.GoBytes(unsafe.Pointer(config), C.int(length))
+	configData := struct {
+		Debug bool `json:"debug"`
+		// ... other config
+	}{
+		Debug: false,
+		// ... other config
+	}
+	err := json.Unmarshal(configBytes, &configData)
+	if err != nil {
+		fmt.Println("[NylonPlugin] Error unmarshalling config", err)
+		return
+	}
+
+	// Print the config data
+	fmt.Println("[NylonPlugin] Plugin initialized", string(configBytes))
+
+	// Create a new plugin
+	plugin := sdk.NewNylonPlugin()
+
+	// Register middleware
+	plugin.HttpPlugin("authz", func(ctx *sdk.NylonHttpPluginCtx) {
+		payload := ctx.GetPayload()
+		fmt.Println("Payload", payload)
+
+		// set headers
+		ctx.Response().SetHeader("x-test", "test")
+		ctx.Response().SetHeader("Transfer-Encoding", "chunked")
+
+		// remove  headers
+		ctx.Response().RemoveHeader("Content-Type")
+		ctx.Response().RemoveHeader("Content-Length")
+
+		// next middleware
+		ctx.Next()
+	})
+}
 ```
 
 > See [plugin docs](https://nylon.sh/plugin-system/go) and [real-world examples](https://github.com/AssetsArt/nylon/tree/main/examples/go)

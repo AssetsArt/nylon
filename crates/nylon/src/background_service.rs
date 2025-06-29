@@ -1,6 +1,11 @@
 use async_trait::async_trait;
-use pingora::{server::ShutdownWatch, services::background::BackgroundService};
-use std::time::Duration;
+use dashmap::DashMap;
+use nylon_types::plugins::FfiPlugin;
+use pingora::{
+    server::ShutdownWatch,
+    services::background::BackgroundService,
+};
+use std::{sync::Arc, time::Duration};
 use tokio::time::interval;
 
 pub struct NylonBackgroundService;
@@ -13,6 +18,22 @@ impl BackgroundService for NylonBackgroundService {
                 _ = shutdown.changed() => {
                     // shutdown
                     tracing::info!("Shutting down background service");
+
+                    // Shutting down plugins
+                    let plugins =
+                    match nylon_store::get::<DashMap<String, Arc<FfiPlugin>>>(nylon_store::KEY_PLUGINS) {
+                        Some(plugins) => plugins,
+                        None => {
+                            let new_plugins = DashMap::new();
+                            nylon_store::insert(nylon_store::KEY_PLUGINS, new_plugins.clone());
+                            new_plugins
+                        }
+                    };
+                    for plugin in plugins.iter() {
+                        unsafe {
+                            (plugin.value().shutdown)();
+                        }
+                    }
                     break;
                 },
                 _ = period_1d.tick() => {

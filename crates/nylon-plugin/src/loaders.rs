@@ -2,7 +2,7 @@ use dashmap::DashMap;
 use libloading::{Library, Symbol};
 use nylon_types::plugins::{
     FfiCloseSessionFn, FfiEventStreamFn, FfiInitializeFn, FfiPlugin, FfiPluginFreeFn,
-    FfiRegisterSessionFn, PluginItem,
+    FfiRegisterSessionFn, FfiShutdownFn, PluginItem,
 };
 use std::sync::Arc;
 
@@ -11,6 +11,7 @@ const FFI_PLUGIN_FREE: &str = "plugin_free";
 const FFI_REGISTER_SESSION: &str = "register_session_stream";
 const FFI_EVENT_STREAM: &str = "event_stream";
 const FFI_CLOSE_SESSION: &str = "close_session_stream";
+const FFI_SHUTDOWN: &str = "shutdown";
 
 pub fn load(plugin: &PluginItem) {
     let file = plugin.file.clone();
@@ -77,6 +78,12 @@ pub fn load(plugin: &PluginItem) {
             });
         std::mem::transmute::<Symbol<FfiCloseSessionFn>, Symbol<'static, FfiCloseSessionFn>>(symbol)
     };
+    let shutdown = unsafe {
+        let symbol: Symbol<FfiShutdownFn> = lib.get(FFI_SHUTDOWN.as_bytes()).unwrap_or_else(|_| {
+            panic!("Failed to load symbol: {}", FFI_SHUTDOWN);
+        });
+        std::mem::transmute::<Symbol<FfiShutdownFn>, Symbol<'static, FfiShutdownFn>>(symbol)
+    };
 
     let ffi_item = FfiPlugin {
         _lib: lib.clone(),
@@ -84,6 +91,7 @@ pub fn load(plugin: &PluginItem) {
         register_session,
         event_stream,
         close_session,
+        shutdown,
     };
     let plugins =
         match nylon_store::get::<DashMap<String, Arc<FfiPlugin>>>(nylon_store::KEY_PLUGINS) {
