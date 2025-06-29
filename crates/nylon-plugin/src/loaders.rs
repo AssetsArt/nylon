@@ -1,19 +1,13 @@
 use dashmap::DashMap;
 use libloading::{Library, Symbol};
 use nylon_types::plugins::PluginItem;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 const FFI_PLUGIN_FREE: &str = "plugin_free";
 const FFI_REGISTER_SESSION: &str = "register_session_stream";
 const FFI_EVENT_STREAM: &str = "event_stream";
 const FFI_CLOSE_SESSION: &str = "close_session_stream";
 
-#[repr(C)]
-pub struct FfiOutput {
-    pub ptr: *mut u8,
-    pub len: usize,
-}
-type FfiEntryFn = unsafe extern "C" fn(*const u8, usize) -> FfiOutput;
 type FfiPluginFreeFn = unsafe extern "C" fn(*mut u8);
 type FfiRegisterSessionFn =
     unsafe extern "C" fn(u32, *const u8, i32, extern "C" fn(u32, u32, *const u8, i32)) -> bool;
@@ -23,7 +17,6 @@ type FfiCloseSessionFn = unsafe extern "C" fn(u32);
 #[derive(Debug)]
 pub struct FfiPlugin {
     _lib: Arc<Library>,
-    pub entry: HashMap<String, Symbol<'static, FfiEntryFn>>,
     pub plugin_free: Symbol<'static, FfiPluginFreeFn>,
     pub register_session: Symbol<'static, FfiRegisterSessionFn>,
     pub event_stream: Symbol<'static, FfiEventStreamFn>,
@@ -96,19 +89,8 @@ pub fn load(plugin: &PluginItem) {
         std::mem::transmute::<Symbol<FfiCloseSessionFn>, Symbol<'static, FfiCloseSessionFn>>(symbol)
     };
 
-    let mut entry_map = HashMap::new();
-    for entry in &plugin.entry.clone().unwrap_or_default() {
-        let handle = unsafe {
-            let symbol: Symbol<FfiEntryFn> = lib.get(entry.as_bytes()).unwrap_or_else(|_| {
-                panic!("Failed to load symbol: {}", entry);
-            });
-            std::mem::transmute::<Symbol<FfiEntryFn>, Symbol<'static, FfiEntryFn>>(symbol)
-        };
-        entry_map.insert(entry.clone(), handle);
-    }
     let ffi_item = FfiPlugin {
         _lib: lib.clone(),
-        entry: entry_map,
         plugin_free,
         register_session,
         event_stream,

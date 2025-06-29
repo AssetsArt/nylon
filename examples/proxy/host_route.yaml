@@ -21,4 +21,4 @@ routes:
           - POST
           - OPTIONS
         service:
-          name: go-service
+          name: http-service

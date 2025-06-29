@@ -65,13 +65,6 @@ pub async fn dispatch(
     store: &Option<Vec<u8>>,
 ) -> Result<Vec<u8>, NylonError> {
     let plugin = get_plugin(plugin_name)?;
-    let Some(entry_fn) = plugin.entry.get(entry_name) else {
-        return Err(NylonError::ConfigError(format!(
-            "Plugin {} entry {} not found",
-            plugin_name, entry_name
-        )));
-    };
-    let entry_fn = entry_fn.clone();
     let plugin_free = plugin.plugin_free.clone();
     let plugin_name_str = plugin_name.to_string();
 
@@ -157,34 +150,36 @@ pub async fn dispatch(
         println!("method: {:?}", method);
     }
 
-    tokio::task::spawn_blocking(move || {
-        let ctx_dispatcher = fbs.finished_data();
-        let ptr = ctx_dispatcher.as_ptr();
-        let len = ctx_dispatcher.len();
-        let output = unsafe { entry_fn(ptr, len) };
-        if output.ptr.is_null() {
-            return Err(NylonError::ConfigError(
-                "Plugin entry function returned null".to_string(),
-            ));
-        }
-        let ptr = output.ptr;
-        let copied = unsafe { std::slice::from_raw_parts(ptr, output.len) }.to_vec();
-        std::panic::catch_unwind(move || unsafe {
-            (plugin_free)(ptr);
-        })
-        .unwrap_or_else(|e| {
-            eprintln!(
-                "plugin_free panic for plugin '{}': {:?}",
-                plugin_name_str, e
-            );
-        });
-        Ok(copied)
-    })
-    .await
-    .map_err(|e| {
-        NylonError::ConfigError(format!(
-            "Plugin {} entry {} panicked: {:?}",
-            plugin_name, entry_name, e
-        ))
-    })?
+    // tokio::task::spawn_blocking(move || {
+    //     let ctx_dispatcher = fbs.finished_data();
+    //     let ptr = ctx_dispatcher.as_ptr();
+    //     let len = ctx_dispatcher.len();
+    //     let output = unsafe { entry_fn(ptr, len) };
+    //     if output.ptr.is_null() {
+    //         return Err(NylonError::ConfigError(
+    //             "Plugin entry function returned null".to_string(),
+    //         ));
+    //     }
+    //     let ptr = output.ptr;
+    //     let copied = unsafe { std::slice::from_raw_parts(ptr, output.len) }.to_vec();
+    //     std::panic::catch_unwind(move || unsafe {
+    //         (plugin_free)(ptr);
+    //     })
+    //     .unwrap_or_else(|e| {
+    //         eprintln!(
+    //             "plugin_free panic for plugin '{}': {:?}",
+    //             plugin_name_str, e
+    //         );
+    //     });
+    //     Ok(copied)
+    // })
+    // .await
+    // .map_err(|e| {
+    //     NylonError::ConfigError(format!(
+    //         "Plugin {} entry {} panicked: {:?}",
+    //         plugin_name, entry_name, e
+    //     ))
+    // })?
+
+    Ok(vec![])
 }
