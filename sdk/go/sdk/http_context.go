@@ -32,8 +32,12 @@ func (r *Response) SetHeader(key, value string) {
 }
 
 func (r *Response) RemoveHeader(key string) {
-	// delete(r.Headers, key)
-	RequestMethod(r._ctx.sessionID, NylonMethodRemoveResponseHeader, []byte(key))
+	builder := flatbuffers.NewBuilder(0)
+	headerKey := builder.CreateString(key)
+	nylon_plugin.RemoveResponseHeaderStart(builder)
+	nylon_plugin.RemoveResponseHeaderAddKey(builder, headerKey)
+	builder.Finish(nylon_plugin.RemoveResponseHeaderEnd(builder))
+	RequestMethod(r._ctx.sessionID, NylonMethodRemoveResponseHeader, builder.FinishedBytes())
 }
 
 func (r *Response) SetStatus(status int) {

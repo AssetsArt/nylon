@@ -1,6 +1,7 @@
 use crate::stream::PluginSessionStream;
 use dashmap::DashMap;
 use nylon_error::NylonError;
+use nylon_sdk::fbs::plugin_generated::nylon_plugin::{HeaderKeyValue, RemoveResponseHeader};
 use nylon_types::{
     context::NylonContext,
     plugins::{FfiPlugin, SessionStream},
@@ -10,7 +11,6 @@ use nylon_types::{
 use pingora::proxy::Session;
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
-use nylon_sdk::fbs::plugin_generated::nylon_plugin::HeaderKeyValue;
 
 pub mod loaders;
 mod native;
@@ -109,7 +109,10 @@ pub async fn session_stream(
                     })?;
                     ctx.add_response_header.insert(headers.key().to_string(), headers.value().to_string());
                 } else if method == stream::METHOD_REMOVE_RESPONSE_HEADER {
-                    ctx.remove_response_header.push(String::from_utf8_lossy(&data).to_string());
+                    let headers = flatbuffers::root::<RemoveResponseHeader>(&data).map_err(|e| {
+                        NylonError::ConfigError(format!("Invalid headers: {}", e))
+                    })?;
+                    ctx.remove_response_header.push(headers.key().to_string());
                 } else if method == stream::METHOD_SET_RESPONSE_STATUS {
                     let status = match String::from_utf8_lossy(&data).parse::<u16>() {
                         Ok(status) => status,

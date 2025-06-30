@@ -4,3 +4,7 @@ table HeaderKeyValue {
   key: string (required);
   value: string (required);
 }
+
+table RemoveResponseHeader {
+  key: string (required);
+}
