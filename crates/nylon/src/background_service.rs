@@ -1,10 +1,7 @@
 use async_trait::async_trait;
 use dashmap::DashMap;
 use nylon_types::plugins::FfiPlugin;
-use pingora::{
-    server::ShutdownWatch,
-    services::background::BackgroundService,
-};
+use pingora::{server::ShutdownWatch, services::background::BackgroundService};
 use std::{sync::Arc, time::Duration};
 use tokio::time::interval;
 

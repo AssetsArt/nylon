@@ -8,9 +8,9 @@ use nylon_types::{
     template::{Expr, apply_payload_ast},
 };
 use pingora::proxy::Session;
-use serde::Deserialize;
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
+use nylon_sdk::fbs::plugin_generated::nylon_plugin::HeaderKeyValue;
 
 pub mod loaders;
 mod native;
@@ -104,18 +104,10 @@ pub async fn session_stream(
                 }
                 // response
                 else if method == stream::METHOD_SET_RESPONSE_HEADER {
-                    #[derive(Deserialize, Debug)]
-                    struct SetResponseHeaderData {
-                        key: String,
-                        value: String,
-                    }
-                    let headers = match serde_json::from_slice::<SetResponseHeaderData>(&data) {
-                        Ok(headers) => headers,
-                        Err(e) => {
-                            return Err(NylonError::ConfigError(format!("Invalid headers: {}", e)));
-                        }
-                    };
-                    ctx.add_response_header.insert(headers.key, headers.value);
+                    let headers = flatbuffers::root::<HeaderKeyValue>(&data).map_err(|e| {
+                        NylonError::ConfigError(format!("Invalid headers: {}", e))
+                    })?;
+                    ctx.add_response_header.insert(headers.key().to_string(), headers.value().to_string());
                 } else if method == stream::METHOD_REMOVE_RESPONSE_HEADER {
                     ctx.remove_response_header.push(String::from_utf8_lossy(&data).to_string());
                 } else if method == stream::METHOD_SET_RESPONSE_STATUS {

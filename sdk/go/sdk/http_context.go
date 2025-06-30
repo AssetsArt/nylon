@@ -2,8 +2,10 @@ package sdk
 
 import (
 	"encoding/json"
-	"fmt"
 	"strconv"
+
+	"github.com/AssetsArt/easy-proxy/sdk/go/fbs/nylon_plugin"
+	flatbuffers "github.com/google/flatbuffers/go"
 )
 
 type HttpContext struct {
@@ -18,20 +20,15 @@ type Response struct {
 
 // Builder
 func (r *Response) SetHeader(key, value string) {
-	type SetResponseHeaderData struct {
-		Key   string `json:"key"`
-		Value string `json:"value"`
-	}
-	data := SetResponseHeaderData{
-		Key:   key,
-		Value: value,
-	}
-	jsonData, err := json.Marshal(data)
-	if err != nil {
-		fmt.Println("[NylonPlugin] SetResponseHeader JSON marshal error:", err)
-		return
-	}
-	RequestMethod(r._ctx.sessionID, NylonMethodSetResponseHeader, jsonData)
+	builder := flatbuffers.NewBuilder(0)
+	headerKey := builder.CreateString(key)
+	headerValue := builder.CreateString(value)
+	nylon_plugin.HeaderKeyValueStart(builder)
+	nylon_plugin.HeaderKeyValueAddKey(builder, headerKey)
+	nylon_plugin.HeaderKeyValueAddValue(builder, headerValue)
+	builder.Finish(nylon_plugin.HeaderKeyValueEnd(builder))
+
+	RequestMethod(r._ctx.sessionID, NylonMethodSetResponseHeader, builder.FinishedBytes())
 }
 
 func (r *Response) RemoveHeader(key string) {

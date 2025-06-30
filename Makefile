@@ -13,10 +13,8 @@ dev-debug:
 	RUST_LOG="info,warn,debug" make dev
 
 generate:
-	flatc --rust -o sdk/rust/src/fbs proto/dispatcher.fbs
-	flatc --rust -o sdk/rust/src/fbs proto/http_context.fbs
-	flatc --go -o sdk/go/fbs proto/dispatcher.fbs
-	flatc --go -o sdk/go/fbs proto/http_context.fbs
+	flatc --rust -o sdk/rust/src/fbs proto/plugin.fbs
+	flatc --go -o sdk/go/fbs proto/plugin.fbs
 
 build-examples:
 	cd examples/go && go build -buildmode=c-shared -o ./../../target/examples/go/plugin_sdk.so
