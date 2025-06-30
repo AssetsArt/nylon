@@ -2,7 +2,6 @@ package sdk
 
 import (
 	"encoding/json"
-	"strconv"
 
 	"github.com/AssetsArt/easy-proxy/sdk/go/fbs/nylon_plugin"
 	flatbuffers "github.com/google/flatbuffers/go"
@@ -40,8 +39,8 @@ func (r *Response) RemoveHeader(key string) {
 	RequestMethod(r._ctx.sessionID, NylonMethodRemoveResponseHeader, builder.FinishedBytes())
 }
 
-func (r *Response) SetStatus(status int) {
-	RequestMethod(r._ctx.sessionID, NylonMethodSetResponseStatus, []byte(strconv.Itoa(status)))
+func (r *Response) SetStatus(status uint16) {
+	RequestMethod(r._ctx.sessionID, NylonMethodSetResponseStatus, []byte{byte(status >> 8), byte(status)})
 }
 
 func (r *Response) BodyRaw(body []byte) {
@@ -67,8 +66,8 @@ func (r *Response) BodyHTML(s string) *Response {
 	return r
 }
 
-func (r *Response) Redirect(url string, code ...int) *Response {
-	status := 302 // default
+func (r *Response) Redirect(url string, code ...uint16) *Response {
+	status := uint16(302) // default
 	if len(code) > 0 {
 		status = code[0]
 	}

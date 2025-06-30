@@ -51,6 +51,8 @@ func initialize(config *C.char, length C.int) {
 		ctx.Response().RemoveHeader("Content-Type")
 		ctx.Response().RemoveHeader("Content-Length")
 
+		ctx.Response().SetStatus(201)
+
 		// next middleware
 		ctx.Next()
 	})

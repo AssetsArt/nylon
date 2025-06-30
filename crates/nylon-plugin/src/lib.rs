@@ -114,12 +114,7 @@ pub async fn session_stream(
                     })?;
                     ctx.remove_response_header.push(headers.key().to_string());
                 } else if method == stream::METHOD_SET_RESPONSE_STATUS {
-                    let status = match String::from_utf8_lossy(&data).parse::<u16>() {
-                        Ok(status) => status,
-                        Err(e) => {
-                            return Err(NylonError::ConfigError(format!("Invalid status: {}", e)));
-                        }
-                    };
+                    let status = u16::from_be_bytes([data[0], data[1]]);
                     ctx.set_response_status = status;
                 }
                 // unknown method
