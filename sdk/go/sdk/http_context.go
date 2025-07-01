@@ -8,7 +8,7 @@ import (
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 
-type StreamData struct {
+type ResponseStream struct {
 	_r *Response
 }
 type HttpContext struct {
@@ -78,7 +78,7 @@ func (r *Response) Redirect(url string, code ...uint16) *Response {
 	return r
 }
 
-func (r *Response) Stream() (*StreamData, error) {
+func (r *Response) Stream() (*ResponseStream, error) {
 	r.SetHeader("Transfer-Encoding", "chunked")
 	r.RemoveHeader("Content-Length")
 
@@ -87,16 +87,16 @@ func (r *Response) Stream() (*StreamData, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &StreamData{
+	return &ResponseStream{
 		_r: r,
 	}, nil
 }
 
-// StreamData
-func (s *StreamData) Write(p []byte) (n int, err error) {
+// StreamHttpBody
+func (s *ResponseStream) Write(p []byte) (n int, err error) {
 	return len(p), RequestMethod(s._r._ctx.sessionID, NylonMethodSetResponseStreamData, p)
 }
 
-func (s *StreamData) End() error {
+func (s *ResponseStream) End() error {
 	return RequestMethod(s._r._ctx.sessionID, NylonMethodSetResponseStreamEnd, nil)
 }
