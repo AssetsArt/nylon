@@ -1,7 +1,7 @@
 use crate::stream::PluginSessionStream;
 use dashmap::DashMap;
 use nylon_error::NylonError;
-use nylon_sdk::fbs::plugin_generated::nylon_plugin::{HeaderKeyValue, RemoveResponseHeader};
+use nylon_sdk::fbs::plugin_generated::nylon_plugin::HeaderKeyValue;
 use nylon_types::{
     context::NylonContext,
     plugins::{FfiPlugin, SessionStream},
@@ -109,10 +109,8 @@ pub async fn session_stream(
                     })?;
                     ctx.add_response_header.insert(headers.key().to_string(), headers.value().to_string());
                 } else if method == stream::METHOD_REMOVE_RESPONSE_HEADER {
-                    let headers = flatbuffers::root::<RemoveResponseHeader>(&data).map_err(|e| {
-                        NylonError::ConfigError(format!("Invalid headers: {}", e))
-                    })?;
-                    ctx.remove_response_header.push(headers.key().to_string());
+                    let header_key = String::from_utf8_lossy(&data).to_string();
+                    ctx.remove_response_header.push(header_key);
                 } else if method == stream::METHOD_SET_RESPONSE_STATUS {
                     let status = u16::from_be_bytes([data[0], data[1]]);
                     ctx.set_response_status = status;
