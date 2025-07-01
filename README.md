@@ -127,20 +127,42 @@ func initialize(config *C.char, length C.int) {
 
 	// Register middleware
 	plugin.HttpPlugin("authz", func(ctx *sdk.NylonHttpPluginCtx) {
-		payload := ctx.GetPayload()
-		fmt.Println("Payload", payload)
+		// payload := ctx.GetPayload()
+		// fmt.Println("Payload", payload)
 
-		// set headers
-		ctx.Response().SetHeader("x-test", "test")
-		ctx.Response().SetHeader("Transfer-Encoding", "chunked")
-
-		// remove  headers
-		ctx.Response().RemoveHeader("Content-Type")
-		ctx.Response().RemoveHeader("Content-Length")
+		// // set headers
+		ctx.RequestFilter().
+			Response().
+			SetHeader("x-authz", "true")
 
 		// next middleware
 		ctx.Next()
 	})
+
+	// example of streaming response
+	plugin.HttpPlugin("stream_body", func(ctx *sdk.NylonHttpPluginCtx) {
+		res := ctx.RequestFilter().Response()
+		// set status and headers
+		res.SetStatus(200)
+		res.SetHeader("Content-Type", "text/plain")
+
+		// Start streaming response
+		stream, err := res.Stream()
+		if err != nil {
+			fmt.Println("[NylonPlugin] Error streaming response", err)
+			ctx.Next()
+			return
+		}
+		stream.Write([]byte("Hello"))
+		w := ", World"
+		for i := 0; i < len(w); i++ {
+			stream.Write([]byte(w[i : i+1]))
+		}
+
+		// End streaming response
+		stream.End()
+	})
+
 }
 ```
 

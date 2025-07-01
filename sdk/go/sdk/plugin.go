@@ -280,8 +280,8 @@ func (ctx *NylonHttpPluginCtx) GetPayload() map[string]any {
 	return payloadMap
 }
 
-func (ctx *NylonHttpPluginCtx) Response() *Response {
-	return &Response{
+func (ctx *NylonHttpPluginCtx) RequestFilter() *PhaseRequestFilter {
+	return &PhaseRequestFilter{
 		_ctx: ctx,
 	}
 }

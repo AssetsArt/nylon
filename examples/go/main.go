@@ -44,14 +44,9 @@ func initialize(config *C.char, length C.int) {
 		// fmt.Println("Payload", payload)
 
 		// // set headers
-		// ctx.Response().SetHeader("x-test", "test")
-		// ctx.Response().SetHeader("Transfer-Encoding", "chunked")
-
-		// // remove  headers
-		// ctx.Response().RemoveHeader("Content-Type")
-		// ctx.Response().RemoveHeader("Content-Length")
-
-		// ctx.Response().SetStatus(201)
+		ctx.RequestFilter().
+			Response().
+			SetHeader("x-authz", "true")
 
 		// next middleware
 		ctx.Next()
@@ -59,12 +54,13 @@ func initialize(config *C.char, length C.int) {
 
 	// example of streaming response
 	plugin.HttpPlugin("stream_body", func(ctx *sdk.NylonHttpPluginCtx) {
+		res := ctx.RequestFilter().Response()
 		// set status and headers
-		ctx.Response().SetStatus(201)
-		ctx.Response().SetHeader("Content-Type", "text/plain")
+		res.SetStatus(200)
+		res.SetHeader("Content-Type", "text/plain")
 
 		// Start streaming response
-		stream, err := ctx.Response().Stream()
+		stream, err := res.Stream()
 		if err != nil {
 			fmt.Println("[NylonPlugin] Error streaming response", err)
 			ctx.Next()
