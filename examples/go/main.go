@@ -39,13 +39,12 @@ func initialize(config *C.char, length C.int) {
 	})
 
 	// Register middleware
-	plugin.HttpPlugin("authz", func(ctx *sdk.NylonHttpPluginCtx) {
+	plugin.AddRequestFilter("authz", func(ctx *sdk.PhaseRequestFilter) {
 		// payload := ctx.GetPayload()
 		// fmt.Println("Payload", payload)
 
 		// // set headers
-		ctx.RequestFilter().
-			Response().
+		ctx.Response().
 			SetHeader("x-authz", "true")
 
 		// next middleware
@@ -53,8 +52,8 @@ func initialize(config *C.char, length C.int) {
 	})
 
 	// example of streaming response
-	plugin.HttpPlugin("stream_body", func(ctx *sdk.NylonHttpPluginCtx) {
-		res := ctx.RequestFilter().Response()
+	plugin.AddRequestFilter("stream_body", func(ctx *sdk.PhaseRequestFilter) {
+		res := ctx.Response()
 		// set status and headers
 		res.SetStatus(200)
 		res.SetHeader("Content-Type", "text/plain")

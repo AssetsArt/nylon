@@ -108,7 +108,7 @@ func (plugin *NylonPlugin) Shutdown(fn func()) {
 }
 
 // Register a Go handler for an entry name
-func (plugin *NylonPlugin) HttpPlugin(entry string, handler HttpPluginFunc) {
+func (plugin *NylonPlugin) AddRequestFilter(entry string, handler func(ctx *PhaseRequestFilter)) {
 	handlerMu.Lock()
 	defer handlerMu.Unlock()
 	// handlerMap[entry] = handler
@@ -117,7 +117,9 @@ func (plugin *NylonPlugin) HttpPlugin(entry string, handler HttpPluginFunc) {
 		fmt.Printf("[NylonPlugin] HttpPlugin already registered for entry=%s\n", entry)
 		return
 	}
-	handlerMap[entry] = handler
+	handlerMap[entry] = func(ctx *NylonHttpPluginCtx) {
+		handler(ctx.RequestFilter())
+	}
 }
 
 // ====================

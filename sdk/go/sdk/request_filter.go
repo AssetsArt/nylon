@@ -10,3 +10,11 @@ func (ctx *PhaseRequestFilter) Response() *Response {
 		_ctx: ctx._ctx,
 	}
 }
+
+func (p *PhaseRequestFilter) Next() {
+	p._ctx.Next()
+}
+
+func (p *PhaseRequestFilter) End() {
+	p._ctx.End()
+}
