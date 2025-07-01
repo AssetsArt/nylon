@@ -105,8 +105,11 @@ impl ProxyHttp for NylonRuntime {
             )
             .await
             {
-                Ok(http_end) if http_end => {
+                Ok((http_end, _)) if http_end => {
                     return res.send(session).await;
+                }
+                Ok((_, stream_end)) if stream_end => {
+                    return Ok(true);
                 }
                 Ok(_) => continue,
                 Err(e) => return handle_error_response(&mut res, session, e).await,

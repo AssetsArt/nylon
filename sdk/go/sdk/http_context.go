@@ -8,6 +8,9 @@ import (
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 
+type StreamData struct {
+	_r *Response
+}
 type HttpContext struct {
 	// Request  Request
 	Response Response
@@ -42,7 +45,7 @@ func (r *Response) SetStatus(status uint16) {
 }
 
 func (r *Response) BodyRaw(body []byte) {
-	panic("not implemented")
+	RequestMethod(r._ctx.sessionID, NylonMethodSetResponseFullBody, body)
 }
 
 func (r *Response) BodyJSON(v any) *Response {
@@ -73,4 +76,27 @@ func (r *Response) Redirect(url string, code ...uint16) *Response {
 	r.SetHeader("Location", url)
 	r.BodyRaw([]byte{})
 	return r
+}
+
+func (r *Response) Stream() (*StreamData, error) {
+	r.SetHeader("Transfer-Encoding", "chunked")
+	r.RemoveHeader("Content-Length")
+
+	// send headers to the client
+	err := RequestMethod(r._ctx.sessionID, NylonMethodSetResponseStreamHeader, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &StreamData{
+		_r: r,
+	}, nil
+}
+
+// StreamData
+func (s *StreamData) Write(p []byte) (n int, err error) {
+	return len(p), RequestMethod(s._r._ctx.sessionID, NylonMethodSetResponseStreamData, p)
+}
+
+func (s *StreamData) End() error {
+	return RequestMethod(s._r._ctx.sessionID, NylonMethodSetResponseStreamEnd, nil)
 }

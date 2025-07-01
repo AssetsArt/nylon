@@ -1,4 +1,5 @@
 use crate::stream::PluginSessionStream;
+use bytes::Bytes;
 use dashmap::DashMap;
 use nylon_error::NylonError;
 use nylon_sdk::fbs::plugin_generated::nylon_plugin::HeaderKeyValue;
@@ -8,7 +9,7 @@ use nylon_types::{
     route::MiddlewareItem,
     template::{Expr, apply_payload_ast},
 };
-use pingora::proxy::Session;
+use pingora::{http::ResponseHeader, protocols::http::HttpTask, proxy::Session};
 use serde_json::Value;
 use std::{collections::HashMap, sync::Arc};
 
@@ -69,9 +70,10 @@ pub async fn session_stream(
     payload: &Option<Vec<u8>>,
     _params: &Option<HashMap<String, String>>,
     ctx: &mut NylonContext,
-    _session: &mut Session,
-) -> Result<bool, NylonError> {
+    session: &mut Session,
+) -> Result<(bool, bool), NylonError> {
     let mut http_end = false;
+    let mut stream_end = false;
     let session_stream = match ctx.session_stream.get(plugin_name) {
         Some(session_stream) => session_stream,
         None => {
@@ -114,6 +116,35 @@ pub async fn session_stream(
                 } else if method == stream::METHOD_SET_RESPONSE_STATUS {
                     let status = u16::from_be_bytes([data[0], data[1]]);
                     ctx.set_response_status = status;
+                } else if method == stream::METHOD_SET_RESPONSE_FULL_BODY {
+                    ctx.set_response_body = data.to_vec();
+                } else if method == stream::METHOD_SET_RESPONSE_STREAM_HEADER {
+                    let mut headers = ResponseHeader::build(ctx.set_response_status, None).map_err(|e| {
+                        NylonError::ConfigError(format!("Invalid headers: {}", e))
+                    })?;
+                    for (key, value) in ctx.add_response_header.iter() {
+                        let _ = headers.append_header(key.to_ascii_lowercase(), value);
+                    }
+                    for key in ctx.remove_response_header.iter() {
+                        let key = key.to_ascii_lowercase();
+                        let _ = headers.remove_header(&key);
+                    }
+                    let tasks = vec![HttpTask::Header(Box::new(headers), false)];
+                    session.response_duplex_vec(tasks).await.map_err(|e| {
+                        NylonError::ConfigError(format!("Error sending response: {}", e))
+                    })?;
+                } else if method == stream::METHOD_SET_RESPONSE_STREAM_DATA {
+                    let tasks = vec![HttpTask::Body(Some(Bytes::from(data)), false)];
+                    session.response_duplex_vec(tasks).await.map_err(|e| {
+                        NylonError::ConfigError(format!("Error sending response: {}", e))
+                    })?;
+                } else if method == stream::METHOD_SET_RESPONSE_STREAM_END {
+                    let tasks = vec![HttpTask::Done];
+                    session.response_duplex_vec(tasks).await.map_err(|e| {
+                        NylonError::ConfigError(format!("Error sending response: {}", e))
+                    })?;
+                    stream_end = true;
+                    break;
                 }
                 // unknown method
                 else {
@@ -126,14 +157,14 @@ pub async fn session_stream(
         }
     }
 
-    Ok(http_end)
+    Ok((http_end, stream_end))
 }
 
 pub async fn run_middleware(
     middleware_context: &MiddlewareContext,
     ctx: &mut NylonContext,
     session: &mut Session,
-) -> Result<bool, NylonError> {
+) -> Result<(bool, bool), NylonError> {
     let (middleware, payload, payload_ast, params) = (
         &middleware_context.middleware,
         &middleware_context.payload,
@@ -141,16 +172,16 @@ pub async fn run_middleware(
         &middleware_context.params,
     );
     let Some(plugin_name) = &middleware.plugin else {
-        return Ok(false);
+        return Ok((false, false));
     };
     match try_builtin(plugin_name.as_str()) {
         Some(BuiltinPlugin::RequestHeaderModifier) => {
             native::header_modifier::request(ctx, session, payload, payload_ast)?;
-            Ok(false)
+            Ok((false, false))
         }
         Some(BuiltinPlugin::ResponseHeaderModifier) => {
             native::header_modifier::response(ctx, session, payload, payload_ast)?;
-            Ok(false)
+            Ok((false, false))
         }
         _ => {
             let headers = session.req_header_mut();
@@ -177,7 +208,7 @@ pub async fn run_middleware(
                 // todo!("logging");
             }
 
-            Ok(false)
+            Ok((false, false))
         }
     }
 }

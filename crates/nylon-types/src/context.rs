@@ -18,7 +18,9 @@ pub struct NylonContext {
     pub add_response_header: HashMap<String, String>,
     pub remove_response_header: Vec<String>,
     pub set_response_status: u16,
+    pub set_response_body: Vec<u8>,
 
+    // 
     pub backend: Backend,
     pub client_ip: String,
     pub route: Option<Route>,
@@ -44,6 +46,7 @@ impl Default for NylonContext {
             host: "".to_string(),
             tls: false,
             set_response_status: 200,
+            set_response_body: Vec::new(),
             session_stream: HashMap::new(),
         }
     }

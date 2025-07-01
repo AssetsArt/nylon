@@ -22,9 +22,13 @@ const (
 	NylonMethodGetPayload NylonMethods = "get_payload"
 
 	// response
-	NylonMethodSetResponseHeader    NylonMethods = "set_response_header"
-	NylonMethodRemoveResponseHeader NylonMethods = "remove_response_header"
-	NylonMethodSetResponseStatus    NylonMethods = "set_response_status"
+	NylonMethodSetResponseHeader       NylonMethods = "set_response_header"
+	NylonMethodRemoveResponseHeader    NylonMethods = "remove_response_header"
+	NylonMethodSetResponseStatus       NylonMethods = "set_response_status"
+	NylonMethodSetResponseFullBody     NylonMethods = "set_response_full_body"
+	NylonMethodSetResponseStreamData   NylonMethods = "set_response_stream_data"
+	NylonMethodSetResponseStreamEnd    NylonMethods = "set_response_stream_end"
+	NylonMethodSetResponseStreamHeader NylonMethods = "set_response_stream_header"
 )
 
 // Mapping of NylonMethods to IDs used in FFI
@@ -34,9 +38,13 @@ var mapMethod = map[NylonMethods]uint32{
 	NylonMethodGetPayload: 3,
 
 	// response
-	NylonMethodSetResponseHeader:    100,
-	NylonMethodRemoveResponseHeader: 101,
-	NylonMethodSetResponseStatus:    102,
+	NylonMethodSetResponseHeader:       100,
+	NylonMethodRemoveResponseHeader:    101,
+	NylonMethodSetResponseStatus:       102,
+	NylonMethodSetResponseFullBody:     103,
+	NylonMethodSetResponseStreamData:   104,
+	NylonMethodSetResponseStreamEnd:    105,
+	NylonMethodSetResponseStreamHeader: 106,
 }
 
 // ====================

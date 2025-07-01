@@ -40,20 +40,44 @@ func initialize(config *C.char, length C.int) {
 
 	// Register middleware
 	plugin.HttpPlugin("authz", func(ctx *sdk.NylonHttpPluginCtx) {
-		payload := ctx.GetPayload()
-		fmt.Println("Payload", payload)
+		// payload := ctx.GetPayload()
+		// fmt.Println("Payload", payload)
 
-		// set headers
-		ctx.Response().SetHeader("x-test", "test")
-		ctx.Response().SetHeader("Transfer-Encoding", "chunked")
+		// // set headers
+		// ctx.Response().SetHeader("x-test", "test")
+		// ctx.Response().SetHeader("Transfer-Encoding", "chunked")
 
-		// remove  headers
-		ctx.Response().RemoveHeader("Content-Type")
-		ctx.Response().RemoveHeader("Content-Length")
+		// // remove  headers
+		// ctx.Response().RemoveHeader("Content-Type")
+		// ctx.Response().RemoveHeader("Content-Length")
 
-		ctx.Response().SetStatus(201)
+		// ctx.Response().SetStatus(201)
 
 		// next middleware
 		ctx.Next()
 	})
+
+	// example of streaming response
+	plugin.HttpPlugin("stream_body", func(ctx *sdk.NylonHttpPluginCtx) {
+		// set status and headers
+		ctx.Response().SetStatus(201)
+		ctx.Response().SetHeader("Content-Type", "text/plain")
+
+		// Start streaming response
+		stream, err := ctx.Response().Stream()
+		if err != nil {
+			fmt.Println("[NylonPlugin] Error streaming response", err)
+			ctx.Next()
+			return
+		}
+		stream.Write([]byte("Hello"))
+		w := ", World"
+		for i := 0; i < len(w); i++ {
+			stream.Write([]byte(w[i : i+1]))
+		}
+
+		// End streaming response
+		stream.End()
+	})
+
 }

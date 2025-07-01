@@ -24,6 +24,10 @@ pub const METHOD_GET_PAYLOAD: usize = 3;
 pub const METHOD_SET_RESPONSE_HEADER: usize = 100;
 pub const METHOD_REMOVE_RESPONSE_HEADER: usize = 101;
 pub const METHOD_SET_RESPONSE_STATUS: usize = 102;
+pub const METHOD_SET_RESPONSE_FULL_BODY: usize = 103;
+pub const METHOD_SET_RESPONSE_STREAM_DATA: usize = 104;
+pub const METHOD_SET_RESPONSE_STREAM_END: usize = 105;
+pub const METHOD_SET_RESPONSE_STREAM_HEADER: usize = 106;
 
 extern "C" fn handle_ffi_event(session_id: usize, method: usize, data_ptr: *const u8, len: usize) {
     let mut data = Vec::new();
