@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"encoding/binary"
 	"encoding/json"
 
 	"github.com/AssetsArt/easy-proxy/sdk/go/fbs/nylon_plugin"
@@ -35,7 +36,9 @@ func (r *Response) RemoveHeader(key string) {
 }
 
 func (r *Response) SetStatus(status uint16) {
-	RequestMethod(r._ctx.sessionID, NylonMethodSetResponseStatus, []byte{byte(status >> 8), byte(status)})
+	buf := make([]byte, 2)
+	binary.BigEndian.PutUint16(buf, status)
+	RequestMethod(r._ctx.sessionID, NylonMethodSetResponseStatus, buf)
 }
 
 func (r *Response) BodyRaw(body []byte) {
