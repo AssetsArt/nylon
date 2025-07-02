@@ -81,7 +81,7 @@ impl<'a> Response<'a> {
             tasks.push(HttpTask::Body(None, false));
         }
         tasks.push(HttpTask::Done);
-        println!("tasks: {:?}", tasks);
+        // println!("tasks: {:?}", tasks);
         if let Err(e) = session.response_duplex_vec(tasks).await {
             tracing::error!("Error sending response: {:?}", e);
             return Err(pingora::Error::because(

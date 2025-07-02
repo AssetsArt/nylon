@@ -20,7 +20,7 @@ pub struct NylonContext {
     pub set_response_status: u16,
     pub set_response_body: Vec<u8>,
 
-    // 
+    //
     pub backend: Backend,
     pub client_ip: String,
     pub route: Option<Route>,

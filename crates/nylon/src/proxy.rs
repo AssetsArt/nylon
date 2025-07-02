@@ -176,13 +176,25 @@ impl ProxyHttp for NylonRuntime {
     fn response_body_filter(
         &self,
         _session: &mut Session,
-        _body: &mut Option<Bytes>,
+        body: &mut Option<Bytes>,
         _end_of_stream: bool,
-        _ctx: &mut Self::CTX,
+        ctx: &mut Self::CTX,
     ) -> pingora::Result<Option<Duration>>
     where
         Self::CTX: Send + Sync,
     {
+        if !ctx.set_response_body.is_empty() {
+            if let Some(old_body) = body {
+                let mut rs_body = old_body.to_vec();
+                rs_body.extend_from_slice(&ctx.set_response_body);
+                ctx.set_response_body.clear();
+                *body = Some(Bytes::from(rs_body));
+            } else {
+                let rs_body = Bytes::from(ctx.set_response_body.to_vec());
+                ctx.set_response_body.clear();
+                *body = Some(rs_body);
+            }
+        }
         Ok(None)
     }
 

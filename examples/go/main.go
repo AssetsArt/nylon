@@ -44,8 +44,16 @@ func initialize(config *C.char, length C.int) {
 		// fmt.Println("Payload", payload)
 
 		// // set headers
+		// ctx.Response().
+		// 	SetHeader("Transfer-Encoding", "chunked")
 		ctx.Response().
 			SetHeader("x-authz", "true")
+		// ctx.Response().
+		// 	SetStatus(200)
+
+		// ctx.Response().BodyJSON(map[string]string{
+		// 	"message": "Hello, world!",
+		// })
 
 		// next middleware
 		ctx.Next()
