@@ -29,6 +29,10 @@ const (
 	NylonMethodSetResponseStreamData   NylonMethods = "set_response_stream_data"
 	NylonMethodSetResponseStreamEnd    NylonMethods = "set_response_stream_end"
 	NylonMethodSetResponseStreamHeader NylonMethods = "set_response_stream_header"
+	NylonMethodReadResponseFullBody    NylonMethods = "read_response_full_body"
+
+	// request
+	NylonMethodReadRequestFullBody NylonMethods = "read_request_full_body"
 )
 
 // Mapping of NylonMethods to IDs used in FFI
@@ -45,6 +49,10 @@ var mapMethod = map[NylonMethods]uint32{
 	NylonMethodSetResponseStreamData:   104,
 	NylonMethodSetResponseStreamEnd:    105,
 	NylonMethodSetResponseStreamHeader: 106,
+	NylonMethodReadResponseFullBody:    107,
+
+	// request
+	NylonMethodReadRequestFullBody: 200,
 }
 
 // ====================
@@ -207,6 +215,8 @@ func event_stream(sessionID C.int, method C.uint32_t, data *C.char, length C.int
 	// Store payload
 	dataBytes := C.GoBytes(unsafe.Pointer(data), length)
 	ctx.dataMap[uint32(method)] = dataBytes
+	// fmt.Printf("[NylonPlugin] Stored payload for method=%d\n", method)
+	// fmt.Printf("[NylonPlugin] Payload: %s\n", string(dataBytes))
 	ctx.cond.Broadcast()
 }
 

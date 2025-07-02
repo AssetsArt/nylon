@@ -91,7 +91,6 @@ impl ProxyHttp for NylonRuntime {
             });
 
         // let session_stream = stream::SessionStream::new(plugin.clone());
-
         for middleware in middleware_items {
             match run_middleware(
                 &MiddlewareContext {

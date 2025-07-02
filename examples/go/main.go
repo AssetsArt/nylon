@@ -43,17 +43,13 @@ func initialize(config *C.char, length C.int) {
 		// payload := ctx.GetPayload()
 		// fmt.Println("Payload", payload)
 
+		// read request body
+		// body := ctx.Request().ReadBody()
+		// fmt.Println("Request body", string(body))
+
 		// // set headers
-		// ctx.Response().
-		// 	SetHeader("Transfer-Encoding", "chunked")
 		ctx.Response().
 			SetHeader("x-authz", "true")
-		// ctx.Response().
-		// 	SetStatus(200)
-
-		// ctx.Response().BodyJSON(map[string]string{
-		// 	"message": "Hello, world!",
-		// })
 
 		// next middleware
 		ctx.Next()
@@ -62,6 +58,7 @@ func initialize(config *C.char, length C.int) {
 	// example of streaming response
 	plugin.AddRequestFilter("stream_body", func(ctx *sdk.PhaseRequestFilter) {
 		res := ctx.Response()
+
 		// set status and headers
 		res.SetStatus(200)
 		res.SetHeader("Content-Type", "text/plain")

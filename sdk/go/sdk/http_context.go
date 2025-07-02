@@ -11,13 +11,14 @@ import (
 type ResponseStream struct {
 	_r *Response
 }
-type HttpContext struct {
-	// Request  Request
-	Response Response
-}
 
 // Response
 type Response struct {
+	_ctx *NylonHttpPluginCtx
+}
+
+// Request
+type Request struct {
 	_ctx *NylonHttpPluginCtx
 }
 
@@ -99,4 +100,36 @@ func (s *ResponseStream) Write(p []byte) (n int, err error) {
 
 func (s *ResponseStream) End() error {
 	return RequestMethod(s._r._ctx.sessionID, NylonMethodSetResponseStreamEnd, nil)
+}
+
+// Read response body
+func (r *Response) ReadBody() []byte {
+	ctx := r._ctx
+	methodID := mapMethod[NylonMethodReadResponseFullBody]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	// Ask Rust to read body
+	RequestMethod(ctx.sessionID, NylonMethodReadResponseFullBody, nil)
+
+	// Wait for response
+	ctx.cond.Wait()
+	return ctx.dataMap[methodID]
+}
+
+// Request
+func (r *Request) ReadBody() []byte {
+	ctx := r._ctx
+	methodID := mapMethod[NylonMethodReadRequestFullBody]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	// Ask Rust to read body
+	RequestMethod(ctx.sessionID, NylonMethodReadRequestFullBody, nil)
+
+	// Wait for response
+	ctx.cond.Wait()
+	return ctx.dataMap[methodID]
 }

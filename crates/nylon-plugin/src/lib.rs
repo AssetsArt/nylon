@@ -145,6 +145,17 @@ pub async fn session_stream(
                     })?;
                     stream_end = true;
                     break;
+                } else if method == stream::METHOD_READ_RESPONSE_FULL_BODY {
+                    session_stream.event_stream(method, &ctx.set_response_body).await?;
+                }
+                // request
+                else if method == stream::METHOD_READ_REQUEST_FULL_BODY {
+                    if !session.is_body_empty() {
+                        while let Ok(Some(data)) = session.read_request_body().await {
+                            ctx.request_body.extend_from_slice(&data);
+                        }
+                    }
+                    session_stream.event_stream(method, &ctx.request_body).await?;
                 }
                 // unknown method
                 else {

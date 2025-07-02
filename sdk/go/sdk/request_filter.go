@@ -11,6 +11,12 @@ func (ctx *PhaseRequestFilter) Response() *Response {
 	}
 }
 
+func (ctx *PhaseRequestFilter) Request() *Request {
+	return &Request{
+		_ctx: ctx._ctx,
+	}
+}
+
 func (p *PhaseRequestFilter) GetPayload() map[string]any {
 	return p._ctx.GetPayload()
 }

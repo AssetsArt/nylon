@@ -15,12 +15,6 @@ pub struct Route {
 
 #[derive(Debug, Clone)]
 pub struct NylonContext {
-    pub add_response_header: HashMap<String, String>,
-    pub remove_response_header: Vec<String>,
-    pub set_response_status: u16,
-    pub set_response_body: Vec<u8>,
-
-    //
     pub backend: Backend,
     pub client_ip: String,
     pub route: Option<Route>,
@@ -30,6 +24,15 @@ pub struct NylonContext {
     pub host: String,
     pub tls: bool,
     pub session_stream: HashMap<String, SessionStream>,
+
+    // response
+    pub add_response_header: HashMap<String, String>,
+    pub remove_response_header: Vec<String>,
+    pub set_response_status: u16,
+    pub set_response_body: Vec<u8>,
+
+    // request
+    pub request_body: Vec<u8>,
 }
 
 impl Default for NylonContext {
@@ -40,14 +43,19 @@ impl Default for NylonContext {
             route: None,
             params: None,
             request_id: Uuid::now_v7().to_string(),
-            add_response_header: HashMap::new(),
-            remove_response_header: Vec::new(),
             plugin_store: None,
             host: "".to_string(),
             tls: false,
+            session_stream: HashMap::new(),
+
+            // response
+            add_response_header: HashMap::new(),
+            remove_response_header: Vec::new(),
             set_response_status: 200,
             set_response_body: Vec::new(),
-            session_stream: HashMap::new(),
+
+            // request
+            request_body: Vec::new(),
         }
     }
 }
