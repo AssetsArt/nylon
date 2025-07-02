@@ -258,18 +258,14 @@ func (ctx *NylonHttpPluginCtx) GetPayload() map[string]any {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
-	// Check if data is already available
+	// Ask Rust to send payload
+	RequestMethod(ctx.sessionID, NylonMethodGetPayload, nil)
+
+	// Wait for response
+	ctx.cond.Wait()
 	payload, exists := ctx.dataMap[methodID]
 	if !exists {
-		// Ask Rust to send payload
-		RequestMethod(ctx.sessionID, NylonMethodGetPayload, nil)
-
-		// Wait for response
-		ctx.cond.Wait()
-		payload, exists = ctx.dataMap[methodID]
-		if !exists {
-			return nil
-		}
+		return nil
 	}
 
 	// Decode JSON
