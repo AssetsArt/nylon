@@ -153,7 +153,9 @@ pub async fn session_stream(
                 }
                 // request
                 else if method == stream::METHOD_READ_REQUEST_FULL_BODY {
-                    if !session.is_body_empty() {
+                    if !session.is_body_empty() && !ctx.read_body {
+                        ctx.read_body = true;
+                        session.enable_retry_buffering();
                         while let Ok(Some(data)) = session.read_request_body().await {
                             ctx.request_body.extend_from_slice(&data);
                         }

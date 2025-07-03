@@ -32,6 +32,7 @@ pub struct NylonContext {
     pub set_response_body: Vec<u8>,
 
     // request
+    pub read_body: bool,
     pub request_body: Vec<u8>,
 }
 
@@ -55,6 +56,7 @@ impl Default for NylonContext {
             set_response_body: Vec::new(),
 
             // request
+            read_body: false,
             request_body: Vec::new(),
         }
     }
