@@ -118,7 +118,7 @@ pub fn load(plugin: &PluginItem) {
         None => "".to_string(),
     };
     let config_ptr = config.as_ptr();
-    let config_len = config.len();
+    let config_len = config.len() as u32;
     unsafe {
         initialize(config_ptr, config_len);
     }

@@ -16,7 +16,7 @@ pub struct SessionHandler;
 impl SessionHandler {
     /// Process a method from the plugin session stream
     pub async fn process_method(
-        method: usize,
+        method: u32,
         data: Vec<u8>,
         ctx: &mut NylonContext,
         session: &mut Session,
