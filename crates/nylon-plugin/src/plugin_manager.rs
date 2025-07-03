@@ -1,5 +1,6 @@
 //! Plugin management and builtin plugin handling
 
+use crate::stream::PluginSessionStream;
 use crate::{constants::builtin_plugins, types::BuiltinPlugin};
 use dashmap::DashMap;
 use nylon_error::NylonError;
@@ -8,7 +9,6 @@ use nylon_types::{
     plugins::{FfiPlugin, SessionStream},
 };
 use std::sync::Arc;
-use crate::stream::PluginSessionStream;
 
 /// Manages plugins and provides access to builtin plugins
 pub struct PluginManager;
@@ -64,9 +64,7 @@ impl PluginManager {
         Ok(ctx
             .session_stream
             .entry(plugin_name.to_string())
-            .or_insert_with(|| {
-                SessionStream::new(plugin)
-            })
+            .or_insert_with(|| SessionStream::new(plugin))
             .clone())
     }
 }

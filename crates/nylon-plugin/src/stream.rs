@@ -1,12 +1,15 @@
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
+
 use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_types::plugins::{FfiBuffer, FfiPlugin, SessionStream};
 use once_cell::sync::Lazy;
-use tracing::debug;
+// use tracing::debug;
 use std::{
     collections::HashMap,
     sync::{
-        atomic::{AtomicU32, Ordering}, Arc, RwLock
+        Arc, RwLock,
+        atomic::{AtomicU32, Ordering},
     },
 };
 use tokio::sync::mpsc;
@@ -95,8 +98,10 @@ pub extern "C" fn handle_ffi_event(session_id: u32, method: u32, data: *const Ff
 #[async_trait]
 pub trait PluginSessionStream {
     fn new(plugin: Arc<FfiPlugin>) -> Self;
-    async fn open(&self, entry: &str)
-        -> Result<(u32, mpsc::UnboundedReceiver<(u32, Vec<u8>)>), NylonError>;
+    async fn open(
+        &self,
+        entry: &str,
+    ) -> Result<(u32, mpsc::UnboundedReceiver<(u32, Vec<u8>)>), NylonError>;
     async fn event_stream(&self, method: u32, data: &[u8]) -> Result<(), NylonError>;
     async fn close(&self) -> Result<(), NylonError>;
 }
@@ -115,9 +120,9 @@ impl PluginSessionStream for SessionStream {
         let (tx, rx) = mpsc::unbounded_channel();
 
         {
-            let mut sessions = ACTIVE_SESSIONS
-                .write()
-                .map_err(|e| NylonError::ConfigError(format!("Failed to lock ACTIVE_SESSIONS: {:?}", e)))?;
+            let mut sessions = ACTIVE_SESSIONS.write().map_err(|e| {
+                NylonError::ConfigError(format!("Failed to lock ACTIVE_SESSIONS: {:?}", e))
+            })?;
             sessions.insert(self.session_id, tx);
         }
 
@@ -126,13 +131,15 @@ impl PluginSessionStream for SessionStream {
                 self.session_id,
                 entry.as_ptr(),
                 entry.len() as u32,
-                handle_ffi_event
+                handle_ffi_event,
             );
             if !ok {
                 if let Ok(mut sessions) = ACTIVE_SESSIONS.write() {
                     sessions.remove(&self.session_id);
                 }
-                return Err(NylonError::ConfigError("Failed to register session".to_string()));
+                return Err(NylonError::ConfigError(
+                    "Failed to register session".to_string(),
+                ));
             }
         }
 
@@ -141,11 +148,15 @@ impl PluginSessionStream for SessionStream {
 
     async fn event_stream(&self, method: u32, data: &[u8]) -> Result<(), NylonError> {
         unsafe {
-            (*self.plugin.event_stream)(self.session_id, method, &FfiBuffer {
-                ptr: data.as_ptr(),
-                len: data.len() as u32,
-                capacity: data.len() as u32,
-            });
+            (*self.plugin.event_stream)(
+                self.session_id,
+                method,
+                &FfiBuffer {
+                    ptr: data.as_ptr(),
+                    len: data.len() as u32,
+                    capacity: data.len() as u32,
+                },
+            );
         }
         Ok(())
     }

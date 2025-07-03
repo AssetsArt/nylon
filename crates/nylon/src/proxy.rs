@@ -17,7 +17,7 @@ use pingora::{
     proxy::{ProxyHttp, Session},
 };
 use std::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 /// Helper function to handle error responses consistently
 ///
@@ -69,10 +69,7 @@ fn process_tls_redirect(host: &str, tls: bool) -> Option<String> {
             Some(format!("https://{}", redirect))
         }
         Ok(None) => None,
-        Err(e) => {
-            warn!("Failed to get TLS route for host {}: {}", host, e);
-            None
-        }
+        Err(_) => None,
     }
 }
 
@@ -126,15 +123,12 @@ async fn process_middleware(
         .await
         {
             Ok((http_end, _)) if http_end => {
-                info!("Middleware ended HTTP request");
                 return Ok(true);
             }
             Ok((_, stream_end)) if stream_end => {
-                info!("Middleware ended stream");
                 return Ok(true);
             }
             Ok(_) => {
-                // debug!("Middleware completed, continuing");
                 continue;
             }
             Err(e) => {

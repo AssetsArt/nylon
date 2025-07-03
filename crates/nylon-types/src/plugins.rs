@@ -9,7 +9,6 @@ pub struct FfiBuffer {
     pub capacity: u32,
 }
 
-
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum PluginType {
     #[serde(rename = "wasm")]
@@ -17,7 +16,6 @@ pub enum PluginType {
     #[serde(rename = "ffi")]
     Ffi,
 }
-
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct LifeCycle {
@@ -38,12 +36,8 @@ pub struct PluginItem {
 // FFI Plugin
 pub type FfiInitializeFn = unsafe extern "C" fn(*const u8, u32);
 pub type FfiPluginFreeFn = unsafe extern "C" fn(*mut u8);
-pub type FfiRegisterSessionFn = unsafe extern "C" fn(
-    u32,
-    *const u8,
-    u32,
-    extern "C" fn(u32, u32, *const FfiBuffer),
-) -> bool;
+pub type FfiRegisterSessionFn =
+    unsafe extern "C" fn(u32, *const u8, u32, extern "C" fn(u32, u32, *const FfiBuffer)) -> bool;
 pub type FfiEventStreamFn = unsafe extern "C" fn(u32, u32, *const FfiBuffer);
 pub type FfiCloseSessionFn = unsafe extern "C" fn(u32);
 pub type FfiShutdownFn = unsafe extern "C" fn();

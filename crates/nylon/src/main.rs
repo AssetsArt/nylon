@@ -16,14 +16,12 @@ use nylon_config::{proxy::ProxyConfigExt, runtime::RuntimeConfig};
 use nylon_error::NylonError;
 use nylon_types::proxy::ProxyConfig;
 use runtime::NylonRuntime;
-use tracing::{Level, error, info};
+use tracing::{error, info};
 
 /// Main entry point for the Nylon proxy server
 fn main() {
     // Initialize logging with appropriate level
-    tracing_subscriber::fmt()
-        .with_max_level(Level::DEBUG)
-        .init();
+    tracing_subscriber::fmt::init();
 
     info!("Starting Nylon proxy server...");
 
