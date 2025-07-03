@@ -19,7 +19,7 @@ import (
 // Import types from types.go
 
 // ====================
-// Ultra Low Latency Session State Management
+// Session State Management
 // ====================
 
 var (
@@ -72,7 +72,7 @@ func (plugin *NylonPlugin) AddRequestFilter(entry string, phasehandler func(ctx 
 }
 
 // ====================
-// Ultra Low Latency FFI Exported Functions
+// FFI Exported Functions
 // ====================
 
 // shutdown is called by the Rust backend when the plugin is being shut down.
@@ -202,7 +202,7 @@ func event_stream(sessionID C.int, method C.uint32_t, data *C.char, length C.int
 }
 
 // ====================
-// Ultra Low Latency NylonPluginCtx Methods
+// NylonPluginCtx Methods
 // ====================
 
 // RequestMethod calls into Rust using the FFI callback to execute a specific method.

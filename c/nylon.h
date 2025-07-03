@@ -1,11 +1,11 @@
-// nylon.h - Ultra Low Latency FFI Interface
+// nylon.h - FFI Interface
 #ifndef NYLON_H
 #define NYLON_H
 
 #include <stdlib.h>
 #include <stdint.h>
 
-// Zero-copy data structure for ultra low latency
+// Zero-copy data structure
 typedef struct {
     const unsigned char *ptr;
     uint32_t len;
