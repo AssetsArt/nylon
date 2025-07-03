@@ -31,6 +31,8 @@ pub const METHOD_SET_RESPONSE_STREAM_HEADER: usize = 106;
 pub const METHOD_READ_RESPONSE_FULL_BODY: usize = 107;
 // request
 pub const METHOD_READ_REQUEST_FULL_BODY: usize = 200;
+pub const METHOD_READ_REQUEST_HEADER: usize = 201;
+pub const METHOD_READ_REQUEST_HEADERS: usize = 201;
 
 extern "C" fn handle_ffi_event(session_id: usize, method: usize, data_ptr: *const u8, len: usize) {
     let mut data = Vec::new();

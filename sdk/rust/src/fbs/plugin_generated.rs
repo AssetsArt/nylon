@@ -156,4 +156,136 @@ pub mod nylon_plugin {
             ds.finish()
         }
     }
+    pub enum NylonHttpHeadersOffset {}
+    #[derive(Copy, Clone, PartialEq)]
+
+    pub struct NylonHttpHeaders<'a> {
+        pub _tab: flatbuffers::Table<'a>,
+    }
+
+    impl<'a> flatbuffers::Follow<'a> for NylonHttpHeaders<'a> {
+        type Inner = NylonHttpHeaders<'a>;
+        #[inline]
+        unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+            Self {
+                _tab: flatbuffers::Table::new(buf, loc),
+            }
+        }
+    }
+
+    impl<'a> NylonHttpHeaders<'a> {
+        pub const VT_HEADERS: flatbuffers::VOffsetT = 4;
+
+        #[inline]
+        pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+            NylonHttpHeaders { _tab: table }
+        }
+        #[allow(unused_mut)]
+        pub fn create<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: flatbuffers::Allocator + 'bldr,
+        >(
+            _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args NylonHttpHeadersArgs<'args>,
+        ) -> flatbuffers::WIPOffset<NylonHttpHeaders<'bldr>> {
+            let mut builder = NylonHttpHeadersBuilder::new(_fbb);
+            if let Some(x) = args.headers {
+                builder.add_headers(x);
+            }
+            builder.finish()
+        }
+
+        #[inline]
+        pub fn headers(
+            &self,
+        ) -> flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<HeaderKeyValue<'a>>> {
+            // Safety:
+            // Created from valid Table for this object
+            // which contains a valid value in this slot
+            unsafe {
+                self._tab
+                    .get::<flatbuffers::ForwardsUOffset<
+                        flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<HeaderKeyValue>>,
+                    >>(NylonHttpHeaders::VT_HEADERS, None)
+                    .unwrap()
+            }
+        }
+    }
+
+    impl flatbuffers::Verifiable for NylonHttpHeaders<'_> {
+        #[inline]
+        fn run_verifier(
+            v: &mut flatbuffers::Verifier,
+            pos: usize,
+        ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+            use self::flatbuffers::Verifiable;
+            v.visit_table(pos)?
+                .visit_field::<flatbuffers::ForwardsUOffset<
+                    flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<HeaderKeyValue>>,
+                >>("headers", Self::VT_HEADERS, true)?
+                .finish();
+            Ok(())
+        }
+    }
+    pub struct NylonHttpHeadersArgs<'a> {
+        pub headers: Option<
+            flatbuffers::WIPOffset<
+                flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<HeaderKeyValue<'a>>>,
+            >,
+        >,
+    }
+    impl<'a> Default for NylonHttpHeadersArgs<'a> {
+        #[inline]
+        fn default() -> Self {
+            NylonHttpHeadersArgs {
+                headers: None, // required field
+            }
+        }
+    }
+
+    pub struct NylonHttpHeadersBuilder<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> {
+        fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
+        start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+    }
+    impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> NylonHttpHeadersBuilder<'a, 'b, A> {
+        #[inline]
+        pub fn add_headers(
+            &mut self,
+            headers: flatbuffers::WIPOffset<
+                flatbuffers::Vector<'b, flatbuffers::ForwardsUOffset<HeaderKeyValue<'b>>>,
+            >,
+        ) {
+            self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(
+                NylonHttpHeaders::VT_HEADERS,
+                headers,
+            );
+        }
+        #[inline]
+        pub fn new(
+            _fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
+        ) -> NylonHttpHeadersBuilder<'a, 'b, A> {
+            let start = _fbb.start_table();
+            NylonHttpHeadersBuilder {
+                fbb_: _fbb,
+                start_: start,
+            }
+        }
+        #[inline]
+        pub fn finish(self) -> flatbuffers::WIPOffset<NylonHttpHeaders<'a>> {
+            let o = self.fbb_.end_table(self.start_);
+            self.fbb_
+                .required(o, NylonHttpHeaders::VT_HEADERS, "headers");
+            flatbuffers::WIPOffset::new(o.value())
+        }
+    }
+
+    impl core::fmt::Debug for NylonHttpHeaders<'_> {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            let mut ds = f.debug_struct("NylonHttpHeaders");
+            ds.field("headers", &self.headers());
+            ds.finish()
+        }
+    }
 } // pub mod nylon_plugin

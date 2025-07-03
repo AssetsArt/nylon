@@ -1,8 +1,11 @@
 use crate::stream::PluginSessionStream;
 use bytes::Bytes;
 use dashmap::DashMap;
+use http::{HeaderMap, HeaderValue};
 use nylon_error::NylonError;
-use nylon_sdk::fbs::plugin_generated::nylon_plugin::HeaderKeyValue;
+use nylon_sdk::fbs::plugin_generated::nylon_plugin::{
+    HeaderKeyValue, HeaderKeyValueArgs, NylonHttpHeaders, NylonHttpHeadersArgs,
+};
 use nylon_types::{
     context::NylonContext,
     plugins::{FfiPlugin, SessionStream},
@@ -156,6 +159,46 @@ pub async fn session_stream(
                         }
                     }
                     session_stream.event_stream(method, &ctx.request_body).await?;
+                } else if method == stream::METHOD_READ_REQUEST_HEADER {
+                    if !data.is_empty() {
+                        let read_key = String::from_utf8_lossy(&data).to_string();
+                        let value = session.req_header().headers.get(&read_key);
+                        if let Some(value) = value {
+                            session_stream.event_stream(method, value.as_bytes()).await?;
+                        }
+                    } else {
+                        session_stream.event_stream(method, &[]).await?;
+                    }
+                } else if method == stream::METHOD_READ_REQUEST_HEADERS {
+                    let mut fbs = flatbuffers::FlatBufferBuilder::new();
+                    let headers: &HeaderMap<HeaderValue> = match session.as_http2() {
+                        Some(h2) => &h2.req_header().headers,
+                        None => &session.req_header().headers,
+                    };
+                    let headers_vec = headers
+                    .iter()
+                    .map(|(k, v)| {
+                        let key = fbs.create_string(k.as_str());
+                        let value = fbs.create_string(v.to_str().unwrap_or_default());
+                        HeaderKeyValue::create(
+                            &mut fbs,
+                            &HeaderKeyValueArgs {
+                                key: Some(key),
+                                value: Some(value),
+                            },
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let headers_vec = fbs.create_vector(&headers_vec);
+                let headers = NylonHttpHeaders::create(
+                    &mut fbs,
+                    &NylonHttpHeadersArgs {
+                        headers: Some(headers_vec),
+                    },
+                );
+                fbs.finish(headers, None);
+                let headers = fbs.finished_data();
+                session_stream.event_stream(method, headers).await?;
                 }
                 // unknown method
                 else {
