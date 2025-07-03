@@ -5,15 +5,11 @@ use pingora::proxy::Session;
 
 #[async_trait]
 pub trait NylonContextExt {
-    fn new() -> Self;
     async fn parse_request(&mut self, session: &mut Session) -> Result<(), NylonError>;
 }
 
 #[async_trait]
 impl NylonContextExt for NylonContext {
-    fn new() -> Self {
-        Self::default()
-    }
 
     async fn parse_request(&mut self, session: &mut Session) -> Result<(), NylonError> {
         self.client_ip = match session.client_addr() {
