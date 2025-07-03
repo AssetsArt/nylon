@@ -1,5 +1,5 @@
 //! Nylon Runtime Server Implementation
-//! 
+//!
 //! This module contains the core runtime functionality for the Nylon proxy server,
 //! including server initialization, configuration, and service management.
 
@@ -35,9 +35,9 @@ impl NylonRuntime {
             daemon: config.pingora.daemon,
             ..Default::default()
         };
-        
-        let mut pingora_server = Server::new(Some(opt))
-            .map_err(|e| NylonError::PingoraError(e.to_string()))?;
+
+        let mut pingora_server =
+            Server::new(Some(opt)).map_err(|e| NylonError::PingoraError(e.to_string()))?;
 
         // Configure server settings
         let conf = create_server_config(&config)?;
@@ -75,9 +75,7 @@ fn create_server_config(config: &RuntimeConfig) -> Result<ServerConf, NylonError
     let mut conf = ServerConf {
         daemon: config.pingora.daemon,
         grace_period_seconds: Some(config.pingora.grace_period_seconds),
-        graceful_shutdown_timeout_seconds: Some(
-            config.pingora.graceful_shutdown_timeout_seconds,
-        ),
+        graceful_shutdown_timeout_seconds: Some(config.pingora.graceful_shutdown_timeout_seconds),
         threads: config.pingora.threads,
         ..Default::default()
     };
@@ -104,10 +102,10 @@ fn create_server_config(config: &RuntimeConfig) -> Result<ServerConf, NylonError
     // Set user and group if provided
     conf.user = config.pingora.user.clone().filter(|s| !s.is_empty());
     conf.group = config.pingora.group.clone().filter(|s| !s.is_empty());
-    
+
     // Set work stealing if configured
     conf.work_stealing = config.pingora.work_stealing.unwrap_or(conf.work_stealing);
-    
+
     // Set upstream keepalive pool size if configured
     if let Some(v) = &config.pingora.upstream_keepalive_pool_size {
         conf.upstream_keepalive_pool_size = *v

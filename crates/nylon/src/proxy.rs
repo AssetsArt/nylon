@@ -1,5 +1,5 @@
 //! HTTP Proxy Implementation
-//! 
+//!
 //! This module contains the core HTTP proxy functionality for Nylon,
 //! implementing the Pingora ProxyHttp trait to handle incoming requests,
 //! apply middleware filters, and route traffic to upstream services.
@@ -8,7 +8,7 @@ use crate::{backend, context::NylonContextExt, response::Response, runtime::Nylo
 use async_trait::async_trait;
 use bytes::Bytes;
 use nylon_error::NylonError;
-use nylon_plugin::{MiddlewareContext, run_middleware, try_request_filter};
+use nylon_plugin::{plugin_manager::PluginManager, run_middleware, types::MiddlewareContext};
 use nylon_types::{context::NylonContext, services::ServiceType};
 use pingora::{
     ErrorType,
@@ -37,7 +37,7 @@ async fn handle_error_response<'a>(
 ) -> pingora::Result<bool> {
     let error = error.into();
     error!("Request error: {}", error);
-    
+
     res.status(error.http_status())
         .body_json(error.exception_json())?
         .send(session)
@@ -58,14 +58,14 @@ fn process_tls_redirect(host: &str, tls: bool) -> Option<String> {
     if tls {
         return None;
     }
-    
+
     match nylon_store::routes::get_tls_route(host) {
         Ok(Some(redirect)) => {
             let redirect = redirect
                 .replace("${host}", host)
                 .replace("http://", "")
                 .replace("https://", "");
-            
+
             Some(format!("https://{}", redirect))
         }
         Ok(None) => None,
@@ -105,14 +105,14 @@ async fn process_middleware(
                 || m.0
                     .plugin
                     .as_ref()
-                    .map(|name| try_request_filter(name).is_some())
+                    .map(|name| PluginManager::is_request_filter(name))
                     .unwrap_or(false)
         });
 
     // Process each middleware item
     for middleware in middleware_items {
         debug!("Processing middleware: {:?}", middleware.0.plugin);
-        
+
         match run_middleware(
             &MiddlewareContext {
                 middleware: middleware.0.clone(),
@@ -147,7 +147,7 @@ async fn process_middleware(
             }
         }
     }
-    
+
     Ok(false)
 }
 
@@ -200,9 +200,9 @@ impl ProxyHttp for NylonRuntime {
         res.ctx.params = Some(params.clone());
 
         // Process middleware
-        match process_middleware(&route, &params, &mut res.ctx, session).await {
+        match process_middleware(&route, &params, res.ctx, session).await {
             Ok(true) => return Ok(true),
-            Ok(false) => {},
+            Ok(false) => {}
             Err(e) => {
                 let nylon_error = NylonError::InternalServerError(e.to_string());
                 return handle_error_response(&mut res, session, nylon_error).await;
@@ -222,11 +222,11 @@ impl ProxyHttp for NylonRuntime {
         };
 
         // Get backend selection
-        let selected_backend = match backend::selection(&http_service, session, &mut res.ctx) {
+        let selected_backend = match backend::selection(&http_service, session, res.ctx) {
             Ok(b) => b,
             Err(e) => return handle_error_response(&mut res, session, e).await,
         };
-        
+
         res.ctx.backend = selected_backend;
 
         Ok(false)
@@ -274,16 +274,16 @@ impl ProxyHttp for NylonRuntime {
         for (key, value) in ctx.add_response_header.iter() {
             let _ = upstream_response.append_header(key.to_ascii_lowercase(), value);
         }
-        
+
         // Remove response headers
         for key in ctx.remove_response_header.iter() {
             let key = key.to_ascii_lowercase();
             let _ = upstream_response.remove_header(&key);
         }
-        
+
         // Set response status if modified
         upstream_response.set_status(ctx.set_response_status)?;
-        
+
         Ok(())
     }
 

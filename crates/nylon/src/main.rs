@@ -1,5 +1,5 @@
 //! Nylon - The Extensible Proxy Server
-//! 
+//!
 //! This is the main entry point for the Nylon proxy server application.
 //! It handles command-line argument parsing and initializes the server runtime.
 
@@ -16,7 +16,7 @@ use nylon_config::{proxy::ProxyConfigExt, runtime::RuntimeConfig};
 use nylon_error::NylonError;
 use nylon_types::proxy::ProxyConfig;
 use runtime::NylonRuntime;
-use tracing::{error, info, Level};
+use tracing::{Level, error, info};
 
 /// Main entry point for the Nylon proxy server
 fn main() {
@@ -68,26 +68,25 @@ fn handle_commands(args: Commands) -> Result<(), NylonError> {
 /// * `Result<(), NylonError>` - The result of the operation
 fn handle_run_command(config_path: String) -> Result<(), NylonError> {
     info!("Loading configuration from: {}", config_path);
-    
+
     // Load and validate runtime configuration
     let config = RuntimeConfig::from_file(&config_path)?;
     config.store()?;
-    
+
     info!("Runtime configuration loaded successfully");
     tracing::debug!("Runtime config: {:#?}", RuntimeConfig::get()?);
-    
+
     // Load proxy configuration
-    let proxy_config = ProxyConfig::from_dir(
-        config.config_dir.to_string_lossy().to_string().as_str()
-    )?;
+    let proxy_config =
+        ProxyConfig::from_dir(config.config_dir.to_string_lossy().to_string().as_str())?;
     tracing::debug!("Proxy config: {:#?}", proxy_config);
-    
+
     // Create and run the server
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| NylonError::RuntimeError(format!("Failed to create Tokio runtime: {}", e)))?;
-    
+
     rt.block_on(proxy_config.store())?;
-    
+
     info!("Starting Nylon runtime server...");
     NylonRuntime::new_server()
         .map_err(|e| NylonError::RuntimeError(format!("Failed to create server: {}", e)))?

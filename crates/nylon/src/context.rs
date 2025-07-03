@@ -10,7 +10,6 @@ pub trait NylonContextExt {
 
 #[async_trait]
 impl NylonContextExt for NylonContext {
-
     async fn parse_request(&mut self, session: &mut Session) -> Result<(), NylonError> {
         self.client_ip = match session.client_addr() {
             Some(ip) => match ip.as_inet() {
