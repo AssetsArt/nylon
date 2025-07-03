@@ -7,6 +7,7 @@
 PORTS := 8088 8443 6192
 RUST_BACKTRACE := 1
 RUST_LOG := "info,warn,debug"
+DEV_CMD := cargo watch -w crates -w examples -w proto -w sdk -q -c -s "make build-examples && cargo run -- run --config ./examples/config.yaml"
 
 # Default target
 .PHONY: default
@@ -20,13 +21,13 @@ dev:
 		kill -9 $$(lsof -t -i :$$port) 2>/dev/null || true; \
 	done
 	@echo "🚀 Starting Nylon development server..."
-	RUST_BACKTRACE=$(RUST_BACKTRACE) cargo watch -w crates -w examples -w proto -w sdk -q -c -s "make build-examples && cargo run -- run --config ./examples/config.yaml"
+	RUST_BACKTRACE=$(RUST_BACKTRACE) $(DEV_CMD)
 
 # Development target with debug logging
 .PHONY: dev-debug
 dev-debug:
 	@echo "🐛 Starting Nylon development server with debug logging..."
-	RUST_LOG=$(RUST_LOG) make dev
+	RUST_LOG=$(RUST_LOG) $(DEV_CMD)
 
 # Generate FlatBuffers code from protocol definitions
 .PHONY: generate
