@@ -8,6 +8,7 @@ use nylon_types::{
     plugins::{FfiPlugin, SessionStream},
 };
 use std::sync::Arc;
+use crate::stream::PluginSessionStream;
 
 /// Manages plugins and provides access to builtin plugins
 pub struct PluginManager;
@@ -15,7 +16,7 @@ pub struct PluginManager;
 impl PluginManager {
     /// Try to get a builtin plugin by name
     pub fn try_builtin(name: &str) -> Option<BuiltinPlugin> {
-        tracing::debug!("Trying builtin plugin: {}", name);
+        // tracing::debug!("Trying builtin plugin: {}", name);
         match name {
             builtin_plugins::REQUEST_HEADER_MODIFIER => Some(BuiltinPlugin::RequestHeaderModifier),
             builtin_plugins::RESPONSE_HEADER_MODIFIER => {
@@ -64,10 +65,7 @@ impl PluginManager {
             .session_stream
             .entry(plugin_name.to_string())
             .or_insert_with(|| {
-                SessionStream {
-                    plugin,
-                    session_id: 0, // This will be set by the stream module
-                }
+                SessionStream::new(plugin)
             })
             .clone())
     }

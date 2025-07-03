@@ -42,10 +42,10 @@ fn return_buffer(mut buffer: Vec<u8>) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn handle_ffi_event(session_id: u32, method: u32, data: *const FfiBuffer) {
-    debug!("handle_ffi_event: session_id={}, method={}", session_id, method);
+    // debug!("handle_ffi_event: session_id={}, method={}", session_id, method);
 
     if data.is_null() {
-        debug!("handle_ffi_event: data is null (no payload)");
+        // debug!("handle_ffi_event: data is null (no payload)");
         if let Ok(sessions) = ACTIVE_SESSIONS.read() {
             if let Some(sender) = sessions.get(&(session_id)) {
                 let _ = sender.send((method, Vec::new()));
@@ -60,7 +60,7 @@ pub extern "C" fn handle_ffi_event(session_id: u32, method: u32, data: *const Ff
         let ptr = ffi.ptr;
 
         if ptr.is_null() || len == 0 {
-            debug!("handle_ffi_event: empty payload");
+            // debug!("handle_ffi_event: empty payload");
             if let Ok(sessions) = ACTIVE_SESSIONS.read() {
                 if let Some(sender) = sessions.get(&(session_id)) {
                     let _ = sender.send((method, Vec::new()));

@@ -111,7 +111,7 @@ async fn process_middleware(
 
     // Process each middleware item
     for middleware in middleware_items {
-        debug!("Processing middleware: {:?}", middleware.0.plugin);
+        // debug!("Processing middleware: {:?}", middleware.0.plugin);
 
         match run_middleware(
             &MiddlewareContext {
@@ -134,7 +134,7 @@ async fn process_middleware(
                 return Ok(true);
             }
             Ok(_) => {
-                debug!("Middleware completed, continuing");
+                // debug!("Middleware completed, continuing");
                 continue;
             }
             Err(e) => {
