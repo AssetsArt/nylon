@@ -162,7 +162,11 @@ pub async fn session_stream(
                 } else if method == stream::METHOD_READ_REQUEST_HEADER {
                     if !data.is_empty() {
                         let read_key = String::from_utf8_lossy(&data).to_string();
-                        let value = session.req_header().headers.get(&read_key);
+                        let headers: &HeaderMap<HeaderValue> = match session.as_http2() {
+                            Some(h2) => &h2.req_header().headers,
+                            None => &session.req_header().headers,
+                        };
+                        let value = headers.get(&read_key);
                         if let Some(value) = value {
                             session_stream.event_stream(method, value.as_bytes()).await?;
                         }
