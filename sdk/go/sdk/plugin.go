@@ -11,95 +11,32 @@ import (
 	"unsafe"
 )
 
-// ====================
-// Nylon Method Types
-// ====================
-type NylonMethods string
+// Import constants from constants.go
 
-const (
-	NylonMethodNext       NylonMethods = "next"
-	NylonMethodEnd        NylonMethods = "end"
-	NylonMethodGetPayload NylonMethods = "get_payload"
-
-	// response
-	NylonMethodSetResponseHeader       NylonMethods = "set_response_header"
-	NylonMethodRemoveResponseHeader    NylonMethods = "remove_response_header"
-	NylonMethodSetResponseStatus       NylonMethods = "set_response_status"
-	NylonMethodSetResponseFullBody     NylonMethods = "set_response_full_body"
-	NylonMethodSetResponseStreamData   NylonMethods = "set_response_stream_data"
-	NylonMethodSetResponseStreamEnd    NylonMethods = "set_response_stream_end"
-	NylonMethodSetResponseStreamHeader NylonMethods = "set_response_stream_header"
-	NylonMethodReadResponseFullBody    NylonMethods = "read_response_full_body"
-
-	// request
-	NylonMethodReadRequestFullBody NylonMethods = "read_request_full_body"
-	NylonMethodReadRequestHeader   NylonMethods = "read_request_header"
-	NylonMethodReadRequestHeaders  NylonMethods = "read_request_headers"
-)
-
-// Mapping of NylonMethods to IDs used in FFI
-var mapMethod = map[NylonMethods]uint32{
-	NylonMethodNext:       1,
-	NylonMethodEnd:        2,
-	NylonMethodGetPayload: 3,
-
-	// response
-	NylonMethodSetResponseHeader:       100,
-	NylonMethodRemoveResponseHeader:    101,
-	NylonMethodSetResponseStatus:       102,
-	NylonMethodSetResponseFullBody:     103,
-	NylonMethodSetResponseStreamData:   104,
-	NylonMethodSetResponseStreamEnd:    105,
-	NylonMethodSetResponseStreamHeader: 106,
-	NylonMethodReadResponseFullBody:    107,
-
-	// request
-	NylonMethodReadRequestFullBody: 200,
-	NylonMethodReadRequestHeader:   201,
-	NylonMethodReadRequestHeaders:  202,
-}
+// Import types from types.go
 
 // ====================
-// NylonPlugin Core Types
-// ====================
-
-// User-defined request handler
-type HttpPluginFunc func(ctx *NylonHttpPluginCtx)
-
-// NylonPlugin represents the plugin itself
-type NylonPlugin struct{}
-
-// NylonPluginCtx represents a per-session context
-type NylonHttpPluginCtx struct {
-	sessionID int
-
-	mu      sync.Mutex
-	cond    *sync.Cond
-	dataMap map[uint32][]byte
-}
-
-// ====================
-// Session State
+// Session State Management
 // ====================
 
 var (
-	// sessionID -> FFI callback
+	// sessionCallbacks maps sessionID to FFI callback functions
 	sessionCallbacks = make(map[int]C.data_event_fn)
 
-	// sessionID -> session context
+	// streamSessions maps sessionID to session context
 	streamSessions = make(map[int]*NylonHttpPluginCtx)
 
-	// sessionID -> true if open
+	// sessionIsOpen tracks whether a session is currently open
 	sessionIsOpen = make(map[int]bool)
 
-	// name -> Go-side handler
+	// handlerMap maps entry names to Go-side handlers
 	handlerMap = make(map[string]HttpPluginFunc)
 
-	// Global mutexes
+	// Global mutexes for thread safety
 	sessionMu sync.Mutex
 	handlerMu sync.Mutex
 
-	// shutdown handler
+	// shutdownHandler stores the function to be called during shutdown
 	shutdownHandler func() = nil
 )
 
@@ -107,28 +44,34 @@ var (
 // NylonPlugin API
 // ====================
 
-// NewNylonPlugin creates a new NylonPlugin
+// NewNylonPlugin creates a new NylonPlugin instance
 func NewNylonPlugin() *NylonPlugin {
 	return &NylonPlugin{}
 }
 
-// Shutdown registers a function to be called when the plugin is shutting down
+// Shutdown registers a function to be called when the plugin is shutting down.
+// This is useful for cleanup operations like closing database connections or
+// saving state before the plugin terminates.
 func (plugin *NylonPlugin) Shutdown(fn func()) {
 	handlerMu.Lock()
 	defer handlerMu.Unlock()
 	shutdownHandler = fn
 }
 
-// Register a Go handler for an entry name
+// AddRequestFilter registers a Go handler function for a specific entry point.
+// The handler will be called whenever a request matches the given entry name.
+// If a handler is already registered for the entry, a warning is logged and
+// the registration is skipped.
 func (plugin *NylonPlugin) AddRequestFilter(entry string, handler func(ctx *PhaseRequestFilter)) {
 	handlerMu.Lock()
 	defer handlerMu.Unlock()
-	// handlerMap[entry] = handler
+
 	_, exists := handlerMap[entry]
 	if exists {
 		fmt.Printf("[NylonPlugin] HttpPlugin already registered for entry=%s\n", entry)
 		return
 	}
+
 	handlerMap[entry] = func(ctx *NylonHttpPluginCtx) {
 		handler(ctx.RequestFilter())
 	}
@@ -138,6 +81,9 @@ func (plugin *NylonPlugin) AddRequestFilter(entry string, handler func(ctx *Phas
 // FFI Exported Functions
 // ====================
 
+// shutdown is called by the Rust backend when the plugin is being shut down.
+// It invokes the registered shutdown handler if one exists.
+//
 //export shutdown
 func shutdown() {
 	if shutdownHandler != nil {
@@ -145,11 +91,16 @@ func shutdown() {
 	}
 }
 
+// plugin_free is called by the Rust backend to free memory allocated by the plugin.
+//
 //export plugin_free
 func plugin_free(ptr *C.uchar) {
 	C.free(unsafe.Pointer(ptr))
 }
 
+// close_session_stream is called by the Rust backend when a session is being closed.
+// It cleans up all session-related data structures.
+//
 //export close_session_stream
 func close_session_stream(sessionID C.int) {
 	sessionMu.Lock()
@@ -161,11 +112,15 @@ func close_session_stream(sessionID C.int) {
 	fmt.Printf("[NylonPlugin] Closed session %d\n", sessionID)
 }
 
+// register_session_stream is called by the Rust backend when a new session is being created.
+// It looks up the appropriate handler for the entry point and creates a new session context.
+// Returns true if the session was successfully registered, false otherwise.
+//
 //export register_session_stream
 func register_session_stream(sessionID C.int, entry *C.char, length C.int, cb C.data_event_fn) bool {
 	entryName := C.GoStringN(entry, length)
 
-	// Lookup Go handler
+	// Lookup Go handler for the entry point
 	handlerMu.Lock()
 	handler, exists := handlerMap[entryName]
 	handlerMu.Unlock()
@@ -175,11 +130,11 @@ func register_session_stream(sessionID C.int, entry *C.char, length C.int, cb C.
 		return false
 	}
 
-	// Store FFI callback
+	// Store FFI callback for this session
 	sessionMu.Lock()
 	sessionCallbacks[int(sessionID)] = cb
 
-	// Create context if new
+	// Create or retrieve session context
 	ctx, exists := streamSessions[int(sessionID)]
 	if !exists {
 		ctx = &NylonHttpPluginCtx{
@@ -192,11 +147,14 @@ func register_session_stream(sessionID C.int, entry *C.char, length C.int, cb C.
 	sessionIsOpen[int(sessionID)] = true
 	sessionMu.Unlock()
 
-	// Invoke Go handler
+	// Invoke Go handler in a new goroutine
 	go handler(ctx)
 	return true
 }
 
+// event_stream is called by the Rust backend to send data to a specific session.
+// It stores the received data in the session's data map and notifies waiting goroutines.
+//
 //export event_stream
 func event_stream(sessionID C.int, method C.uint32_t, data *C.char, length C.int) {
 	sessionMu.Lock()
@@ -210,17 +168,17 @@ func event_stream(sessionID C.int, method C.uint32_t, data *C.char, length C.int
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
-	// Special case: notify without data
+	// Special case: notify without data (used for signaling)
 	if length == 0 {
 		ctx.cond.Broadcast()
 		return
 	}
 
-	// Store payload
+	// Store payload in session's data map
 	dataBytes := C.GoBytes(unsafe.Pointer(data), length)
 	ctx.dataMap[uint32(method)] = dataBytes
-	// fmt.Printf("[NylonPlugin] Stored payload for method=%d\n", method)
-	// fmt.Printf("[NylonPlugin] Payload: %s\n", string(dataBytes))
+
+	// Notify waiting goroutines that data is available
 	ctx.cond.Broadcast()
 }
 
@@ -228,7 +186,8 @@ func event_stream(sessionID C.int, method C.uint32_t, data *C.char, length C.int
 // NylonPluginCtx Methods
 // ====================
 
-// RequestMethod calls into Rust using the FFI callback
+// RequestMethod calls into Rust using the FFI callback to execute a specific method.
+// It handles the conversion of Go data to C-compatible format and manages the FFI call.
 func RequestMethod(sessionID int, method NylonMethods, data []byte) error {
 	sessionMu.Lock()
 	cb := sessionCallbacks[int(sessionID)]
@@ -244,7 +203,7 @@ func RequestMethod(sessionID int, method NylonMethods, data []byte) error {
 		dataPtr = (*C.char)(unsafe.Pointer(&data[0]))
 	}
 
-	methodID := mapMethod[method]
+	methodID := MethodIDMapping[method]
 	C.call_event_method(
 		cb,
 		C.size_t(sessionID),
@@ -255,24 +214,28 @@ func RequestMethod(sessionID int, method NylonMethods, data []byte) error {
 	return nil
 }
 
-// Next sends a 'next' request to Rust
+// Next sends a 'next' request to Rust, indicating that the plugin should continue
+// processing the request pipeline.
 func (ctx *NylonHttpPluginCtx) Next() {
 	RequestMethod(ctx.sessionID, NylonMethodNext, nil)
 }
 
-// End sends a 'end' request to Rust
+// End sends an 'end' request to Rust, indicating that the plugin has finished
+// processing and the request should be terminated.
 func (ctx *NylonHttpPluginCtx) End() {
 	RequestMethod(ctx.sessionID, NylonMethodEnd, nil)
 }
 
-// GetPayload requests and waits for payload from Rust
+// GetPayload requests and waits for payload data from Rust.
+// It blocks until the payload is received and then decodes it as JSON.
+// Returns nil if no payload is available or if JSON decoding fails.
 func (ctx *NylonHttpPluginCtx) GetPayload() map[string]any {
-	methodID := mapMethod[NylonMethodGetPayload]
+	methodID := MethodIDMapping[NylonMethodGetPayload]
 
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
-	// Ask Rust to send payload
+	// Request payload from Rust
 	RequestMethod(ctx.sessionID, NylonMethodGetPayload, nil)
 
 	// Wait for response
@@ -282,7 +245,7 @@ func (ctx *NylonHttpPluginCtx) GetPayload() map[string]any {
 		return nil
 	}
 
-	// Decode JSON
+	// Decode JSON payload
 	var payloadMap map[string]any
 	if err := json.Unmarshal(payload, &payloadMap); err != nil {
 		fmt.Println("[NylonPlugin] JSON unmarshal error:", err)
@@ -292,8 +255,10 @@ func (ctx *NylonHttpPluginCtx) GetPayload() map[string]any {
 	return payloadMap
 }
 
+// RequestFilter creates and returns a PhaseRequestFilter instance that provides
+// access to both request and response objects for the current session.
 func (ctx *NylonHttpPluginCtx) RequestFilter() *PhaseRequestFilter {
 	return &PhaseRequestFilter{
-		_ctx: ctx,
+		ctx: ctx,
 	}
 }
