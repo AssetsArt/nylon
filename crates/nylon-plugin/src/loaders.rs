@@ -1,3 +1,4 @@
+use crate::constants::ffi_symbols;
 use dashmap::DashMap;
 use libloading::{Library, Symbol};
 use nylon_types::plugins::{
@@ -5,13 +6,6 @@ use nylon_types::plugins::{
     FfiRegisterSessionFn, FfiShutdownFn, PluginItem,
 };
 use std::sync::Arc;
-
-const FFI_INITIALIZE: &str = "initialize";
-const FFI_PLUGIN_FREE: &str = "plugin_free";
-const FFI_REGISTER_SESSION: &str = "register_session_stream";
-const FFI_EVENT_STREAM: &str = "event_stream";
-const FFI_CLOSE_SESSION: &str = "close_session_stream";
-const FFI_SHUTDOWN: &str = "shutdown";
 
 pub fn load(plugin: &PluginItem) {
     let file = plugin.file.clone();
@@ -48,40 +42,45 @@ pub fn load(plugin: &PluginItem) {
         }
     };
     let plugin_free = unsafe {
-        let symbol: Symbol<FfiPluginFreeFn> =
-            lib.get(FFI_PLUGIN_FREE.as_bytes()).unwrap_or_else(|_| {
-                panic!("Failed to load symbol: {}", FFI_PLUGIN_FREE);
+        let symbol: Symbol<FfiPluginFreeFn> = lib
+            .get(ffi_symbols::PLUGIN_FREE.as_bytes())
+            .unwrap_or_else(|_| {
+                panic!("Failed to load symbol: {}", ffi_symbols::PLUGIN_FREE);
             });
         std::mem::transmute::<Symbol<FfiPluginFreeFn>, Symbol<'static, FfiPluginFreeFn>>(symbol)
     };
     let register_session = unsafe {
         let symbol: Symbol<FfiRegisterSessionFn> = lib
-            .get(FFI_REGISTER_SESSION.as_bytes())
+            .get(ffi_symbols::REGISTER_SESSION.as_bytes())
             .unwrap_or_else(|_| {
-                panic!("Failed to load symbol: {}", FFI_REGISTER_SESSION);
+                panic!("Failed to load symbol: {}", ffi_symbols::REGISTER_SESSION);
             });
         std::mem::transmute::<Symbol<FfiRegisterSessionFn>, Symbol<'static, FfiRegisterSessionFn>>(
             symbol,
         )
     };
     let event_stream = unsafe {
-        let symbol: Symbol<FfiEventStreamFn> =
-            lib.get(FFI_EVENT_STREAM.as_bytes()).unwrap_or_else(|_| {
-                panic!("Failed to load symbol: {}", FFI_EVENT_STREAM);
+        let symbol: Symbol<FfiEventStreamFn> = lib
+            .get(ffi_symbols::EVENT_STREAM.as_bytes())
+            .unwrap_or_else(|_| {
+                panic!("Failed to load symbol: {}", ffi_symbols::EVENT_STREAM);
             });
         std::mem::transmute::<Symbol<FfiEventStreamFn>, Symbol<'static, FfiEventStreamFn>>(symbol)
     };
     let close_session = unsafe {
-        let symbol: Symbol<FfiCloseSessionFn> =
-            lib.get(FFI_CLOSE_SESSION.as_bytes()).unwrap_or_else(|_| {
-                panic!("Failed to load symbol: {}", FFI_CLOSE_SESSION);
+        let symbol: Symbol<FfiCloseSessionFn> = lib
+            .get(ffi_symbols::CLOSE_SESSION.as_bytes())
+            .unwrap_or_else(|_| {
+                panic!("Failed to load symbol: {}", ffi_symbols::CLOSE_SESSION);
             });
         std::mem::transmute::<Symbol<FfiCloseSessionFn>, Symbol<'static, FfiCloseSessionFn>>(symbol)
     };
     let shutdown = unsafe {
-        let symbol: Symbol<FfiShutdownFn> = lib.get(FFI_SHUTDOWN.as_bytes()).unwrap_or_else(|_| {
-            panic!("Failed to load symbol: {}", FFI_SHUTDOWN);
-        });
+        let symbol: Symbol<FfiShutdownFn> = lib
+            .get(ffi_symbols::SHUTDOWN.as_bytes())
+            .unwrap_or_else(|_| {
+                panic!("Failed to load symbol: {}", ffi_symbols::SHUTDOWN);
+            });
         std::mem::transmute::<Symbol<FfiShutdownFn>, Symbol<'static, FfiShutdownFn>>(symbol)
     };
 
@@ -107,9 +106,10 @@ pub fn load(plugin: &PluginItem) {
 
     // initialize
     let initialize = unsafe {
-        let symbol: Symbol<FfiInitializeFn> =
-            lib.get(FFI_INITIALIZE.as_bytes()).unwrap_or_else(|_| {
-                panic!("Failed to load symbol: {}", FFI_INITIALIZE);
+        let symbol: Symbol<FfiInitializeFn> = lib
+            .get(ffi_symbols::INITIALIZE.as_bytes())
+            .unwrap_or_else(|_| {
+                panic!("Failed to load symbol: {}", ffi_symbols::INITIALIZE);
             });
         std::mem::transmute::<Symbol<FfiInitializeFn>, Symbol<'static, FfiInitializeFn>>(symbol)
     };
@@ -118,7 +118,7 @@ pub fn load(plugin: &PluginItem) {
         None => "".to_string(),
     };
     let config_ptr = config.as_ptr();
-    let config_len = config.len();
+    let config_len = config.len() as u32;
     unsafe {
         initialize(config_ptr, config_len);
     }

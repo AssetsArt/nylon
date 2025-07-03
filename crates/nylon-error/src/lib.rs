@@ -9,6 +9,9 @@ pub enum NylonError {
     #[error("Could not start the Pingora server: {0}")]
     PingoraError(String),
 
+    #[error("Runtime error occurred: {0}")]
+    RuntimeError(String),
+
     #[error("{{ \"status\": \"{0}\", \"error\": \"{1}\", \"message\": \"{2}\" }}")]
     HttpException(u16, &'static str, &'static str),
 
@@ -52,6 +55,7 @@ impl NylonError {
             NylonError::HttpException(_, error, _) => error.to_string(),
             NylonError::ConfigError(_) => "CONFIG_ERROR".to_string(),
             NylonError::PingoraError(_) => "PINGORA_ERROR".to_string(),
+            NylonError::RuntimeError(_) => "RUNTIME_ERROR".to_string(),
             NylonError::ServiceNotFound(_) => "SERVICE_NOT_FOUND".to_string(),
             NylonError::RouteNotFound(_) => "ROUTE_NOT_FOUND".to_string(),
             NylonError::AcmeKeyPairError(_) => "ACME_KEY_PAIR_ERROR".to_string(),
@@ -68,6 +72,7 @@ impl NylonError {
             NylonError::HttpException(_, _, message) => message.to_string(),
             NylonError::ConfigError(message) => message.to_string(),
             NylonError::PingoraError(message) => message.to_string(),
+            NylonError::RuntimeError(message) => message.to_string(),
             NylonError::ServiceNotFound(message) => message.to_string(),
             NylonError::RouteNotFound(message) => message.to_string(),
             NylonError::AcmeKeyPairError(message) => message.to_string(),

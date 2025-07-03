@@ -1,223 +1,84 @@
-use crate::stream::PluginSessionStream;
-use bytes::Bytes;
-use dashmap::DashMap;
-use http::{HeaderMap, HeaderValue};
-use nylon_error::NylonError;
-use nylon_sdk::fbs::plugin_generated::nylon_plugin::{
-    HeaderKeyValue, HeaderKeyValueArgs, NylonHttpHeaders, NylonHttpHeadersArgs,
-};
-use nylon_types::{
-    context::NylonContext,
-    plugins::{FfiPlugin, SessionStream},
-    route::MiddlewareItem,
-    template::{Expr, apply_payload_ast},
-};
-use pingora::{http::ResponseHeader, protocols::http::HttpTask, proxy::Session};
-use serde_json::Value;
-use std::{collections::HashMap, sync::Arc};
+//! Nylon Plugin System
+//!
+//! This module provides a flexible and extensible plugin system for the Nylon proxy server.
+//! It supports both built-in plugins and dynamically loaded external plugins.
+//!
+//! # Architecture
+//!
+//! The plugin system is organized into several modules:
+//!
+//! - **constants**: Defines all constants used throughout the plugin system
+//! - **types**: Core types and structures for plugin operations
+//! - **plugin_manager**: Plugin management and discovery
+//! - **session_handler**: Session stream management and method processing
+//! - **stream**: Stream management and FFI communication
+//! - **loaders**: Dynamic library loading and symbol resolution
+//! - **native**: Built-in native plugins
+//!
+//! # Examples
+//!
+//! ```rust
+//! use nylon_plugin::{run_middleware, MiddlewareContext};
+//!
+//! // Create middleware context
+//! let context = MiddlewareContext {
+//!     middleware: middleware_item,
+//!     payload: Some(payload_value),
+//!     payload_ast: Some(ast),
+//!     params: Some(params),
+//! };
+//!
+//! // Run middleware
+//! let result = run_middleware(&context, &mut ctx, &mut session).await?;
+//! ```
 
+use crate::{
+    plugin_manager::PluginManager,
+    session_handler::SessionHandler,
+    stream::PluginSessionStream,
+    types::{BuiltinPlugin, MiddlewareContext, PluginResult},
+};
+use nylon_error::NylonError;
+use nylon_types::{context::NylonContext, template::apply_payload_ast};
+use pingora::proxy::Session;
+
+use std::collections::HashMap;
+
+pub mod constants;
 pub mod loaders;
 mod native;
+pub mod plugin_manager;
+pub mod session_handler;
 pub mod stream;
+pub mod types;
 
-pub enum BuiltinPlugin {
-    RequestHeaderModifier,
-    ResponseHeaderModifier,
-}
-
-pub struct MiddlewareContext {
-    pub middleware: MiddlewareItem,
-    pub payload: Option<Value>,
-    pub payload_ast: Option<HashMap<String, Vec<Expr>>>,
-    pub params: Option<HashMap<String, String>>,
-}
-
-fn try_builtin(name: &str) -> Option<BuiltinPlugin> {
-    tracing::debug!("Trying builtin plugin: {}", name);
-    match name {
-        "RequestHeaderModifier" => Some(BuiltinPlugin::RequestHeaderModifier),
-        "ResponseHeaderModifier" => Some(BuiltinPlugin::ResponseHeaderModifier),
-        _ => None,
-    }
-}
-
-pub fn try_request_filter(name: &str) -> Option<BuiltinPlugin> {
-    match name {
-        "RequestHeaderModifier" => Some(BuiltinPlugin::RequestHeaderModifier),
-        _ => None,
-    }
-}
-
-pub fn try_response_filter(name: &str) -> Option<BuiltinPlugin> {
-    match name {
-        "ResponseHeaderModifier" => Some(BuiltinPlugin::ResponseHeaderModifier),
-        _ => None,
-    }
-}
-
-pub fn get_plugin(name: &str) -> Result<Arc<FfiPlugin>, NylonError> {
-    let Some(plugins) =
-        &nylon_store::get::<DashMap<String, Arc<FfiPlugin>>>(nylon_store::KEY_PLUGINS)
-    else {
-        return Err(NylonError::ConfigError("Plugins not found".to_string()));
-    };
-    let Some(plugin) = plugins.get(name) else {
-        return Err(NylonError::ConfigError("Plugin not found".to_string()));
-    };
-    Ok(plugin.clone())
-}
-
+/// Execute a session stream for a plugin
 pub async fn session_stream(
     plugin_name: &str,
     entry: &str,
-    payload: &Option<Vec<u8>>,
+    _payload: &Option<Vec<u8>>,
     _params: &Option<HashMap<String, String>>,
     ctx: &mut NylonContext,
     session: &mut Session,
-) -> Result<(bool, bool), NylonError> {
-    let mut http_end = false;
-    let mut stream_end = false;
-    let session_stream = match ctx.session_stream.get(plugin_name) {
-        Some(session_stream) => session_stream,
-        None => {
-            let plugin = get_plugin(plugin_name)?;
-            let session_stream = SessionStream::new(plugin.clone());
-            ctx.session_stream
-                .insert(plugin_name.to_string(), session_stream);
-            match ctx.session_stream.get(plugin_name) {
-                Some(session_stream) => session_stream,
-                None => {
-                    return Err(NylonError::ConfigError(
-                        "Failed to get session stream".to_string(),
-                    ));
-                }
-            }
-        }
-    };
+) -> Result<PluginResult, NylonError> {
+    let session_stream = PluginManager::get_or_create_session_stream(plugin_name, ctx)?;
     let (_session_id, mut rx) = session_stream.open(entry).await?;
+
     loop {
         tokio::select! {
             Some((method, data)) = rx.recv() => {
-                if method == stream::METHOD_GET_PAYLOAD {
-                    let payload = payload.as_ref().unwrap_or(&vec![]).clone();
-                    session_stream.event_stream(method, &payload).await?;
-                } else if method == stream::METHOD_NEXT {
-                    break;
-                } else if method == stream::METHOD_END {
-                    http_end = true;
-                    break;
-                }
-                // response
-                else if method == stream::METHOD_SET_RESPONSE_HEADER {
-                    let headers = flatbuffers::root::<HeaderKeyValue>(&data).map_err(|e| {
-                        NylonError::ConfigError(format!("Invalid headers: {}", e))
-                    })?;
-                    ctx.add_response_header.insert(headers.key().to_string(), headers.value().to_string());
-                } else if method == stream::METHOD_REMOVE_RESPONSE_HEADER {
-                    let header_key = String::from_utf8_lossy(&data).to_string();
-                    ctx.remove_response_header.push(header_key);
-                } else if method == stream::METHOD_SET_RESPONSE_STATUS {
-                    let status = u16::from_be_bytes([data[0], data[1]]);
-                    ctx.set_response_status = status;
-                } else if method == stream::METHOD_SET_RESPONSE_FULL_BODY {
-                    ctx.set_response_body = data.to_vec();
-                } else if method == stream::METHOD_SET_RESPONSE_STREAM_HEADER {
-                    let mut headers = ResponseHeader::build(ctx.set_response_status, None).map_err(|e| {
-                        NylonError::ConfigError(format!("Invalid headers: {}", e))
-                    })?;
-                    for (key, value) in ctx.add_response_header.iter() {
-                        let _ = headers.append_header(key.to_ascii_lowercase(), value);
-                    }
-                    for key in ctx.remove_response_header.iter() {
-                        let key = key.to_ascii_lowercase();
-                        let _ = headers.remove_header(&key);
-                    }
-                    let tasks = vec![HttpTask::Header(Box::new(headers), false)];
-                    session.response_duplex_vec(tasks).await.map_err(|e| {
-                        NylonError::ConfigError(format!("Error sending response: {}", e))
-                    })?;
-                } else if method == stream::METHOD_SET_RESPONSE_STREAM_DATA {
-                    let tasks = vec![HttpTask::Body(Some(Bytes::from(data)), false)];
-                    session.response_duplex_vec(tasks).await.map_err(|e| {
-                        NylonError::ConfigError(format!("Error sending response: {}", e))
-                    })?;
-                } else if method == stream::METHOD_SET_RESPONSE_STREAM_END {
-                    let tasks = vec![HttpTask::Done];
-                    session.response_duplex_vec(tasks).await.map_err(|e| {
-                        NylonError::ConfigError(format!("Error sending response: {}", e))
-                    })?;
-                    stream_end = true;
-                    break;
-                } else if method == stream::METHOD_READ_RESPONSE_FULL_BODY {
-                    session_stream.event_stream(method, &ctx.set_response_body).await?;
-                }
-                // request
-                else if method == stream::METHOD_READ_REQUEST_FULL_BODY {
-                    if !session.is_body_empty() && !ctx.read_body {
-                        ctx.read_body = true;
-                        session.enable_retry_buffering();
-                        while let Ok(Some(data)) = session.read_request_body().await {
-                            ctx.request_body.extend_from_slice(&data);
-                        }
-                    }
-                    session_stream.event_stream(method, &ctx.request_body).await?;
-                } else if method == stream::METHOD_READ_REQUEST_HEADER {
-                    if !data.is_empty() {
-                        let read_key = String::from_utf8_lossy(&data).to_string();
-                        let headers: &HeaderMap<HeaderValue> = match session.as_http2() {
-                            Some(h2) => &h2.req_header().headers,
-                            None => &session.req_header().headers,
-                        };
-                        let value = headers.get(&read_key);
-                        if let Some(value) = value {
-                            session_stream.event_stream(method, value.as_bytes()).await?;
-                        }
-                    } else {
-                        session_stream.event_stream(method, &[]).await?;
-                    }
-                } else if method == stream::METHOD_READ_REQUEST_HEADERS {
-                    let mut fbs = flatbuffers::FlatBufferBuilder::new();
-                    let headers: &HeaderMap<HeaderValue> = match session.as_http2() {
-                        Some(h2) => &h2.req_header().headers,
-                        None => &session.req_header().headers,
-                    };
-                    let headers_vec = headers
-                    .iter()
-                    .map(|(k, v)| {
-                        let key = fbs.create_string(k.as_str());
-                        let value = fbs.create_string(v.to_str().unwrap_or_default());
-                        HeaderKeyValue::create(
-                            &mut fbs,
-                            &HeaderKeyValueArgs {
-                                key: Some(key),
-                                value: Some(value),
-                            },
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                let headers_vec = fbs.create_vector(&headers_vec);
-                let headers = NylonHttpHeaders::create(
-                    &mut fbs,
-                    &NylonHttpHeadersArgs {
-                        headers: Some(headers_vec),
-                    },
-                );
-                fbs.finish(headers, None);
-                let headers = fbs.finished_data();
-                session_stream.event_stream(method, headers).await?;
-                }
-                // unknown method
-                else {
-                    return Err(NylonError::ConfigError(format!(
-                        "Invalid method: {}",
-                        method
-                    )));
+                if let Some(result) = SessionHandler::process_method(
+                    method,
+                    data,
+                    ctx,
+                    session,
+                    &session_stream,
+                ).await? {
+                    return Ok(result);
                 }
             }
         }
     }
-
-    Ok((http_end, stream_end))
 }
 
 pub async fn run_middleware(
@@ -234,7 +95,7 @@ pub async fn run_middleware(
     let Some(plugin_name) = &middleware.plugin else {
         return Ok((false, false));
     };
-    match try_builtin(plugin_name.as_str()) {
+    match PluginManager::try_builtin(plugin_name.as_str()) {
         Some(BuiltinPlugin::RequestHeaderModifier) => {
             native::header_modifier::request(ctx, session, payload, payload_ast)?;
             Ok((false, false))
@@ -256,10 +117,10 @@ pub async fn run_middleware(
                 None => None,
             };
             if let Some(request_filter) = &middleware.request_filter {
-                // return session_stream(plugin_name, request_filter, &payload, params, ctx, session)
-                //     .await;
-                return session_stream(plugin_name, request_filter, &payload, params, ctx, session)
-                    .await;
+                let result =
+                    session_stream(plugin_name, request_filter, &payload, params, ctx, session)
+                        .await?;
+                return Ok((result.http_end, result.stream_end));
             } else if let Some(_response_filter) = &middleware.response_filter {
                 // todo!("response filter");
             } else if let Some(_response_body_filter) = &middleware.response_body_filter {

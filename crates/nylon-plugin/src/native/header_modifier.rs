@@ -8,12 +8,14 @@ use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
 
+/// Payload structure for header modification
 #[derive(Debug, Deserialize, Clone)]
 struct Payload {
     remove: Option<Vec<String>>,
     set: Option<Vec<Header>>,
 }
 
+/// Header structure for setting headers
 #[derive(Debug, Deserialize, Clone)]
 struct Header {
     name: String,

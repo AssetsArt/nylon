@@ -2,6 +2,13 @@ use libloading::{Library, Symbol};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+#[repr(C)]
+pub struct FfiBuffer {
+    pub ptr: *const u8,
+    pub len: u32,
+    pub capacity: u32,
+}
+
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum PluginType {
     #[serde(rename = "wasm")]
@@ -27,16 +34,12 @@ pub struct PluginItem {
 }
 
 // FFI Plugin
-pub type FfiInitializeFn = unsafe extern "C" fn(*const u8, usize);
+pub type FfiInitializeFn = unsafe extern "C" fn(*const u8, u32);
 pub type FfiPluginFreeFn = unsafe extern "C" fn(*mut u8);
-pub type FfiRegisterSessionFn = unsafe extern "C" fn(
-    usize,
-    *const u8,
-    usize,
-    extern "C" fn(usize, usize, *const u8, usize),
-) -> bool;
-pub type FfiEventStreamFn = unsafe extern "C" fn(usize, usize, *const u8, usize);
-pub type FfiCloseSessionFn = unsafe extern "C" fn(usize);
+pub type FfiRegisterSessionFn =
+    unsafe extern "C" fn(u32, *const u8, u32, extern "C" fn(u32, u32, *const FfiBuffer)) -> bool;
+pub type FfiEventStreamFn = unsafe extern "C" fn(u32, u32, *const FfiBuffer);
+pub type FfiCloseSessionFn = unsafe extern "C" fn(u32);
 pub type FfiShutdownFn = unsafe extern "C" fn();
 
 #[derive(Debug)]
@@ -53,5 +56,5 @@ pub struct FfiPlugin {
 #[derive(Debug, Clone)]
 pub struct SessionStream {
     pub plugin: Arc<FfiPlugin>,
-    pub session_id: usize,
+    pub session_id: u32,
 }
