@@ -33,6 +33,8 @@ const (
 
 	// request
 	NylonMethodReadRequestFullBody NylonMethods = "read_request_full_body"
+	NylonMethodReadRequestHeader   NylonMethods = "read_request_header"
+	NylonMethodReadRequestHeaders  NylonMethods = "read_request_headers"
 )
 
 // Mapping of NylonMethods to IDs used in FFI
@@ -53,6 +55,8 @@ var mapMethod = map[NylonMethods]uint32{
 
 	// request
 	NylonMethodReadRequestFullBody: 200,
+	NylonMethodReadRequestHeader:   201,
+	NylonMethodReadRequestHeaders:  202,
 }
 
 // ====================

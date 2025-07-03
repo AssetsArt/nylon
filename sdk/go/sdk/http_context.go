@@ -8,6 +8,18 @@ import (
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 
+type Headers struct {
+	_headers map[string]string
+}
+
+func (h *Headers) Get(key string) string {
+	return h._headers[key]
+}
+
+func (h *Headers) GetAll() map[string]string {
+	return h._headers
+}
+
 type ResponseStream struct {
 	_r *Response
 }
@@ -119,7 +131,7 @@ func (r *Response) ReadBody() []byte {
 }
 
 // Request
-func (r *Request) ReadBody() []byte {
+func (r *Request) RawBody() []byte {
 	ctx := r._ctx
 	methodID := mapMethod[NylonMethodReadRequestFullBody]
 
@@ -132,4 +144,46 @@ func (r *Request) ReadBody() []byte {
 	// Wait for response
 	ctx.cond.Wait()
 	return ctx.dataMap[methodID]
+}
+
+func (r *Request) Header(key string) string {
+	ctx := r._ctx
+	methodID := mapMethod[NylonMethodReadRequestHeader]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	RequestMethod(ctx.sessionID, NylonMethodReadRequestHeader, []byte(key))
+
+	// Wait for response
+	ctx.cond.Wait()
+	return string(ctx.dataMap[methodID])
+}
+
+func (r *Request) Headers() *Headers {
+	ctx := r._ctx
+	methodID := mapMethod[NylonMethodReadRequestHeaders]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	RequestMethod(ctx.sessionID, NylonMethodReadRequestHeaders, nil)
+
+	// Wait for response
+	ctx.cond.Wait()
+
+	// parse flatbuffers
+	headersBytes := ctx.dataMap[methodID]
+	headers := nylon_plugin.GetRootAsNylonHttpHeaders(headersBytes, 0)
+
+	headersMap := make(map[string]string)
+	for i := 0; i < headers.HeadersLength(); i++ {
+		header := &nylon_plugin.HeaderKeyValue{}
+		headers.Headers(header, i)
+		headersMap[string(header.Key())] = string(header.Value())
+	}
+
+	return &Headers{
+		_headers: headersMap,
+	}
 }

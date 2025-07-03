@@ -51,6 +51,10 @@ func initialize(config *C.char, length C.int) {
 		ctx.Response().
 			SetHeader("x-authz", "true")
 
+		// read request headers
+		// host := ctx.Request().Header("host")
+		// fmt.Println("Request headers", host)
+
 		// next middleware
 		ctx.Next()
 	})
