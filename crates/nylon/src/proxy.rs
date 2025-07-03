@@ -8,7 +8,10 @@ use crate::{backend, context::NylonContextExt, response::Response, runtime::Nylo
 use async_trait::async_trait;
 use bytes::Bytes;
 use nylon_error::NylonError;
-use nylon_plugin::{plugin_manager::PluginManager, run_middleware, types::MiddlewareContext};
+use nylon_plugin::{
+    plugin_manager::PluginManager, run_middleware, stream::PluginSessionStream,
+    types::MiddlewareContext,
+};
 use nylon_types::{context::NylonContext, services::ServiceType};
 use pingora::{
     ErrorType,
@@ -307,5 +310,19 @@ impl ProxyHttp for NylonRuntime {
             }
         }
         Ok(None)
+    }
+
+    /// Closes all session streams when the request is complete
+    async fn logging(
+        &self,
+        _session: &mut Session,
+        _e: Option<&pingora::Error>,
+        _ctx: &mut Self::CTX,
+    ) where
+        Self::CTX: Send + Sync,
+    {
+        for (_, stream) in std::mem::take(&mut _ctx.session_stream) {
+            let _ = stream.close().await;
+        }
     }
 }

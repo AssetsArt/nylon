@@ -4,7 +4,6 @@ use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_types::plugins::{FfiBuffer, FfiPlugin, SessionStream};
 use once_cell::sync::Lazy;
-use tracing::debug;
 use std::{
     collections::HashMap,
     sync::{
@@ -13,6 +12,7 @@ use std::{
     },
 };
 use tokio::sync::mpsc;
+use tracing::debug;
 
 // Active sessions
 type SessionSender = mpsc::UnboundedSender<(u32, Vec<u8>)>;
@@ -45,7 +45,10 @@ fn return_buffer(mut buffer: Vec<u8>) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn handle_ffi_event(session_id: u32, method: u32, data: *const FfiBuffer) {
-    debug!("handle_ffi_event: session_id={}, method={}", session_id, method);
+    debug!(
+        "handle_ffi_event: session_id={}, method={}",
+        session_id, method
+    );
 
     if data.is_null() {
         debug!("handle_ffi_event: data is null (no payload)");

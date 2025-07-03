@@ -103,8 +103,6 @@ func close_session_stream(sessionID C.uint32_t) {
 	sessionCallbacks.Delete(sid)
 	streamSessions.Delete(sid)
 	sessionIsOpen.Delete(sid)
-
-	fmt.Printf("[NylonPlugin] Closed session %d\n", sessionID)
 }
 
 // register_session_stream is called by the Rust backend when a new session is being created.
