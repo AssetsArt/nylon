@@ -1,6 +1,6 @@
 #![allow(clippy::type_complexity)]
 
-use crate::{route::MiddlewareItem, services::ServiceItem, template::Expr};
+use crate::{plugins::SessionStream, route::MiddlewareItem, services::ServiceItem, template::Expr};
 use pingora::lb::Backend;
 use std::collections::HashMap;
 
@@ -22,6 +22,7 @@ pub struct NylonContext {
     pub host: String,
     pub tls: bool,
     pub session_id: u32,
+    pub session_stream: HashMap<String, SessionStream>,
     pub add_response_header: HashMap<String, String>,
     pub remove_response_header: Vec<String>,
     pub set_response_status: u16,
@@ -39,6 +40,7 @@ impl Default for NylonContext {
             host: "".to_string(),
             tls: false,
             session_id: 0,
+            session_stream: HashMap::new(),
             // Response modifications
             add_response_header: HashMap::new(),
             remove_response_header: Vec::new(),

@@ -126,7 +126,15 @@ impl PluginSessionStream for SessionStream {
     }
 
     async fn close(&self) -> Result<(), NylonError> {
-        close_session(self.plugin.clone(), self.session_id).await
+        tokio::select! {
+            _ = close_session(self.plugin.clone(), self.session_id) => {
+                let _ = remove_rx(self.session_id).await;
+            }
+            _ = remove_rx(self.session_id) => {
+                let _ = close_session(self.plugin.clone(), self.session_id).await;
+            }
+        }
+        Ok(())
     }
 }
 
