@@ -34,15 +34,22 @@ pub async fn session_stream(
         let session_id = session_stream.open(entry).await?;
         ctx.session_id = session_id;
     }
-    // call phase
-    session_stream.event_stream(phase, 0, b"").await?;
     // loop rx
     let rx = get_rx(ctx.session_id).await?;
     let mut rx_guard = rx.lock().await;
+
     // add session stream to context
     ctx.session_stream
         .insert(plugin_name.to_string(), session_stream.clone());
+
+    // call phase
+    let session_stream_clone = session_stream.clone();
+    tokio::spawn(async move {
+        let _ = session_stream_clone.event_stream(phase, 0, b"").await;
+    });
+
     loop {
+        // wait for method
         tokio::select! {
             Some((method, data)) = rx_guard.recv() => {
                 if let Some(result) = SessionHandler::process_method(
