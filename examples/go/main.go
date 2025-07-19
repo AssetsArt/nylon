@@ -1,87 +1,61 @@
-//go:build cgo
-
 package main
 
 import "C"
 import (
-	"encoding/json"
 	"fmt"
-	"unsafe"
 
 	"github.com/AssetsArt/easy-proxy/sdk/go/sdk"
 )
 
+type PluginConfig struct {
+	Debug bool `json:"debug"`
+}
+
 func main() {}
-
-//export initialize
-func initialize(config *C.char, length C.int) {
-	configBytes := C.GoBytes(unsafe.Pointer(config), C.int(length))
-	configData := struct {
-		Debug bool `json:"debug"`
-	}{
-		Debug: false,
-	}
-	err := json.Unmarshal(configBytes, &configData)
-	if err != nil {
-		fmt.Println("[NylonPlugin] Error unmarshalling config", err)
-		return
-	}
-
-	// Print the config data
-	fmt.Println("[NylonPlugin] Plugin initialized", string(configBytes))
+func init() {
 
 	// Create a new plugin
 	plugin := sdk.NewNylonPlugin()
+
+	// Register initialize handler
+	plugin.Initialize(sdk.NewInitializer(func(config PluginConfig) {
+		fmt.Println("[NylonPlugin] Plugin initialized")
+		fmt.Println("[NylonPlugin] Config: Debug", config.Debug)
+	}))
 
 	// Register shutdown handler
 	plugin.Shutdown(func() {
 		fmt.Println("[NylonPlugin] Plugin shutdown")
 	})
 
+	// phase
+	// - RequestFilter // Can return a full response
+	//   |
+	//   V
+	// - ResponseFilter // Can modify the response headers
+	//   |
+	//   V
+	// - ResponseBodyFilter // Can modify the response body
+	//   |
+	//   V
+	// - Logging // Can log the request and response
+
 	// Register middleware
-	plugin.AddRequestFilter("authz", func(ctx *sdk.PhaseRequestFilter) {
-		// payload := ctx.GetPayload()
-		// fmt.Println("Payload", payload)
-
-		// read request body
-		// body := ctx.Request().ReadBody()
-		// fmt.Println("Request body", string(body))
-
-		// // set headers
-		ctx.Response().
-			SetHeader("x-authz", "true")
-
-		// read request headers
-		// host := ctx.Request().Header("host")
-		// fmt.Println("Request headers", host)
-
-		// next middleware
-		ctx.Next()
-	})
-
-	// example of streaming response
-	plugin.AddRequestFilter("stream_body", func(ctx *sdk.PhaseRequestFilter) {
-		res := ctx.Response()
-
-		// set status and headers
-		res.SetStatus(200)
-		res.SetHeader("Content-Type", "text/plain")
-
-		// Start streaming response
-		stream, err := res.Stream()
-		if err != nil {
-			fmt.Println("[NylonPlugin] Error streaming response", err)
-			ctx.Next()
-			return
-		}
-		stream.Write([]byte("Hello"))
-		w := ", World"
-		for i := 0; i < len(w); i++ {
-			stream.Write([]byte(w[i : i+1]))
+	plugin.AddPhaseHandler("authz", func(phase *sdk.PhaseHandler) {
+		fmt.Println("[Go] sessionID", phase.SessionId)
+		// Initialize phase state per request
+		myPhaseState := map[string]bool{
+			"authz": false,
 		}
 
-		// End streaming response
-		stream.End()
-	})
+		// Phase request filter
+		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
+			fmt.Println("[NylonPlugin] Authz phase")
+			myPhaseState["authz"] = true
 
+			payload := ctx.GetPayload()
+			fmt.Println("[NylonPlugin] Payload", payload)
+		})
+
+	})
 }

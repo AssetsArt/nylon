@@ -1,9 +1,34 @@
+//go:build cgo
+
 package sdk
 
 /*
-#include "../../../c/nylon.h"
-#include <string.h>
+#ifndef NYLON_H
+#define NYLON_H
+
 #include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+
+// Zero-copy data structure
+typedef struct {
+    uint32_t sid;
+    uint8_t phase;
+    uint32_t method;
+    const unsigned char *ptr;
+    uint64_t len;
+    uint64_t capacity;
+} FfiBuffer;
+
+// Event callback with optimized signature
+typedef void (*data_event_fn)(const FfiBuffer* ffiBuffer);
+
+// Inline wrapper for minimal overhead
+static inline void call_event_method(data_event_fn cb, const FfiBuffer* ffiBuffer) {
+    cb(ffiBuffer);
+}
+
+#endif // NYLON_H
 */
 import "C"
 import (
@@ -13,14 +38,6 @@ import (
 	"sync/atomic"
 	"unsafe"
 )
-
-// Import constants from constants.go
-
-// Import types from types.go
-
-// ====================
-// Session State Management
-// ====================
 
 var (
 	// Lock-free session management using atomic operations
@@ -33,6 +50,8 @@ var (
 
 	// Atomic shutdown handler
 	shutdownHandler atomic.Value
+	// Atomic initialize handler
+	initializeHandler atomic.Value
 
 	// Pre-allocated buffer pool for zero-copy operations
 	bufferPool = sync.Pool{
@@ -40,44 +59,41 @@ var (
 			return make([]byte, 0, 1024) // Pre-allocate with reasonable capacity
 		},
 	}
+
+	// phase handler map
+	phaseHandlerMap = sync.Map{}
+
+	// plugin instance
+	pluginInstance *NylonPlugin
 )
 
-// ====================
-// NylonPlugin API
-// ====================
+func NewInitializer[T any](fn func(config T)) func(map[string]interface{}) {
+	return func(raw map[string]interface{}) {
+		var cfg T
+		data, _ := json.Marshal(raw)
+		json.Unmarshal(data, &cfg)
+		fn(cfg)
+	}
+}
 
 // NewNylonPlugin creates a new NylonPlugin instance
 func NewNylonPlugin() *NylonPlugin {
-	return &NylonPlugin{}
+	if pluginInstance != nil {
+		fmt.Println("[NylonPlugin] Plugin instance already exists")
+		return pluginInstance
+	}
+	pluginInstance = &NylonPlugin{}
+	return pluginInstance
 }
 
-// Shutdown registers a function to be called when the plugin is shutting down.
-// This is useful for cleanup operations like closing database connections or
-// saving state before the plugin terminates.
+func (plugin *NylonPlugin) Initialize(fn func(map[string]interface{})) {
+	initializeHandler.Store(fn)
+}
+
 func (plugin *NylonPlugin) Shutdown(fn func()) {
 	shutdownHandler.Store(fn)
 }
 
-// AddRequestFilter registers a Go handler function for a specific entry point.
-// The handler will be called whenever a request matches the given entry name.
-// If a handler is already registered for the entry, a warning is logged and
-// the registration is skipped.
-func (plugin *NylonPlugin) AddRequestFilter(entry string, phasehandler func(ctx *PhaseRequestFilter)) {
-	handler := func(ctx *NylonHttpPluginCtx) {
-		phasehandler(ctx.RequestFilter())
-	}
-	if _, loaded := handlerMap.LoadOrStore(entry, handler); loaded {
-		fmt.Printf("[NylonPlugin] HttpPlugin already registered for entry=%s\n", entry)
-	}
-}
-
-// ====================
-// FFI Exported Functions
-// ====================
-
-// shutdown is called by the Rust backend when the plugin is being shut down.
-// It invokes the registered shutdown handler if one exists.
-//
 //export shutdown
 func shutdown() {
 	if handler := shutdownHandler.Load(); handler != nil {
@@ -87,16 +103,11 @@ func shutdown() {
 	}
 }
 
-// plugin_free is called by the Rust backend to free memory allocated by the plugin.
-//
 //export plugin_free
 func plugin_free(ptr *C.uchar) {
 	C.free(unsafe.Pointer(ptr))
 }
 
-// close_session_stream is called by the Rust backend when a session is being closed.
-// It cleans up all session-related data structures using lock-free operations.
-//
 //export close_session_stream
 func close_session_stream(sessionID C.uint32_t) {
 	sid := int(sessionID)
@@ -105,108 +116,76 @@ func close_session_stream(sessionID C.uint32_t) {
 	sessionIsOpen.Delete(sid)
 }
 
-// register_session_stream is called by the Rust backend when a new session is being created.
-// It looks up the appropriate handler for the entry point and creates a new session context.
-// Returns true if the session was successfully registered, false otherwise.
-//
-//export register_session_stream
-func register_session_stream(sessionID C.int, entry *C.char, length C.int, cb C.data_event_fn) bool {
-	entryName := C.GoStringN(entry, length)
+//export initialize
+func initialize(config *C.char, length C.int) {
+	// fmt.Println("[NylonPlugin] Plugin initialized")
+	if pluginInstance != nil {
+		configBytes := C.GoBytes(unsafe.Pointer(config), C.int(length))
+		if fn, ok := initializeHandler.Load().(func(map[string]interface{})); ok {
+			var configMap map[string]interface{}
+			json.Unmarshal(configBytes, &configMap)
+			fn(configMap)
+		}
 
-	// Lock-free handler lookup
-	handlerValue, exists := handlerMap.Load(entryName)
+		phaseHandlerMap.Range(func(key, _ interface{}) bool {
+			fmt.Println("[NylonPlugin] Phase handler", key)
+			return true
+		})
+	} else {
+		fmt.Println("[NylonPlugin] Plugin instance not found")
+	}
+}
+
+//export register_session_stream
+func register_session_stream(sessionID C.uint32_t, entry *C.char, length C.uint32_t, cb C.data_event_fn) bool {
+	entryName := C.GoStringN(entry, C.int(length))
+
+	handlerValue, exists := phaseHandlerMap.Load(entryName)
 	if !exists {
 		fmt.Printf("[NylonPlugin] No handler registered for entry=%s\n", entryName)
 		return false
 	}
 
-	handler, ok := handlerValue.(func(ctx *NylonHttpPluginCtx))
+	handler, ok := handlerValue.(func(phase *PhaseHandler))
 	if !ok {
 		fmt.Printf("[NylonPlugin] Invalid handler type for entry=%s\n", entryName)
 		return false
 	}
 
-	sid := int(sessionID)
-
-	// Lock-free session registration
-	sessionCallbacks.Store(sid, cb)
-
-	// Create session context with pre-allocated structures
-	ctx := &NylonHttpPluginCtx{
-		sessionID: sid,
-		dataMap:   make(map[uint32][]byte, 8), // Pre-allocate with expected capacity
+	phase := &PhaseHandler{
+		SessionId: int32(sessionID),
+		cb:        cb,
 	}
-	ctx.cond = sync.NewCond(&ctx.mu)
-	streamSessions.Store(sid, ctx)
-	sessionIsOpen.Store(sid, true)
 
-	// Invoke Go handler in a new goroutine
-	go handler(ctx)
+	handler(phase)
+	streamSessions.Store(int32(sessionID), phase)
 	return true
 }
 
-// event_stream is called by the Rust backend to send data to a specific session.
-// It stores the received data in the session's data map and notifies waiting goroutines.
-// Optimized for minimal latency with zero-copy operations where possible.
-//
 //export event_stream
-func event_stream(sessionID C.int, method C.uint32_t, data *C.char, length C.int) {
-	sid := int(sessionID)
-
+func event_stream(ffiBuffer *C.FfiBuffer) {
+	sid := int32(ffiBuffer.sid)
+	// fmt.Println("[NylonPlugin] Event stream", sid)
 	// Lock-free session lookup
-	ctxValue, exists := streamSessions.Load(sid)
+	phase, exists := streamSessions.Load(sid)
 	if !exists {
+		// fmt.Println("[NylonPlugin] Phase not found")
 		return
 	}
-
-	ctx, ok := ctxValue.(*NylonHttpPluginCtx)
+	// fmt.Println("[NylonPlugin] Phase", phase)
+	// cast phase to *PhaseHandler
+	phaseHandler, ok := phase.(*PhaseHandler)
 	if !ok {
+		// fmt.Println("[NylonPlugin] Phase handler not found")
 		return
 	}
-
-	ctx.mu.Lock()
-	defer ctx.mu.Unlock()
-
-	// Special case: notify without data (used for signaling)
-	if length == 0 {
-		ctx.cond.Broadcast()
-		return
+	// fmt.Println("[NylonPlugin] Phase handler", phaseHandler)
+	if ffiBuffer.phase == 1 {
+		phaseHandler.requestFilter(&PhaseRequestFilter{})
 	}
-
-	// Use buffer pool for zero-allocation data handling
-	var dataBytes []byte
-	if length > 0 {
-		// Get buffer from pool or create new one
-		if pooled := bufferPool.Get(); pooled != nil {
-			dataBytes = pooled.([]byte)
-			if cap(dataBytes) < int(length) {
-				dataBytes = make([]byte, length)
-			} else {
-				dataBytes = dataBytes[:length]
-			}
-		} else {
-			dataBytes = make([]byte, length)
-		}
-
-		// Copy data efficiently using Go's copy function
-		copy(dataBytes, (*[1 << 30]byte)(unsafe.Pointer(data))[:length:length])
-	}
-
-	// Store payload in session's data map
-	ctx.dataMap[uint32(method)] = dataBytes
-
-	// Notify waiting goroutines that data is available
-	ctx.cond.Broadcast()
 }
 
-// ====================
-// NylonPluginCtx Methods
-// ====================
-
-// RequestMethod calls into Rust using the FFI callback to execute a specific method.
-// It handles the conversion of Go data to C-compatible format and manages the FFI call.
-// Optimized for minimal latency with zero-copy operations where possible.
-func RequestMethod(sessionID int, method NylonMethods, data []byte) error {
+func RequestMethod(sessionID int, phase int8, method NylonMethods, data []byte) error {
 	// Lock-free callback lookup
 	cbValue, exists := sessionCallbacks.Load(sessionID)
 	if !exists {
@@ -232,70 +211,45 @@ func RequestMethod(sessionID int, method NylonMethods, data []byte) error {
 	methodID := MethodIDMapping[method]
 	C.call_event_method(
 		cb,
-		C.uint32_t(sessionID),
-		C.uint32_t(methodID),
 		&C.FfiBuffer{
+			sid:      C.uint32_t(sessionID),
+			phase:    C.uint8_t(phase),
+			method:   C.uint32_t(methodID),
 			ptr:      dataPtr,
-			len:      C.uint32_t(dataLen),
-			capacity: C.uint32_t(dataLen),
+			len:      C.uint64_t(dataLen),
+			capacity: C.uint64_t(dataLen),
 		},
 	)
 	return nil
 }
 
-// Next sends a 'next' request to Rust, indicating that the plugin should continue
-// processing the request pipeline.
-func (ctx *NylonHttpPluginCtx) Next() {
-	RequestMethod(ctx.sessionID, NylonMethodNext, nil)
-}
-
-// End sends an 'end' request to Rust, indicating that the plugin has finished
-// processing and the request should be terminated.
-func (ctx *NylonHttpPluginCtx) End() {
-	RequestMethod(ctx.sessionID, NylonMethodEnd, nil)
-}
-
-// GetPayload requests and waits for payload data from Rust.
-// It blocks until the payload is received and then decodes it as JSON.
-// Returns nil if no payload is available or if JSON decoding fails.
-// Optimized for minimal latency with buffer pooling.
-func (ctx *NylonHttpPluginCtx) GetPayload() map[string]any {
-	methodID := MethodIDMapping[NylonMethodGetPayload]
-
+func (ctx *NylonHttpPluginCtx) GetPayload(phase int8) map[string]any {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
 
-	// Request payload from Rust
-	RequestMethod(ctx.sessionID, NylonMethodGetPayload, nil)
+	RequestMethod(ctx.sessionID, phase, NylonMethodGetPayload, nil)
 
 	// Wait for response
 	ctx.cond.Wait()
-	payload, exists := ctx.dataMap[methodID]
+	payload, exists := ctx.dataMap[MethodIDMapping[NylonMethodGetPayload]]
 	if !exists {
 		return nil
 	}
-
-	// Decode JSON payload
-	var payloadMap map[string]any
-	if err := json.Unmarshal(payload, &payloadMap); err != nil {
-		fmt.Println("[NylonPlugin] JSON unmarshal error:", err)
-		return nil
-	}
-
-	// Return buffer to pool for reuse
-	if len(payload) > 0 {
-		// Reset slice but keep capacity for reuse
-		payload = payload[:0]
-		bufferPool.Put(payload)
-	}
-
-	return payloadMap
+	fmt.Println("[NylonPlugin] Payload", string(payload))
+	return nil
 }
 
-// RequestFilter creates and returns a PhaseRequestFilter instance that provides
-// access to both request and response objects for the current session.
-func (ctx *NylonHttpPluginCtx) RequestFilter() *PhaseRequestFilter {
-	return &PhaseRequestFilter{
-		ctx: ctx,
-	}
+type PhaseHandler struct {
+	SessionId     int32
+	cb            C.data_event_fn
+	requestFilter func(ctx *PhaseRequestFilter)
+}
+
+func (p *NylonPlugin) AddPhaseHandler(phaseName string, phaseHandler func(phase *PhaseHandler)) {
+	phaseHandlerMap.Store(phaseName, phaseHandler)
+}
+
+// PhaseHandler
+func (p *PhaseHandler) RequestFilter(phaseRequestFilter func(requestFilter *PhaseRequestFilter)) {
+	p.requestFilter = phaseRequestFilter
 }

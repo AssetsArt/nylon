@@ -1,17 +1,8 @@
-//! HTTP Proxy Implementation
-//!
-//! This module contains the core HTTP proxy functionality for Nylon,
-//! implementing the Pingora ProxyHttp trait to handle incoming requests,
-//! apply middleware filters, and route traffic to upstream services.
-
 use crate::{backend, context::NylonContextExt, response::Response, runtime::NylonRuntime};
 use async_trait::async_trait;
 use bytes::Bytes;
 use nylon_error::NylonError;
-use nylon_plugin::{
-    plugin_manager::PluginManager, run_middleware, stream::PluginSessionStream,
-    types::MiddlewareContext,
-};
+use nylon_plugin::{run_middleware, stream::PluginSessionStream, types::MiddlewareContext};
 use nylon_types::{context::NylonContext, services::ServiceType};
 use pingora::{
     ErrorType,
@@ -22,17 +13,6 @@ use pingora::{
 use std::time::Duration;
 use tracing::{error, info, warn};
 
-/// Helper function to handle error responses consistently
-///
-/// # Arguments
-///
-/// * `res` - The response object to modify
-/// * `session` - The HTTP session
-/// * `error` - The error to convert to an HTTP response
-///
-/// # Returns
-///
-/// * `pingora::Result<bool>` - Whether the request should end
 async fn handle_error_response<'a>(
     res: &'a mut Response<'a>,
     session: &'a mut Session,
@@ -47,16 +27,6 @@ async fn handle_error_response<'a>(
         .await
 }
 
-/// Helper function to process TLS redirects
-///
-/// # Arguments
-///
-/// * `host` - The request host
-/// * `tls` - Whether the request is already using TLS
-///
-/// # Returns
-///
-/// * `Option<String>` - The redirect URL if a redirect is needed
 fn process_tls_redirect(host: &str, tls: bool) -> Option<String> {
     if tls {
         return None;
@@ -76,18 +46,6 @@ fn process_tls_redirect(host: &str, tls: bool) -> Option<String> {
     }
 }
 
-/// Helper function to process middleware for a route
-///
-/// # Arguments
-///
-/// * `route` - The matched route
-/// * `params` - Route parameters
-/// * `ctx` - The request context
-/// * `session` - The HTTP session
-///
-/// # Returns
-///
-/// * `pingora::Result<bool>` - Whether the request should end
 async fn process_middleware(
     route: &nylon_types::context::Route,
     params: &std::collections::HashMap<String, String>,
@@ -99,15 +57,7 @@ async fn process_middleware(
         .route_middleware
         .iter()
         .flatten()
-        .chain(route.path_middleware.iter().flatten())
-        .filter(|m| {
-            m.0.request_filter.is_some()
-                || m.0
-                    .plugin
-                    .as_ref()
-                    .map(|name| PluginManager::is_request_filter(name))
-                    .unwrap_or(false)
-        });
+        .chain(route.path_middleware.iter().flatten());
 
     // Process each middleware item
     for middleware in middleware_items {
@@ -153,7 +103,7 @@ impl ProxyHttp for NylonRuntime {
     type CTX = NylonContext;
 
     fn new_ctx(&self) -> Self::CTX {
-        NylonContext::new()
+        NylonContext::default()
     }
 
     /// Handles incoming HTTP requests and applies middleware filters
@@ -254,6 +204,7 @@ impl ProxyHttp for NylonRuntime {
         Ok(Box::new(peer.clone()))
     }
 
+    /*
     /// Processes response filters for the request
     ///
     /// This method modifies the upstream response headers based on
@@ -325,4 +276,5 @@ impl ProxyHttp for NylonRuntime {
             let _ = stream.close().await;
         }
     }
+    */
 }

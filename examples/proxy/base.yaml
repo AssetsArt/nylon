@@ -23,12 +23,9 @@ services:
 middleware_groups:
   example:
     - plugin: plugin_sdk
-      request_filter: "authz"
+      entry: "authz"
       payload:
         client_ip: "${request(client_ip)}"
-
-    - plugin: plugin_sdk
-      request_filter: "stream_body"
 
     # - plugin: RequestHeaderModifier
     #   payload:
