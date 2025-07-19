@@ -74,11 +74,10 @@ pub async fn run_middleware(
     ctx: &mut NylonContext,
     session: &mut Session,
 ) -> Result<(bool, bool), NylonError> {
-    let (middleware, payload, payload_ast, _) = (
+    let (middleware, payload, payload_ast) = (
         &middleware_context.middleware,
         &middleware_context.payload,
         &middleware_context.payload_ast,
-        &middleware_context.params,
     );
     let (Some(plugin_name), Some(entry)) = (&middleware.plugin, &middleware.entry) else {
         return Ok((false, false));

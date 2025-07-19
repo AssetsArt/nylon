@@ -56,7 +56,17 @@ func init() {
 			payload := ctx.GetPayload()
 			fmt.Println("[NylonPlugin] Payload", payload)
 
+			response := ctx.Response()
+			response.SetHeader("X-RequestFilter", "authz-1")
+
 			// next phase
+			ctx.Next()
+		})
+
+		phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
+			fmt.Println("[NylonPlugin] Response filter")
+			response := ctx.Response()
+			response.SetHeader("X-ResponseFilter", "authz-2")
 			ctx.Next()
 		})
 

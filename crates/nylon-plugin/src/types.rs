@@ -17,7 +17,6 @@ pub struct MiddlewareContext {
     pub middleware: MiddlewareItem,
     pub payload: Option<Value>,
     pub payload_ast: Option<HashMap<String, Vec<Expr>>>,
-    pub params: Option<HashMap<String, String>>,
 }
 
 /// Result of plugin execution

@@ -27,6 +27,8 @@ pub struct NylonContext {
     pub remove_response_header: Vec<String>,
     pub set_response_status: u16,
     pub set_response_body: Vec<u8>,
+    pub read_body: bool,
+    pub request_body: Vec<u8>,
 }
 
 impl Default for NylonContext {
@@ -41,11 +43,16 @@ impl Default for NylonContext {
             tls: false,
             session_id: 0,
             session_stream: HashMap::new(),
+
             // Response modifications
             add_response_header: HashMap::new(),
             remove_response_header: Vec::new(),
             set_response_status: 200,
             set_response_body: Vec::new(),
+
+            // Request modifications
+            read_body: false,
+            request_body: Vec::new(),
         }
     }
 }

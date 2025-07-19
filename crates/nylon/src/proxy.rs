@@ -5,6 +5,7 @@ use nylon_plugin::{run_middleware, stream::PluginSessionStream, types::Middlewar
 use nylon_types::{context::NylonContext, services::ServiceType};
 use pingora::{
     ErrorType,
+    http::ResponseHeader,
     prelude::HttpPeer,
     proxy::{ProxyHttp, Session},
 };
@@ -44,29 +45,31 @@ fn process_tls_redirect(host: &str, tls: bool) -> Option<String> {
 }
 
 async fn process_middleware(
-    route: &nylon_types::context::Route,
-    params: &std::collections::HashMap<String, String>,
+    phase: u8,
     ctx: &mut NylonContext,
     session: &mut Session,
 ) -> pingora::Result<bool> {
     // Collect all middleware items from route and path levels
+    let Some(route) = &ctx.route else {
+        return Ok(false);
+    };
+    let path_middleware = &route.path_middleware;
     let middleware_items = route
         .route_middleware
         .iter()
         .flatten()
-        .chain(route.path_middleware.iter().flatten());
+        .chain(path_middleware.iter().flatten());
 
     // Process each middleware item
-    for middleware in middleware_items {
+    for middleware in middleware_items.cloned().collect::<Vec<_>>() {
         // debug!("Processing middleware: {:?}", middleware.0.plugin);
 
         match run_middleware(
-            1,
+            phase,
             &MiddlewareContext {
                 middleware: middleware.0.clone(),
                 payload: middleware.0.payload.clone(),
                 payload_ast: middleware.1.clone(),
-                params: Some(params.clone()),
             },
             ctx,
             session,
@@ -145,7 +148,7 @@ impl ProxyHttp for NylonRuntime {
         res.ctx.params = Some(params.clone());
 
         // Process middleware
-        match process_middleware(&route, &params, res.ctx, session).await {
+        match process_middleware(1, res.ctx, session).await {
             Ok(true) => return Ok(true),
             Ok(false) => {}
             Err(e) => {
@@ -203,36 +206,6 @@ impl ProxyHttp for NylonRuntime {
     }
 
     /*
-    /// Processes response filters for the request
-    ///
-    /// This method modifies the upstream response headers based on
-    /// the context modifications made by middleware.
-    async fn response_filter(
-        &self,
-        _session: &mut Session,
-        upstream_response: &mut ResponseHeader,
-        ctx: &mut Self::CTX,
-    ) -> pingora::Result<()>
-    where
-        Self::CTX: Send + Sync,
-    {
-        // Add response headers
-        for (key, value) in ctx.add_response_header.iter() {
-            let _ = upstream_response.append_header(key.to_ascii_lowercase(), value);
-        }
-
-        // Remove response headers
-        for key in ctx.remove_response_header.iter() {
-            let key = key.to_ascii_lowercase();
-            let _ = upstream_response.remove_header(&key);
-        }
-
-        // Set response status if modified
-        upstream_response.set_status(ctx.set_response_status)?;
-
-        Ok(())
-    }
-
     /// Processes response body filters
     ///
     /// This method modifies the response body based on context modifications.
@@ -261,6 +234,35 @@ impl ProxyHttp for NylonRuntime {
         Ok(None)
     }
     */
+
+    async fn response_filter(
+        &self,
+        session: &mut Session,
+        upstream_response: &mut ResponseHeader,
+        ctx: &mut Self::CTX,
+    ) -> pingora::Result<()>
+    where
+        Self::CTX: Send + Sync,
+    {
+        // Process middleware
+        let _ = process_middleware(2, ctx, session).await;
+
+        // Add response headers
+        for (key, value) in ctx.add_response_header.iter() {
+            let _ = upstream_response.append_header(key.to_ascii_lowercase(), value);
+        }
+
+        // Remove response headers
+        for key in ctx.remove_response_header.iter() {
+            let key = key.to_ascii_lowercase();
+            let _ = upstream_response.remove_header(&key);
+        }
+
+        // Set response status if modified
+        upstream_response.set_status(ctx.set_response_status)?;
+
+        Ok(())
+    }
 
     async fn logging(
         &self,
