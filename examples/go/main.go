@@ -55,6 +55,9 @@ func init() {
 
 			payload := ctx.GetPayload()
 			fmt.Println("[NylonPlugin] Payload", payload)
+
+			// next phase
+			ctx.Next()
 		})
 
 	})

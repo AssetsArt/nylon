@@ -1,16 +1,13 @@
 use crate::{backend, context::NylonContextExt, response::Response, runtime::NylonRuntime};
 use async_trait::async_trait;
-use bytes::Bytes;
 use nylon_error::NylonError;
-use nylon_plugin::{run_middleware, stream::PluginSessionStream, types::MiddlewareContext};
+use nylon_plugin::{run_middleware, types::MiddlewareContext};
 use nylon_types::{context::NylonContext, services::ServiceType};
 use pingora::{
     ErrorType,
-    http::ResponseHeader,
     prelude::HttpPeer,
     proxy::{ProxyHttp, Session},
 };
-use std::time::Duration;
 use tracing::{error, info, warn};
 
 async fn handle_error_response<'a>(
@@ -64,6 +61,7 @@ async fn process_middleware(
         // debug!("Processing middleware: {:?}", middleware.0.plugin);
 
         match run_middleware(
+            1,
             &MiddlewareContext {
                 middleware: middleware.0.clone(),
                 payload: middleware.0.payload.clone(),

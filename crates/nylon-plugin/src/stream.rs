@@ -25,13 +25,18 @@ static SESSION_RX: Lazy<Arc<Mutex<HashMap<u32, Arc<Mutex<UnboundedReceiver<(u32,
     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 
 #[unsafe(no_mangle)]
-pub extern "C" fn handle_ffi_event(session_id: u32, method: u32, data: *const FfiBuffer) {
+pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
+    let ffi = unsafe { &*data };
+    let session_id = ffi.sid;
+    let method = ffi.method;
+    // let phase = ffi.phase;
+    let len = ffi.len as usize;
+    let ptr = ffi.ptr;
     debug!(
         "handle_ffi_event: session_id={}, method={}",
         session_id, method
     );
-
-    if data.is_null() {
+    if ptr.is_null() {
         debug!("handle_ffi_event: data is null (no payload)");
         if let Ok(sessions) = ACTIVE_SESSIONS.read() {
             if let Some(sender) = sessions.get(&(session_id)) {
@@ -40,25 +45,9 @@ pub extern "C" fn handle_ffi_event(session_id: u32, method: u32, data: *const Ff
         }
         return;
     }
-
     unsafe {
-        let ffi = &*data;
-        let len = ffi.len as usize;
-        let ptr = ffi.ptr;
-
-        if ptr.is_null() || len == 0 {
-            debug!("handle_ffi_event: empty payload");
-            if let Ok(sessions) = ACTIVE_SESSIONS.read() {
-                if let Some(sender) = sessions.get(&(session_id)) {
-                    let _ = sender.send((method, Vec::new()));
-                }
-            }
-            return;
-        }
-
         let mut buf = Vec::with_capacity(len);
         buf.extend_from_slice(std::slice::from_raw_parts(ptr, len));
-
         if let Ok(sessions) = ACTIVE_SESSIONS.read() {
             if let Some(sender) = sessions.get(&(session_id)) {
                 if sender.send((method, buf)).is_err() {
@@ -81,8 +70,6 @@ pub trait PluginSessionStream {
 #[async_trait]
 impl PluginSessionStream for SessionStream {
     fn new(plugin: Arc<FfiPlugin>, session_id: u32) -> Self {
-        // let session_id = NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed);
-        // Self { plugin, session_id }
         if session_id == 0 {
             let session_id = NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed);
             Self { plugin, session_id }
@@ -125,19 +112,15 @@ impl PluginSessionStream for SessionStream {
     }
 
     async fn event_stream(&self, phase: u8, method: u32, data: &[u8]) -> Result<(), NylonError> {
-        println!(
-            "event_stream: phase={}, method={}, data={:?}",
-            phase, method, data
-        );
+        let ffi_buffer = &FfiBuffer {
+            sid: self.session_id,
+            phase,
+            method,
+            ptr: data.as_ptr(),
+            len: data.len() as u64,
+        };
         unsafe {
-            (*self.plugin.event_stream)(&FfiBuffer {
-                sid: self.session_id,
-                phase,
-                method,
-                ptr: data.as_ptr(),
-                len: data.len() as u32,
-                capacity: data.len() as u32,
-            });
+            (*self.plugin.event_stream)(ffi_buffer);
         }
         Ok(())
     }

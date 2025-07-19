@@ -10,20 +10,16 @@ package sdk
 #include <stdint.h>
 #include <string.h>
 
-// Zero-copy data structure
 typedef struct {
     uint32_t sid;
     uint8_t phase;
     uint32_t method;
     const unsigned char *ptr;
     uint64_t len;
-    uint64_t capacity;
 } FfiBuffer;
 
-// Event callback with optimized signature
 typedef void (*data_event_fn)(const FfiBuffer* ffiBuffer);
 
-// Inline wrapper for minimal overhead
 static inline void call_event_method(data_event_fn cb, const FfiBuffer* ffiBuffer) {
     cb(ffiBuffer);
 }
@@ -40,31 +36,11 @@ import (
 )
 
 var (
-	// Lock-free session management using atomic operations
-	sessionCallbacks = sync.Map{}
-	streamSessions   = sync.Map{}
-	sessionIsOpen    = sync.Map{}
-
-	// Lock-free handler map
-	handlerMap = sync.Map{}
-
-	// Atomic shutdown handler
-	shutdownHandler atomic.Value
-	// Atomic initialize handler
+	streamSessions    = sync.Map{}
+	shutdownHandler   atomic.Value
 	initializeHandler atomic.Value
-
-	// Pre-allocated buffer pool for zero-copy operations
-	bufferPool = sync.Pool{
-		New: func() interface{} {
-			return make([]byte, 0, 1024) // Pre-allocate with reasonable capacity
-		},
-	}
-
-	// phase handler map
-	phaseHandlerMap = sync.Map{}
-
-	// plugin instance
-	pluginInstance *NylonPlugin
+	phaseHandlerMap   = sync.Map{}
+	pluginInstance    *NylonPlugin
 )
 
 func NewInitializer[T any](fn func(config T)) func(map[string]interface{}) {
@@ -111,14 +87,11 @@ func plugin_free(ptr *C.uchar) {
 //export close_session_stream
 func close_session_stream(sessionID C.uint32_t) {
 	sid := int(sessionID)
-	sessionCallbacks.Delete(sid)
 	streamSessions.Delete(sid)
-	sessionIsOpen.Delete(sid)
 }
 
 //export initialize
 func initialize(config *C.char, length C.int) {
-	// fmt.Println("[NylonPlugin] Plugin initialized")
 	if pluginInstance != nil {
 		configBytes := C.GoBytes(unsafe.Pointer(config), C.int(length))
 		if fn, ok := initializeHandler.Load().(func(map[string]interface{})); ok {
@@ -128,7 +101,7 @@ func initialize(config *C.char, length C.int) {
 		}
 
 		phaseHandlerMap.Range(func(key, _ interface{}) bool {
-			fmt.Println("[NylonPlugin] Phase handler", key)
+			fmt.Println("[NylonPlugin] Added phase handler:", key)
 			return true
 		})
 	} else {
@@ -152,51 +125,70 @@ func register_session_stream(sessionID C.uint32_t, entry *C.char, length C.uint3
 		return false
 	}
 
-	phase := &PhaseHandler{
-		SessionId: int32(sessionID),
-		cb:        cb,
+	sid := int32(sessionID)
+	http_ctx := &NylonHttpPluginCtx{
+		sessionID: sid,
+		dataMap:   make(map[uint32][]byte, 8),
 	}
-
+	http_ctx.cond = sync.NewCond(&http_ctx.mu)
+	phase := &PhaseHandler{
+		SessionId: sid,
+		cb:        cb,
+		http_ctx:  http_ctx,
+	}
 	handler(phase)
-	streamSessions.Store(int32(sessionID), phase)
+	streamSessions.Store(sid, phase)
 	return true
 }
 
 //export event_stream
 func event_stream(ffiBuffer *C.FfiBuffer) {
 	sid := int32(ffiBuffer.sid)
-	// fmt.Println("[NylonPlugin] Event stream", sid)
-	// Lock-free session lookup
 	phase, exists := streamSessions.Load(sid)
 	if !exists {
-		// fmt.Println("[NylonPlugin] Phase not found")
 		return
 	}
-	// fmt.Println("[NylonPlugin] Phase", phase)
-	// cast phase to *PhaseHandler
 	phaseHandler, ok := phase.(*PhaseHandler)
 	if !ok {
-		// fmt.Println("[NylonPlugin] Phase handler not found")
 		return
 	}
-	// fmt.Println("[NylonPlugin] Phase handler", phaseHandler)
 	if ffiBuffer.phase == 1 {
-		phaseHandler.requestFilter(&PhaseRequestFilter{})
+		go func() {
+			phaseHandler.requestFilter(&PhaseRequestFilter{
+				ctx: phaseHandler.http_ctx,
+			})
+		}()
+	} else {
+		ctx := phaseHandler.http_ctx
+		ctx.mu.Lock()
+		defer ctx.mu.Unlock()
+		length := int(ffiBuffer.len)
+		if length == 0 {
+			ctx.cond.Broadcast()
+			return
+		}
+		method := ffiBuffer.method
+		data := ffiBuffer.ptr
+		var dataBytes []byte
+		if length > 0 {
+			dataBytes = make([]byte, length)
+			copy(dataBytes, (*[1 << 30]byte)(unsafe.Pointer(data))[:length:length])
+		}
+		ctx.dataMap[uint32(method)] = dataBytes
+		ctx.cond.Broadcast()
 	}
 }
 
-func RequestMethod(sessionID int, phase int8, method NylonMethods, data []byte) error {
-	// Lock-free callback lookup
-	cbValue, exists := sessionCallbacks.Load(sessionID)
+func RequestMethod(sessionID int32, phase int8, method NylonMethods, data []byte) error {
+	phaseSession, exists := streamSessions.Load(sessionID)
 	if !exists {
 		return fmt.Errorf("session %d not open", sessionID)
 	}
-
-	cb, ok := cbValue.(C.data_event_fn)
+	phaseHandler, ok := phaseSession.(*PhaseHandler)
 	if !ok {
 		return fmt.Errorf("invalid callback type for session %d", sessionID)
 	}
-
+	cb := phaseHandler.cb
 	var dataPtr *C.uchar
 	dataLen := len(data)
 	if dataLen > 0 {
@@ -207,17 +199,15 @@ func RequestMethod(sessionID int, phase int8, method NylonMethods, data []byte) 
 		C.memcpy(unsafe.Pointer(dataPtr), unsafe.Pointer(&data[0]), C.size_t(dataLen))
 		defer C.free(unsafe.Pointer(dataPtr))
 	}
-
 	methodID := MethodIDMapping[method]
 	C.call_event_method(
 		cb,
 		&C.FfiBuffer{
-			sid:      C.uint32_t(sessionID),
-			phase:    C.uint8_t(phase),
-			method:   C.uint32_t(methodID),
-			ptr:      dataPtr,
-			len:      C.uint64_t(dataLen),
-			capacity: C.uint64_t(dataLen),
+			sid:    C.uint32_t(sessionID),
+			phase:  C.uint8_t(phase),
+			method: C.uint32_t(methodID),
+			ptr:    dataPtr,
+			len:    C.uint64_t(dataLen),
 		},
 	)
 	return nil
@@ -226,22 +216,29 @@ func RequestMethod(sessionID int, phase int8, method NylonMethods, data []byte) 
 func (ctx *NylonHttpPluginCtx) GetPayload(phase int8) map[string]any {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
-
-	RequestMethod(ctx.sessionID, phase, NylonMethodGetPayload, nil)
-
-	// Wait for response
+	go RequestMethod(ctx.sessionID, phase, NylonMethodGetPayload, nil)
 	ctx.cond.Wait()
 	payload, exists := ctx.dataMap[MethodIDMapping[NylonMethodGetPayload]]
 	if !exists {
 		return nil
 	}
-	fmt.Println("[NylonPlugin] Payload", string(payload))
-	return nil
+	var payloadMap map[string]any
+	json.Unmarshal(payload, &payloadMap)
+	return payloadMap
+}
+
+func (ctx *NylonHttpPluginCtx) Next(phase int8) {
+	go RequestMethod(ctx.sessionID, phase, NylonMethodNext, nil)
+}
+
+func (ctx *NylonHttpPluginCtx) End(phase int8) {
+	go RequestMethod(ctx.sessionID, phase, NylonMethodEnd, nil)
 }
 
 type PhaseHandler struct {
 	SessionId     int32
 	cb            C.data_event_fn
+	http_ctx      *NylonHttpPluginCtx
 	requestFilter func(ctx *PhaseRequestFilter)
 }
 
@@ -249,7 +246,6 @@ func (p *NylonPlugin) AddPhaseHandler(phaseName string, phaseHandler func(phase 
 	phaseHandlerMap.Store(phaseName, phaseHandler)
 }
 
-// PhaseHandler
 func (p *PhaseHandler) RequestFilter(phaseRequestFilter func(requestFilter *PhaseRequestFilter)) {
 	p.requestFilter = phaseRequestFilter
 }

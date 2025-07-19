@@ -12,7 +12,7 @@ type NylonPlugin struct{}
 
 // NylonHttpPluginCtx represents a per-session context for HTTP plugin operations
 type NylonHttpPluginCtx struct {
-	sessionID int
+	sessionID int32
 
 	mu      sync.Mutex
 	cond    *sync.Cond

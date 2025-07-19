@@ -1,12 +1,3 @@
-use crate::{
-    plugin_manager::PluginManager,
-    stream::{PluginSessionStream, get_rx},
-    types::{BuiltinPlugin, MiddlewareContext},
-};
-use nylon_error::NylonError;
-use nylon_types::{context::NylonContext, plugins::SessionStream};
-use pingora::proxy::Session;
-
 pub mod constants;
 pub mod loaders;
 mod native;
@@ -15,22 +6,37 @@ pub mod session_handler;
 pub mod stream;
 pub mod types;
 
+use crate::{
+    plugin_manager::PluginManager,
+    session_handler::SessionHandler,
+    stream::{PluginSessionStream, get_rx},
+    types::{BuiltinPlugin, MiddlewareContext, PluginResult},
+};
+use nylon_error::NylonError;
+use nylon_types::{context::NylonContext, plugins::SessionStream, template::Expr};
+use pingora::proxy::Session;
+use std::collections::HashMap;
+
 /// Execute a session stream for a plugin
 pub async fn session_stream(
     plugin_name: &str,
+    phase: u8,
     entry: &str,
     ctx: &mut NylonContext,
-) -> Result<(), NylonError> {
+    session: &mut Session,
+    payload: &Option<serde_json::Value>,
+    payload_ast: &Option<HashMap<String, Vec<Expr>>>,
+) -> Result<PluginResult, NylonError> {
     let plugin = PluginManager::get_plugin(plugin_name)?;
-    let ss = SessionStream::new(plugin, ctx.session_id);
+    let session_stream = SessionStream::new(plugin, ctx.session_id);
     if ctx.session_id == 0 {
         // open session
-        let session_id = ss.open(entry).await?;
+        let session_id = session_stream.open(entry).await?;
         ctx.session_id = session_id;
     }
 
-    // call entry
-    ss.event_stream(1, 0, b"test").await?;
+    // call phase
+    session_stream.event_stream(phase, 0, b"").await?;
 
     // loop rx
     let rx = get_rx(ctx.session_id).await?;
@@ -39,23 +45,24 @@ pub async fn session_stream(
     loop {
         tokio::select! {
             Some((method, data)) = rx_guard.recv() => {
-                // if let Some(result) = SessionHandler::process_method(
-                //     method,
-                //     data,
-                //     ctx,
-                //     session,
-                //     &session_stream,
-                // ).await? {
-                //     return Ok(result);
-                // }
-                println!("method: {:?}, data: {:?}", method, data);
-                todo!("dddd")
+                if let Some(result) = SessionHandler::process_method(
+                    method,
+                    data,
+                    ctx,
+                    session,
+                    &session_stream,
+                    payload,
+                    payload_ast,
+                ).await? {
+                    return Ok(result);
+                }
             }
         }
     }
 }
 
 pub async fn run_middleware(
+    phase: u8,
     middleware_context: &MiddlewareContext,
     ctx: &mut NylonContext,
     session: &mut Session,
@@ -79,37 +86,17 @@ pub async fn run_middleware(
             Ok((false, false))
         }
         _ => {
-            /*
-            let headers = session.req_header_mut();
-            let payload: Option<Vec<u8>> = match payload.as_ref() {
-                Some(payload) => {
-                    let mut payload = payload.clone();
-                    if let Some(payload_ast) = payload_ast {
-                        apply_payload_ast(&mut payload, payload_ast, headers, ctx);
-                    }
-                    serde_json::to_vec(&payload).ok()
-                }
-                None => None,
-            };
-            */
-            // if let Some(request_filter) = &middleware.request_filter {
-            //     let result =
-            //         session_stream(plugin_name, request_filter, &payload, params, ctx, session)
-            //             .await?;
-            //     return Ok((result.http_end, result.stream_end));
-            // } else if let Some(_response_filter) = &middleware.response_filter {
-            //     // todo!("response filter");
-            // } else if let Some(_response_body_filter) = &middleware.response_body_filter {
-            //     // todo!("response body filter");
-            // } else if let Some(_logging) = &middleware.logging {
-            //     // todo!("logging");
-            // }
-
-            // println!("plugin_name: {}", plugin_name);
-            // println!("entry: {}", entry);
-            let result = session_stream(plugin_name, entry, ctx).await?;
-            println!("result: {:?}", result);
-            Ok((false, false))
+            let result = session_stream(
+                plugin_name,
+                phase,
+                entry,
+                ctx,
+                session,
+                &payload,
+                &payload_ast,
+            )
+            .await?;
+            Ok((result.http_end, result.stream_end))
         }
     }
 }

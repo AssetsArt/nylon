@@ -16,10 +16,10 @@ func (p *PhaseRequestFilter) GetPayload() map[string]any {
 	return p.ctx.GetPayload(1)
 }
 
-// func (p *PhaseRequestFilter) Next() {
-// 	p.ctx.Next()
-// }
+func (p *PhaseRequestFilter) Next() {
+	p.ctx.Next(1)
+}
 
-// func (p *PhaseRequestFilter) End() {
-// 	p.ctx.End()
-// }
+func (p *PhaseRequestFilter) End() {
+	p.ctx.End(1)
+}
