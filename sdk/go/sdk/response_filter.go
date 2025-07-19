@@ -13,13 +13,9 @@ func (ctx *PhaseResponseFilter) Response() *Response {
 }
 
 func (p *PhaseResponseFilter) GetPayload() map[string]any {
-	return p.ctx.GetPayload(1)
+	return p.ctx.GetPayload(2)
 }
 
 func (p *PhaseResponseFilter) Next() {
-	p.ctx.Next(1)
-}
-
-func (p *PhaseResponseFilter) End() {
-	p.ctx.End(1)
+	p.ctx.Next(2)
 }
