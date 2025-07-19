@@ -1,5 +1,8 @@
+use std::time::Duration;
+
 use crate::{backend, context::NylonContextExt, response::Response, runtime::NylonRuntime};
 use async_trait::async_trait;
+use bytes::Bytes;
 use nylon_error::NylonError;
 use nylon_plugin::{run_middleware, stream::PluginSessionStream, types::MiddlewareContext};
 use nylon_types::{context::NylonContext, services::ServiceType};
@@ -107,14 +110,6 @@ impl ProxyHttp for NylonRuntime {
         NylonContext::default()
     }
 
-    /// Handles incoming HTTP requests and applies middleware filters
-    ///
-    /// This method is called for each incoming HTTP request and performs:
-    /// 1. Request parsing and validation
-    /// 2. Route matching
-    /// 3. TLS redirect processing
-    /// 4. Middleware execution
-    /// 5. Backend selection
     async fn request_filter(
         &self,
         session: &mut Session,
@@ -180,16 +175,6 @@ impl ProxyHttp for NylonRuntime {
         Ok(false)
     }
 
-    /// Selects the upstream peer for the request
-    ///
-    /// # Arguments
-    ///
-    /// * `_session` - The HTTP session (unused)
-    /// * `ctx` - The request context containing backend information
-    ///
-    /// # Returns
-    ///
-    /// * `pingora::Result<Box<HttpPeer>>` - The selected upstream peer
     async fn upstream_peer(
         &self,
         _session: &mut Session,
@@ -204,36 +189,6 @@ impl ProxyHttp for NylonRuntime {
         })?;
         Ok(Box::new(peer.clone()))
     }
-
-    /*
-    /// Processes response body filters
-    ///
-    /// This method modifies the response body based on context modifications.
-    fn response_body_filter(
-        &self,
-        _session: &mut Session,
-        body: &mut Option<Bytes>,
-        _end_of_stream: bool,
-        ctx: &mut Self::CTX,
-    ) -> pingora::Result<Option<Duration>>
-    where
-        Self::CTX: Send + Sync,
-    {
-        if !ctx.set_response_body.is_empty() {
-            if let Some(old_body) = body {
-                let mut rs_body = old_body.to_vec();
-                rs_body.extend_from_slice(&ctx.set_response_body);
-                ctx.set_response_body.clear();
-                *body = Some(Bytes::from(rs_body));
-            } else {
-                let rs_body = Bytes::from(ctx.set_response_body.to_vec());
-                ctx.set_response_body.clear();
-                *body = Some(rs_body);
-            }
-        }
-        Ok(None)
-    }
-    */
 
     async fn response_filter(
         &self,
@@ -262,6 +217,31 @@ impl ProxyHttp for NylonRuntime {
         upstream_response.set_status(ctx.set_response_status)?;
 
         Ok(())
+    }
+
+    fn response_body_filter(
+        &self,
+        _session: &mut Session,
+        body: &mut Option<Bytes>,
+        _end_of_stream: bool,
+        ctx: &mut Self::CTX,
+    ) -> pingora::Result<Option<Duration>>
+    where
+        Self::CTX: Send + Sync,
+    {
+        if !ctx.set_response_body.is_empty() {
+            if let Some(old_body) = body {
+                let mut rs_body = old_body.to_vec();
+                rs_body.extend_from_slice(&ctx.set_response_body);
+                ctx.set_response_body.clear();
+                *body = Some(Bytes::from(rs_body));
+            } else {
+                let rs_body = Bytes::from(ctx.set_response_body.to_vec());
+                ctx.set_response_body.clear();
+                *body = Some(rs_body);
+            }
+        }
+        Ok(None)
     }
 
     async fn logging(
