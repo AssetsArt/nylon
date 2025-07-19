@@ -226,10 +226,10 @@ func RequestMethod(sessionID int32, phase int8, method NylonMethods, data []byte
 	return nil
 }
 
-func (ctx *NylonHttpPluginCtx) GetPayload(phase int8) map[string]any {
+func (ctx *NylonHttpPluginCtx) GetPayload() map[string]any {
 	ctx.mu.Lock()
 	defer ctx.mu.Unlock()
-	go RequestMethod(ctx.sessionID, phase, NylonMethodGetPayload, nil)
+	go RequestMethod(ctx.sessionID, 0, NylonMethodGetPayload, nil)
 	ctx.cond.Wait()
 	payload, exists := ctx.dataMap[MethodIDMapping[NylonMethodGetPayload]]
 	if !exists {
@@ -240,12 +240,12 @@ func (ctx *NylonHttpPluginCtx) GetPayload(phase int8) map[string]any {
 	return payloadMap
 }
 
-func (ctx *NylonHttpPluginCtx) Next(phase int8) {
-	go RequestMethod(ctx.sessionID, phase, NylonMethodNext, nil)
+func (ctx *NylonHttpPluginCtx) Next() {
+	go RequestMethod(ctx.sessionID, 0, NylonMethodNext, nil)
 }
 
-func (ctx *NylonHttpPluginCtx) End(phase int8) {
-	go RequestMethod(ctx.sessionID, phase, NylonMethodEnd, nil)
+func (ctx *NylonHttpPluginCtx) End() {
+	go RequestMethod(ctx.sessionID, 0, NylonMethodEnd, nil)
 }
 
 type PhaseHandler struct {

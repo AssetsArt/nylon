@@ -21,10 +21,24 @@ func (p *PhaseResponseFilter) SetResponseStatus(status uint16) {
 	httpCtx.SetStatus(status)
 }
 
+func (p *PhaseResponseFilter) GetRequestHeader(key string) string {
+	httpCtx := Request{
+		ctx: p.ctx,
+	}
+	return httpCtx.Headers().Get(key)
+}
+
+func (p *PhaseResponseFilter) GetRequestHeaders() map[string]string {
+	httpCtx := Request{
+		ctx: p.ctx,
+	}
+	return httpCtx.Headers().GetAll()
+}
+
 func (p *PhaseResponseFilter) GetPayload() map[string]any {
-	return p.ctx.GetPayload(2)
+	return p.ctx.GetPayload()
 }
 
 func (p *PhaseResponseFilter) Next() {
-	p.ctx.Next(2)
+	p.ctx.Next()
 }

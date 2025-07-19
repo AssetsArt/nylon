@@ -13,13 +13,13 @@ func (ctx *PhaseRequestFilter) Response() *Response {
 }
 
 func (p *PhaseRequestFilter) GetPayload() map[string]any {
-	return p.ctx.GetPayload(1)
+	return p.ctx.GetPayload()
 }
 
 func (p *PhaseRequestFilter) Next() {
-	p.ctx.Next(1)
+	p.ctx.Next()
 }
 
 func (p *PhaseRequestFilter) End() {
-	p.ctx.End(1)
+	p.ctx.End()
 }
