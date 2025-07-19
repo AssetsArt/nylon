@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use crate::{backend, context::NylonContextExt, response::Response, runtime::NylonRuntime};
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -12,6 +10,7 @@ use pingora::{
     prelude::HttpPeer,
     proxy::{ProxyHttp, Session},
 };
+use std::time::Duration;
 use tracing::{error, info, warn};
 
 async fn handle_error_response<'a>(
