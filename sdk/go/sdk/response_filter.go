@@ -1,15 +1,24 @@
 package sdk
 
-func (ctx *PhaseResponseFilter) Request() *Request {
-	return &Request{
-		ctx: ctx.ctx,
+func (p *PhaseResponseFilter) SetResponseHeader(key, value string) {
+	httpCtx := Response{
+		ctx: p.ctx,
 	}
+	httpCtx.SetHeader(key, value)
 }
 
-func (ctx *PhaseResponseFilter) Response() *Response {
-	return &Response{
-		ctx: ctx.ctx,
+func (p *PhaseResponseFilter) RemoveResponseHeader(key string) {
+	httpCtx := Response{
+		ctx: p.ctx,
 	}
+	httpCtx.RemoveHeader(key)
+}
+
+func (p *PhaseResponseFilter) SetResponseStatus(status uint16) {
+	httpCtx := Response{
+		ctx: p.ctx,
+	}
+	httpCtx.SetStatus(status)
 }
 
 func (p *PhaseResponseFilter) GetPayload() map[string]any {

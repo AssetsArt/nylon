@@ -65,8 +65,8 @@ func init() {
 
 		phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 			fmt.Println("[NylonPlugin] Response filter")
-			response := ctx.Response()
-			response.SetHeader("X-ResponseFilter", "authz-2")
+			ctx.SetResponseHeader("X-ResponseFilter", "authz-2")
+
 			ctx.Next()
 		})
 
