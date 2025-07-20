@@ -4,9 +4,11 @@ use std::sync::Arc;
 
 #[repr(C)]
 pub struct FfiBuffer {
+    pub sid: u32,
+    pub phase: u8,
+    pub method: u32,
     pub ptr: *const u8,
-    pub len: u32,
-    pub capacity: u32,
+    pub len: u64,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -37,8 +39,8 @@ pub struct PluginItem {
 pub type FfiInitializeFn = unsafe extern "C" fn(*const u8, u32);
 pub type FfiPluginFreeFn = unsafe extern "C" fn(*mut u8);
 pub type FfiRegisterSessionFn =
-    unsafe extern "C" fn(u32, *const u8, u32, extern "C" fn(u32, u32, *const FfiBuffer)) -> bool;
-pub type FfiEventStreamFn = unsafe extern "C" fn(u32, u32, *const FfiBuffer);
+    unsafe extern "C" fn(u32, *const u8, u32, extern "C" fn(*const FfiBuffer)) -> bool;
+pub type FfiEventStreamFn = unsafe extern "C" fn(*const FfiBuffer);
 pub type FfiCloseSessionFn = unsafe extern "C" fn(u32);
 pub type FfiShutdownFn = unsafe extern "C" fn();
 

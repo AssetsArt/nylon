@@ -1,29 +1,22 @@
-// nylon.h - FFI Interface
 #ifndef NYLON_H
 #define NYLON_H
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
-// Zero-copy data structure
 typedef struct {
+    uint32_t sid;
+    uint8_t phase;
+    uint32_t method;
     const unsigned char *ptr;
-    uint32_t len;
-    uint32_t capacity;  // For potential reuse
+    uint64_t len;
 } FfiBuffer;
 
-// Optimized output structure
-typedef struct {
-    FfiBuffer buffer;
-    uint32_t flags;  // For metadata without additional allocations
-} FfiOutput;
+typedef void (*data_event_fn)(const FfiBuffer* ffiBuffer);
 
-// Event callback with optimized signature
-typedef void (*data_event_fn)(uint32_t session_id, uint32_t method, const FfiBuffer* data);
-
-// Inline wrapper for minimal overhead
-static inline void call_event_method(data_event_fn cb, uint32_t session_id, uint32_t method, const FfiBuffer* data) {
-    cb(session_id, method, data);
+static inline void call_event_method(data_event_fn cb, const FfiBuffer* ffiBuffer) {
+    cb(ffiBuffer);
 }
 
 #endif // NYLON_H

@@ -1,5 +1,7 @@
 //! Session handling and stream management for plugins
 
+use std::collections::HashMap;
+
 use crate::{constants::methods, stream::PluginSessionStream, types::PluginResult};
 use bytes::Bytes;
 use http::{HeaderMap, HeaderValue};
@@ -7,7 +9,11 @@ use nylon_error::NylonError;
 use nylon_sdk::fbs::plugin_generated::nylon_plugin::{
     HeaderKeyValue, HeaderKeyValueArgs, NylonHttpHeaders, NylonHttpHeadersArgs,
 };
-use nylon_types::{context::NylonContext, plugins::SessionStream};
+use nylon_types::{
+    context::NylonContext,
+    plugins::SessionStream,
+    template::{Expr, apply_payload_ast},
+};
 use pingora::{http::ResponseHeader, protocols::http::HttpTask, proxy::Session};
 
 /// Handles session stream operations for plugins
@@ -21,11 +27,14 @@ impl SessionHandler {
         ctx: &mut NylonContext,
         session: &mut Session,
         session_stream: &SessionStream,
+        payload: &Option<serde_json::Value>,
+        payload_ast: &Option<HashMap<String, Vec<Expr>>>,
     ) -> Result<Option<PluginResult>, NylonError> {
         match method {
             // Control methods
             methods::GET_PAYLOAD => {
-                Self::handle_get_payload(session_stream, &data).await?;
+                Self::handle_get_payload(ctx, session, session_stream, payload, payload_ast)
+                    .await?;
                 Ok(None)
             }
             methods::NEXT => Ok(Some(PluginResult::default())),
@@ -88,11 +97,26 @@ impl SessionHandler {
     }
 
     async fn handle_get_payload(
+        ctx: &mut NylonContext,
+        session: &mut Session,
         session_stream: &SessionStream,
-        payload: &[u8],
+        payload: &Option<serde_json::Value>,
+        payload_ast: &Option<HashMap<String, Vec<Expr>>>,
     ) -> Result<(), NylonError> {
+        let headers = session.req_header_mut();
+        let payload: Option<Vec<u8>> = match payload.as_ref() {
+            Some(payload) => {
+                let mut payload = payload.clone();
+                if let Some(payload_ast) = payload_ast {
+                    apply_payload_ast(&mut payload, payload_ast, headers, ctx);
+                }
+                serde_json::to_vec(&payload).ok()
+            }
+            None => None,
+        };
+        let payload_slice = payload.as_ref().map(|p| p.as_slice()).unwrap_or_default();
         session_stream
-            .event_stream(methods::GET_PAYLOAD, payload)
+            .event_stream(0, methods::GET_PAYLOAD, payload_slice)
             .await
     }
 
@@ -187,7 +211,7 @@ impl SessionHandler {
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
         session_stream
-            .event_stream(methods::READ_RESPONSE_FULL_BODY, &ctx.set_response_body)
+            .event_stream(0, methods::READ_RESPONSE_FULL_BODY, &ctx.set_response_body)
             .await
     }
 
@@ -204,7 +228,7 @@ impl SessionHandler {
             }
         }
         session_stream
-            .event_stream(methods::READ_REQUEST_FULL_BODY, &ctx.request_body)
+            .event_stream(0, methods::READ_REQUEST_FULL_BODY, &ctx.request_body)
             .await
     }
 
@@ -221,12 +245,12 @@ impl SessionHandler {
             };
             if let Some(value) = headers.get(&read_key) {
                 session_stream
-                    .event_stream(methods::READ_REQUEST_HEADER, value.as_bytes())
+                    .event_stream(0, methods::READ_REQUEST_HEADER, value.as_bytes())
                     .await?;
             }
         } else {
             session_stream
-                .event_stream(methods::READ_REQUEST_HEADER, &[])
+                .event_stream(0, methods::READ_REQUEST_HEADER, &[])
                 .await?;
         }
         Ok(())
@@ -267,7 +291,7 @@ impl SessionHandler {
         fbs.finish(headers, None);
         let headers = fbs.finished_data();
         session_stream
-            .event_stream(methods::READ_REQUEST_HEADERS, headers)
+            .event_stream(0, methods::READ_REQUEST_HEADERS, headers)
             .await
     }
 }

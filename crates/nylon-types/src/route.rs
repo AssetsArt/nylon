@@ -5,10 +5,7 @@ use serde_json::Value;
 pub struct MiddlewareItem {
     pub group: Option<String>,
     pub plugin: Option<String>,
-    pub request_filter: Option<String>,
-    pub response_filter: Option<String>,
-    pub response_body_filter: Option<String>,
-    pub logging: Option<String>,
+    pub entry: Option<String>,
     pub payload: Option<serde_json::Value>,
 }
 
