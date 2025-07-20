@@ -27,6 +27,10 @@ middleware_groups:
       payload:
         client_ip: "${request(client_ip)}"
 
+    - plugin: plugin_sdk
+      entry: "stream"
+
+
     # - plugin: RequestHeaderModifier
     #   payload:
     #     remove:

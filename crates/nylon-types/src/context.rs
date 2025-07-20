@@ -21,7 +21,7 @@ pub struct NylonContext {
     pub params: Option<HashMap<String, String>>,
     pub host: String,
     pub tls: bool,
-    pub session_id: u32,
+    pub session_ids: HashMap<String, u32>,
     pub session_stream: HashMap<String, SessionStream>,
     pub add_response_header: HashMap<String, String>,
     pub remove_response_header: Vec<String>,
@@ -41,7 +41,7 @@ impl Default for NylonContext {
             params: None,
             host: "".to_string(),
             tls: false,
-            session_id: 0,
+            session_ids: HashMap::new(),
             session_stream: HashMap::new(),
 
             // Response modifications

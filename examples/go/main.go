@@ -71,4 +71,31 @@ func init() {
 		})
 
 	})
+
+	plugin.AddPhaseHandler("stream", func(phase *sdk.PhaseHandler) {
+		fmt.Println("[NylonPlugin] Stream phase")
+		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
+			fmt.Println("[NylonPlugin] Stream request filter")
+			res := ctx.Response()
+			// set status and headers
+			res.SetStatus(200)
+			res.SetHeader("Content-Type", "text/plain")
+
+			// Start streaming response
+			stream, err := res.Stream()
+			if err != nil {
+				fmt.Println("[NylonPlugin] Error streaming response", err)
+				ctx.Next()
+				return
+			}
+			stream.Write([]byte("Hello"))
+			w := ", World"
+			for i := 0; i < len(w); i++ {
+				stream.Write([]byte(w[i : i+1]))
+			}
+
+			// End streaming response
+			stream.End()
+		})
+	})
 }

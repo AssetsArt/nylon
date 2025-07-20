@@ -28,14 +28,18 @@ pub async fn session_stream(
     payload_ast: &Option<HashMap<String, Vec<Expr>>>,
 ) -> Result<PluginResult, NylonError> {
     let plugin = PluginManager::get_plugin(plugin_name)?;
-    let session_stream = SessionStream::new(plugin, ctx.session_id);
-    if ctx.session_id == 0 {
+    let key = format!("{}-{}", plugin_name, entry);
+    let mut session_id = ctx.session_ids.get(&key).unwrap_or(&0).clone();
+    let session_stream = SessionStream::new(plugin, session_id);
+    if session_id == 0 {
         // open session
-        let session_id = session_stream.open(entry).await?;
-        ctx.session_id = session_id;
+        let new_session_id = session_stream.open(entry).await?;
+        session_id = new_session_id;
+        ctx.session_ids.insert(key, new_session_id);
     }
+    // println!("session_id: {}", session_id);
     // loop rx
-    let rx = get_rx(ctx.session_id).await?;
+    let rx = get_rx(session_id.clone()).await?;
     let mut rx_guard = rx.lock().await;
 
     // add session stream to context
