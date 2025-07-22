@@ -1,7 +1,3 @@
-//! Session handling and stream management for plugins
-
-use std::collections::HashMap;
-
 use crate::{constants::methods, stream::PluginSessionStream, types::PluginResult};
 use bytes::Bytes;
 use http::{HeaderMap, HeaderValue};
@@ -14,14 +10,20 @@ use nylon_types::{
     plugins::SessionStream,
     template::{Expr, apply_payload_ast},
 };
-use pingora::{http::ResponseHeader, protocols::http::HttpTask, proxy::Session};
+use pingora::{
+    http::ResponseHeader,
+    protocols::http::HttpTask,
+    proxy::{ProxyHttp, Session},
+};
+use std::collections::HashMap;
 
 /// Handles session stream operations for plugins
 pub struct SessionHandler;
 
 impl SessionHandler {
     /// Process a method from the plugin session stream
-    pub async fn process_method(
+    pub async fn process_method<'a, T>(
+        proxy: &T,
         method: u32,
         data: Vec<u8>,
         ctx: &mut NylonContext,
@@ -29,7 +31,12 @@ impl SessionHandler {
         session_stream: &SessionStream,
         payload: &Option<serde_json::Value>,
         payload_ast: &Option<HashMap<String, Vec<Expr>>>,
-    ) -> Result<Option<PluginResult>, NylonError> {
+    ) -> Result<Option<PluginResult>, NylonError>
+    where
+        T: ProxyHttp + Send + Sync,
+        <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
+    {
+        // println!("method: {}, sid: {}", method, session_stream.session_id);
         match method {
             // Control methods
             methods::GET_PAYLOAD => {
@@ -58,7 +65,7 @@ impl SessionHandler {
                 Ok(None)
             }
             methods::SET_RESPONSE_STREAM_HEADER => {
-                Self::handle_set_response_stream_header(ctx, session).await?;
+                Self::handle_set_response_stream_header(proxy, ctx, session).await?;
                 Ok(None)
             }
             methods::SET_RESPONSE_STREAM_DATA => {
@@ -159,23 +166,23 @@ impl SessionHandler {
         Ok(())
     }
 
-    async fn handle_set_response_stream_header(
-        ctx: &mut NylonContext,
+    async fn handle_set_response_stream_header<'a, T>(
+        proxy: &T,
+        ctx: &'a mut NylonContext,
         session: &mut Session,
-    ) -> Result<(), NylonError> {
+    ) -> Result<(), NylonError>
+    where
+        T: ProxyHttp + Send + Sync,
+        <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
+    {
         let mut headers = ResponseHeader::build(ctx.set_response_status, None)
             .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
 
-        // Add headers
-        for (key, value) in ctx.add_response_header.iter() {
-            let _ = headers.append_header(key.to_ascii_lowercase(), value);
-        }
-
-        // Remove headers
-        for key in ctx.remove_response_header.iter() {
-            let key = key.to_ascii_lowercase();
-            let _ = headers.remove_header(&key);
-        }
+        let mut proxy_ctx: <T as ProxyHttp>::CTX = ctx.clone().into();
+        proxy
+            .response_filter(session, &mut headers, &mut proxy_ctx)
+            .await
+            .map_err(|e| NylonError::ConfigError(format!("Error sending response: {}", e)))?;
 
         let tasks = vec![HttpTask::Header(Box::new(headers), false)];
         session

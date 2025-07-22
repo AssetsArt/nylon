@@ -21,8 +21,10 @@ type SessionSender = mpsc::UnboundedSender<(u32, Vec<u8>)>;
 static ACTIVE_SESSIONS: Lazy<RwLock<HashMap<u32, SessionSender>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
-static SESSION_RX: Lazy<Arc<Mutex<HashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+// static SESSION_RX: Lazy<Arc<Mutex<HashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>>>> =
+//     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+static SESSION_RX: Lazy<Mutex<HashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 #[unsafe(no_mangle)]
 pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
@@ -48,10 +50,15 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
     unsafe {
         let mut buf = Vec::with_capacity(len);
         buf.extend_from_slice(std::slice::from_raw_parts(ptr, len));
+        // println!("send: {:?} {}", buf, session_id);
         if let Ok(sessions) = ACTIVE_SESSIONS.read() {
             if let Some(sender) = sessions.get(&(session_id)) {
-                if sender.send((method, buf)).is_err() {
-                    // Consumed
+                // println!("send: {} {:?}", session_id, sender);
+                match sender.send((method, buf)) {
+                    Ok(_) => {}
+                    Err(_) => {
+                        debug!("send error: {:?}", session_id);
+                    }
                 }
             }
         }
@@ -105,8 +112,12 @@ impl PluginSessionStream for SessionStream {
             }
         }
         {
-            let mut sessions = SESSION_RX.lock().await;
-            sessions.insert(self.session_id, Arc::new(Mutex::new(rx)));
+            // let mut sessions = SESSION_RX.lock().await;
+            // sessions.insert(self.session_id, Arc::new(Mutex::new(rx)));
+            {
+                let mut sessions = SESSION_RX.lock().await;
+                sessions.insert(self.session_id, Arc::new(Mutex::new(rx)));
+            }
         }
         Ok(self.session_id)
     }
@@ -126,14 +137,7 @@ impl PluginSessionStream for SessionStream {
     }
 
     async fn close(&self) -> Result<(), NylonError> {
-        tokio::select! {
-            _ = close_session(self.plugin.clone(), self.session_id) => {
-                let _ = remove_rx(self.session_id).await;
-            }
-            _ = remove_rx(self.session_id) => {
-                let _ = close_session(self.plugin.clone(), self.session_id).await;
-            }
-        }
+        let _ = close_session(self.plugin.clone(), self.session_id).await?;
         Ok(())
     }
 }
@@ -142,30 +146,29 @@ pub async fn close_session(plugin: Arc<FfiPlugin>, session_id: u32) -> Result<()
     unsafe {
         (*plugin.close_session)(session_id);
     }
-
     if let Ok(mut sessions) = ACTIVE_SESSIONS.write() {
         sessions.remove(&session_id);
     }
     Ok(())
 }
 
-pub async fn get_rx(
+pub fn get_rx(
     session_id: u32,
 ) -> Result<Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>, NylonError> {
-    let sessions = SESSION_RX.lock().await;
-
-    sessions
-        .get(&session_id)
-        .cloned()
-        .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))
-}
-
-pub async fn remove_rx(session_id: u32) -> Result<(), NylonError> {
-    let mut sessions = SESSION_RX.lock().await;
-
-    sessions
-        .remove(&session_id)
-        .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))?;
-
-    Ok(())
+    let sessions = SESSION_RX.try_lock();
+    // sessions
+    //     .get(&session_id)
+    //     .cloned()
+    //     .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))
+    //     .map(|arc| arc.clone())
+    match sessions {
+        Ok(sessions) => sessions
+            .get(&session_id)
+            .cloned()
+            .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))
+            .map(|arc| arc.clone()),
+        Err(_) => Err(NylonError::ConfigError(format!(
+            "Failed to lock SESSION_RX"
+        ))),
+    }
 }

@@ -46,11 +46,16 @@ fn process_tls_redirect(host: &str, tls: bool) -> Option<String> {
     }
 }
 
-async fn process_middleware(
+async fn process_middleware<T>(
+    proxy: &T,
     phase: u8,
     ctx: &mut NylonContext,
     session: &mut Session,
-) -> pingora::Result<bool> {
+) -> pingora::Result<bool>
+where
+    T: ProxyHttp + Send + Sync,
+    <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
+{
     // Collect all middleware items from route and path levels
     let Some(route) = &ctx.route else {
         return Ok(false);
@@ -67,6 +72,7 @@ async fn process_middleware(
         // debug!("Processing middleware: {:?}", middleware.0.plugin);
 
         match run_middleware(
+            proxy,
             phase,
             &MiddlewareContext {
                 middleware: middleware.0.clone(),
@@ -142,7 +148,7 @@ impl ProxyHttp for NylonRuntime {
         res.ctx.params = Some(params.clone());
 
         // Process middleware
-        match process_middleware(1, res.ctx, session).await {
+        match process_middleware(self, 1, res.ctx, session).await {
             Ok(true) => return Ok(true),
             Ok(false) => {}
             Err(e) => {
@@ -199,7 +205,7 @@ impl ProxyHttp for NylonRuntime {
         Self::CTX: Send + Sync,
     {
         // Process middleware
-        let _ = process_middleware(2, ctx, session).await;
+        let _ = process_middleware(self, 2, ctx, session).await;
 
         // Add response headers
         for (key, value) in ctx.add_response_header.iter() {
@@ -247,12 +253,12 @@ impl ProxyHttp for NylonRuntime {
         &self,
         _session: &mut Session,
         _e: Option<&pingora::Error>,
-        _ctx: &mut Self::CTX,
+        ctx: &mut Self::CTX,
     ) where
         Self::CTX: Send + Sync,
     {
-        for (_, stream) in std::mem::take(&mut _ctx.session_stream) {
-            let _ = stream.close();
+        for (_, stream) in ctx.session_stream.iter() {
+            let _ = stream.close().await;
         }
     }
 }
