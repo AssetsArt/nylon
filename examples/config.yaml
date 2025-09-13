@@ -24,14 +24,14 @@ pingora:
 
 # WebSocket adapter configuration
 # If not specified, defaults to memory adapter
-websocket:
-  # Adapter type: memory, redis, or cluster
-  adapter_type: redis
+# websocket:
+#   # Adapter type: memory, redis, or cluster
+#   adapter_type: redis
   
-  # Redis configuration (required for redis and cluster adapters)
-  redis:
-    host: "localhost"
-    port: 6379
-    password: null  # Optional Redis password
-    db: 0          # Redis database number (optional, default: 0)
-    key_prefix: "nylon:ws"  # Key prefix for Redis keys (optional)
+#   # Redis configuration (required for redis and cluster adapters)
+#   redis:
+#     host: "localhost"
+#     port: 6379
+#     password: null  # Optional Redis password
+#     db: 0          # Redis database number (optional, default: 0)
+#     key_prefix: "nylon:ws"  # Key prefix for Redis keys (optional)
