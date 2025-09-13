@@ -18,6 +18,7 @@ use nylon_error::NylonError;
 use nylon_types::{context::NylonContext, plugins::SessionStream, template::Expr};
 use pingora::proxy::{ProxyHttp, Session};
 use std::collections::HashMap;
+use tokio::time::{self, Duration};
 
 /// Execute a session stream for a plugin
 pub async fn session_stream<T>(
@@ -106,6 +107,9 @@ where
     // try to get WS rx to forward cluster messages when ws_active
     let ws_rx_arc = crate::stream::get_ws_rx(session_stream.session_id).ok();
 
+    // server keepalive ping every 20s once ws is active
+    let mut ping_interval = time::interval(Duration::from_secs(20));
+
     loop {
         if !ws_active {
             if let Some((method, data)) = rx.recv().await {
@@ -164,6 +168,11 @@ where
                     nylon_types::websocket::WebSocketMessage::Ping(p) => build_ws_frame(0x9, &p),
                     nylon_types::websocket::WebSocketMessage::Pong(p) => build_ws_frame(0xA, &p),
                 };
+                let _ = session.response_duplex_vec(vec![pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false)]).await;
+            }
+            // Server keepalive ping
+            _ = ping_interval.tick() => {
+                let frame = build_ws_frame(0x9, &[]);
                 let _ = session.response_duplex_vec(vec![pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false)]).await;
             }
             // Client -> server frames (including EOF/Err)
