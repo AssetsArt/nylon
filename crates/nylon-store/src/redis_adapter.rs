@@ -65,6 +65,9 @@ impl RedisAdapter {
         
         // Start Redis pub/sub listener
         adapter.start_pubsub_listener().await?;
+        // Start heartbeat and janitor tasks
+        adapter.start_heartbeat().await?;
+        adapter.start_janitor().await?;
         
         Ok(adapter)
     }
@@ -108,6 +111,14 @@ impl RedisAdapter {
     fn get_key_prefix(&self) -> String {
         self.config.key_prefix.clone().unwrap_or_else(|| "nylon:ws".to_string())
     }
+
+    fn node_key(&self, node_id: &str) -> String {
+        format!("{}:nodes:{}", self.get_key_prefix(), node_id)
+    }
+
+    fn node_connections_key(&self, node_id: &str) -> String {
+        format!("{}:node_connections:{}", self.get_key_prefix(), node_id)
+    }
     
     #[allow(dead_code)]
     async fn get_connection(&self) -> Result<redis::aio::Connection, NylonError> {
@@ -128,6 +139,90 @@ impl RedisAdapter {
             
         Ok(())
     }
+
+    async fn start_heartbeat(&self) -> Result<(), NylonError> {
+        let client = self.client.clone();
+        let node_key = self.node_key(&self.node_id);
+        tokio::spawn(async move {
+            loop {
+                match client.get_async_connection().await {
+                    Ok(mut conn) => {
+                        let _ : redis::RedisResult<()> = cmd("SET")
+                            .arg(&node_key)
+                            .arg("1")
+                            .arg("EX")
+                            .arg(30)
+                            .query_async(&mut conn)
+                            .await;
+                    }
+                    Err(_e) => {
+                        // ignore, retry later
+                    }
+                }
+                tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+            }
+        });
+        Ok(())
+    }
+
+    async fn start_janitor(&self) -> Result<(), NylonError> {
+        let client = self.client.clone();
+        let prefix = self.get_key_prefix();
+        tokio::spawn(async move {
+            let scan_pattern = format!("{}:node_connections:*", prefix);
+            loop {
+                if let Ok(mut conn) = client.get_async_connection().await {
+                    let mut cursor: u64 = 0;
+                    loop {
+                        let res: redis::RedisResult<(u64, Vec<String>)> = cmd("SCAN")
+                            .arg(cursor)
+                            .arg("MATCH").arg(&scan_pattern)
+                            .arg("COUNT").arg(200)
+                            .query_async(&mut conn)
+                            .await;
+                        let (next, keys) = match res { Ok(v) => v, Err(_) => break };
+                        for key in keys {
+                            // extract node_id
+                            let node_id = key.split(':').last().unwrap_or("").to_string();
+                            let node_key = format!("{}:nodes:{}", prefix, node_id);
+                            let exists: redis::RedisResult<i32> = cmd("EXISTS").arg(&node_key).query_async(&mut conn).await;
+                            if let Ok(0) = exists {
+                                // stale node, clean its connections
+                                if let Ok(connections) = redis::cmd("SMEMBERS").arg(&key).query_async::<_, Vec<String>>(&mut conn).await {
+                                    for connection_id in connections {
+                                        // remove from rooms
+                                        let conn_rooms_key = format!("{}:connection_rooms:{}", prefix, connection_id);
+                                        if let Ok(rooms) = redis::cmd("SMEMBERS").arg(&conn_rooms_key).query_async::<_, Vec<String>>(&mut conn).await {
+                                            for room in rooms {
+                                                let room_key = format!("{}:rooms:{}", prefix, room);
+                                                let _ : redis::RedisResult<()> = cmd("SREM").arg(&room_key).arg(&connection_id).query_async(&mut conn).await;
+                                                // delete room key if empty
+                                                if let Ok(0) = cmd("SCARD").arg(&room_key).query_async::<_, i32>(&mut conn).await { let _ : redis::RedisResult<()> = cmd("DEL").arg(&room_key).query_async(&mut conn).await; }
+                                            }
+                                        }
+                                        // delete connection keys
+                                        let key_conn = format!("{}:connections:{}", prefix, connection_id);
+                                        let _ : redis::RedisResult<()> = cmd("DEL").arg(&key_conn).query_async(&mut conn).await;
+                                        let _ : redis::RedisResult<()> = cmd("DEL").arg(&conn_rooms_key).query_async(&mut conn).await;
+                                        // remove from node set
+                                        let node_conns_key = format!("{}:node_connections:{}", prefix, node_id);
+                                        let _ : redis::RedisResult<()> = cmd("SREM").arg(&node_conns_key).arg(&connection_id).query_async(&mut conn).await;
+                                    }
+                                }
+                                // delete empty node set
+                                let node_conns_key = format!("{}:node_connections:{}", prefix, node_id);
+                                let _ : redis::RedisResult<()> = cmd("DEL").arg(&node_conns_key).query_async(&mut conn).await;
+                            }
+                        }
+                        cursor = next;
+                        if cursor == 0 { break; }
+                    }
+                }
+                tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+            }
+        });
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -142,6 +237,11 @@ impl WebSocketAdapter for RedisAdapter {
             
         let _: () = conn.set(&key, value).await
             .map_err(|e| NylonError::ConfigError(format!("Redis set error: {}", e)))?;
+
+        // add to node connections set for janitor cleanup
+        let node_conns_key = self.node_connections_key(&self.node_id);
+        let _: () = cmd("SADD").arg(&node_conns_key).arg(&connection.id).query_async(&mut conn).await
+            .map_err(|e| NylonError::ConfigError(format!("Redis sadd error: {}", e)))?;
             
         // Store locally for quick access
         let mut local_connections = self.local_connections.write().await;
@@ -169,7 +269,11 @@ impl WebSocketAdapter for RedisAdapter {
             .map_err(|e| NylonError::ConfigError(format!("Redis del error: {}", e)))?;
         let _: () = conn.del(&key_conn_rooms).await
             .map_err(|e| NylonError::ConfigError(format!("Redis del error: {}", e)))?;
-            
+        // remove from node connections set
+        let node_conns_key = self.node_connections_key(&self.node_id);
+        let _ : () = cmd("SREM").arg(&node_conns_key).arg(connection_id).query_async(&mut conn).await
+            .map_err(|e| NylonError::ConfigError(format!("Redis srem error: {}", e)))?;
+
         // Remove from local cache
         let mut local_connections = self.local_connections.write().await;
         local_connections.remove(connection_id);
