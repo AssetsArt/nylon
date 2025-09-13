@@ -66,14 +66,26 @@ services:
         port: 3002
         # weight: 1 # Optional
 
+  - name: ws-service
+    service_type: plugin
+    plugin:
+      name: plugin_sdk
+      entry: ws
+
 routes:
   - route:
       type: host
       value: localhost # domain.com|domain2.com|domain3.com
     name: http-route-1
-    middleware:
-      - group: example
     paths:
+      - path:
+          - /ws
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+        service:
+          name: ws-service
       - path: 
           - /
           - /{*path}
@@ -81,6 +93,8 @@ routes:
           - GET
           - POST
           - OPTIONS
+        middleware:
+          - group: example
         service:
           name: http-service
 ```
@@ -93,6 +107,7 @@ package main
 import "C"
 import (
 	"fmt"
+	"time"
 
 	"github.com/AssetsArt/easy-proxy/sdk/go/sdk"
 )
@@ -132,7 +147,7 @@ func init() {
 
 	// Register middleware
 	plugin.AddPhaseHandler("authz", func(phase *sdk.PhaseHandler) {
-		fmt.Println("[Go] sessionID", phase.SessionId)
+		fmt.Println("Start Authz[Go] sessionID", phase.SessionId)
 		// Initialize phase state per request
 		myPhaseState := map[string]bool{
 			"authz": false,
@@ -140,21 +155,22 @@ func init() {
 
 		// Phase request filter
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
-			fmt.Println("[NylonPlugin] Authz phase")
+			fmt.Println("Authz[Go] RequestFilter sessionID", phase.SessionId)
 			myPhaseState["authz"] = true
 
 			payload := ctx.GetPayload()
-			fmt.Println("[NylonPlugin] Payload", payload)
+			fmt.Println("[Authz][NylonPlugin] Payload", payload)
 
 			response := ctx.Response()
 			response.SetHeader("X-RequestFilter", "authz-1")
-
+			// sleep 2 seconds
+			time.Sleep(2 * time.Second)
 			// next phase
 			ctx.Next()
 		})
 
 		phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
-			fmt.Println("[NylonPlugin] Response filter")
+			fmt.Println("Authz[Go] ResponseFilter sessionID", phase.SessionId)
 			ctx.SetResponseHeader("X-ResponseFilter", "authz-2")
 
 			ctx.Next()
@@ -163,9 +179,9 @@ func init() {
 	})
 
 	plugin.AddPhaseHandler("stream", func(phase *sdk.PhaseHandler) {
-		fmt.Println("[NylonPlugin] Stream phase")
+		fmt.Println("Start Stream[Go] sessionID", phase.SessionId)
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
-			fmt.Println("[NylonPlugin] Stream request filter")
+			fmt.Println("Stream[Go] RequestFilter sessionID", phase.SessionId)
 			res := ctx.Response()
 			// set status and headers
 			res.SetStatus(200)
@@ -174,7 +190,7 @@ func init() {
 			// Start streaming response
 			stream, err := res.Stream()
 			if err != nil {
-				fmt.Println("[NylonPlugin] Error streaming response", err)
+				fmt.Println("[Stream][NylonPlugin] Error streaming response", err)
 				ctx.Next()
 				return
 			}
@@ -186,6 +202,39 @@ func init() {
 
 			// End streaming response
 			stream.End()
+		})
+	})
+
+	// WebSocket example
+	plugin.AddPhaseHandler("ws", func(phase *sdk.PhaseHandler) {
+		fmt.Println("Start WS[Go] sessionID", phase.SessionId)
+		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
+			fmt.Println("WS[Go] RequestFilter sessionID", phase.SessionId)
+			err := ctx.WebSocketUpgrade(sdk.WebSocketCallbacks{
+				OnOpen: func(ws *sdk.WebSocketConn) {
+					fmt.Println("[WS][Go] onOpen")
+					ws.SendText("hello from plugin")
+				},
+				OnMessageText: func(ws *sdk.WebSocketConn, msg string) {
+					fmt.Println("[WS][Go] onMessageText:", msg)
+					ws.SendText("echo: " + msg)
+				},
+				OnMessageBinary: func(ws *sdk.WebSocketConn, data []byte) {
+					fmt.Println("[WS][Go] onMessageBinary", len(data))
+					ws.SendBinary(data)
+				},
+				OnClose: func(ws *sdk.WebSocketConn) {
+					fmt.Println("[WS][Go] onClose")
+				},
+				OnError: func(ws *sdk.WebSocketConn, err string) {
+					fmt.Println("[WS][Go] onError:", err)
+				},
+			})
+			if err != nil {
+				fmt.Println("[WS][Go] upgrade error:", err)
+				// On error fallback to HTTP
+				ctx.Next()
+			}
 		})
 	})
 }
