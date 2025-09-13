@@ -25,6 +25,22 @@ const (
 	NylonMethodReadRequestHeaders  NylonMethods = "read_request_headers"
 )
 
+// WebSocket methods
+const (
+	// Plugin -> Rust
+	NylonMethodWebSocketUpgrade    NylonMethods = "websocket_upgrade"
+	NylonMethodWebSocketSendText   NylonMethods = "websocket_send_text"
+	NylonMethodWebSocketSendBinary NylonMethods = "websocket_send_binary"
+	NylonMethodWebSocketClose      NylonMethods = "websocket_close"
+
+	// Rust -> Plugin
+	NylonMethodWebSocketOnOpen          NylonMethods = "websocket_on_open"
+	NylonMethodWebSocketOnMessageText   NylonMethods = "websocket_on_message_text"
+	NylonMethodWebSocketOnMessageBinary NylonMethods = "websocket_on_message_binary"
+	NylonMethodWebSocketOnClose         NylonMethods = "websocket_on_close"
+	NylonMethodWebSocketOnError         NylonMethods = "websocket_on_error"
+)
+
 var MethodIDMapping = map[NylonMethods]uint32{
 	NylonMethodNext:       1,
 	NylonMethodEnd:        2,
@@ -44,6 +60,17 @@ var MethodIDMapping = map[NylonMethods]uint32{
 	NylonMethodReadRequestFullBody: 200,
 	NylonMethodReadRequestHeader:   201,
 	NylonMethodReadRequestHeaders:  202,
+
+	// WebSocket methods
+	NylonMethodWebSocketUpgrade:         300,
+	NylonMethodWebSocketSendText:        301,
+	NylonMethodWebSocketSendBinary:      302,
+	NylonMethodWebSocketClose:           303,
+	NylonMethodWebSocketOnOpen:          350,
+	NylonMethodWebSocketOnMessageText:   351,
+	NylonMethodWebSocketOnMessageBinary: 352,
+	NylonMethodWebSocketOnClose:         353,
+	NylonMethodWebSocketOnError:         354,
 }
 
 const (

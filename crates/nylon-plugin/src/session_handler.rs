@@ -1,9 +1,7 @@
-//! Session handling and stream management for plugins
-
-use std::collections::HashMap;
-
 use crate::{constants::methods, stream::PluginSessionStream, types::PluginResult};
 use bytes::Bytes;
+use sha1::{Digest, Sha1};
+use base64::Engine;
 use http::{HeaderMap, HeaderValue};
 use nylon_error::NylonError;
 use nylon_sdk::fbs::plugin_generated::nylon_plugin::{
@@ -14,14 +12,38 @@ use nylon_types::{
     plugins::SessionStream,
     template::{Expr, apply_payload_ast},
 };
-use pingora::{http::ResponseHeader, protocols::http::HttpTask, proxy::Session};
+use pingora::{
+    http::ResponseHeader,
+    protocols::http::HttpTask,
+    proxy::{ProxyHttp, Session},
+};
+use std::collections::HashMap;
 
 /// Handles session stream operations for plugins
 pub struct SessionHandler;
 
 impl SessionHandler {
+    fn build_ws_frame(opcode: u8, payload: &[u8]) -> Vec<u8> {
+        let mut frame = Vec::with_capacity(2 + payload.len() + 8);
+        // FIN=1 RSV=0 and opcode
+        frame.push(0x80 | (opcode & 0x0F));
+        // Server to client frames are not masked
+        let len = payload.len();
+        if len <= 125 {
+            frame.push(len as u8);
+        } else if len <= 65535 {
+            frame.push(126);
+            frame.extend_from_slice(&(len as u16).to_be_bytes());
+        } else {
+            frame.push(127);
+            frame.extend_from_slice(&(len as u64).to_be_bytes());
+        }
+        frame.extend_from_slice(payload);
+        frame
+    }
     /// Process a method from the plugin session stream
-    pub async fn process_method(
+    pub async fn process_method<'a, T>(
+        proxy: &T,
         method: u32,
         data: Vec<u8>,
         ctx: &mut NylonContext,
@@ -29,7 +51,12 @@ impl SessionHandler {
         session_stream: &SessionStream,
         payload: &Option<serde_json::Value>,
         payload_ast: &Option<HashMap<String, Vec<Expr>>>,
-    ) -> Result<Option<PluginResult>, NylonError> {
+    ) -> Result<Option<PluginResult>, NylonError>
+    where
+        T: ProxyHttp + Send + Sync,
+        <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
+    {
+        // println!("method: {}, sid: {}", method, session_stream.session_id);
         match method {
             // Control methods
             methods::GET_PAYLOAD => {
@@ -54,15 +81,15 @@ impl SessionHandler {
                 Ok(None)
             }
             methods::SET_RESPONSE_FULL_BODY => {
-                Self::handle_set_response_full_body(&data, ctx).await?;
+                Self::handle_set_response_full_body(data, ctx).await?;
                 Ok(None)
             }
             methods::SET_RESPONSE_STREAM_HEADER => {
-                Self::handle_set_response_stream_header(ctx, session).await?;
+                Self::handle_set_response_stream_header(proxy, ctx, session).await?;
                 Ok(None)
             }
             methods::SET_RESPONSE_STREAM_DATA => {
-                Self::handle_set_response_stream_data(&data, session).await?;
+                Self::handle_set_response_stream_data(data, session).await?;
                 Ok(None)
             }
             methods::SET_RESPONSE_STREAM_END => {
@@ -86,6 +113,100 @@ impl SessionHandler {
             methods::READ_REQUEST_HEADERS => {
                 Self::handle_read_request_headers(session_stream, session).await?;
                 Ok(None)
+            }
+
+            // WebSocket control methods (temporary stub to simulate events)
+            methods::WEBSOCKET_UPGRADE => {
+                // Perform WebSocket handshake (101)
+                let headers = session.req_header();
+                let key = headers.headers.get("sec-websocket-key").and_then(|v| v.to_str().ok()).unwrap_or("");
+                if key.is_empty() {
+                    // Fallback text response if no key
+                    let mut headers = ResponseHeader::build(400u16, None)
+                        .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
+                    let _ = headers.append_header("content-type", "text/plain");
+                    let tasks = vec![
+                        HttpTask::Header(Box::new(headers), false),
+                        HttpTask::Body(Some(Bytes::from_static(b"Missing Sec-WebSocket-Key")), false),
+                        HttpTask::Done,
+                    ];
+                    session
+                        .response_duplex_vec(tasks)
+                        .await
+                        .map_err(|e| NylonError::ConfigError(format!("Error sending response: {}", e)))?;
+                    return Ok(Some(PluginResult::new(true, false)));
+                }
+
+                // Compute Sec-WebSocket-Accept
+                let mut hasher = Sha1::new();
+                hasher.update(key.as_bytes());
+                hasher.update(nylon_store::websockets::WEBSOCKET_GUID.as_bytes());
+                let accept_key = base64::engine::general_purpose::STANDARD.encode(hasher.finalize());
+
+                let mut resp = ResponseHeader::build(101u16, None)
+                    .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
+                let _ = resp.append_header("upgrade", "websocket");
+                let _ = resp.append_header("connection", "Upgrade");
+                let _ = resp.append_header("sec-websocket-accept", &accept_key);
+
+                session
+                    .response_duplex_vec(vec![HttpTask::Header(Box::new(resp), false)])
+                    .await
+                    .map_err(|e| NylonError::ConfigError(format!("Error sending response: {}", e)))?;
+
+                // Notify plugin side that WebSocket connection is established immediately
+                let _ = session_stream
+                    .event_stream(0, methods::WEBSOCKET_ON_OPEN, &[])
+                    .await;
+
+                // Keep session open (wait for future events)
+                Ok(None)
+            }
+            methods::WEBSOCKET_SEND_TEXT => {
+                // Send a text frame to client
+                let frame = Self::build_ws_frame(0x1, &data);
+                let tasks = vec![HttpTask::Body(Some(Bytes::from(frame)), false)];
+                session
+                    .response_duplex_vec(tasks)
+                    .await
+                    .map_err(|e| NylonError::ConfigError(format!("Error sending WS text: {}", e)))?;
+                Ok(None)
+            }
+            methods::WEBSOCKET_SEND_BINARY => {
+                // Send a binary frame to client
+                let frame = Self::build_ws_frame(0x2, &data);
+                let tasks = vec![HttpTask::Body(Some(Bytes::from(frame)), false)];
+                session
+                    .response_duplex_vec(tasks)
+                    .await
+                    .map_err(|e| NylonError::ConfigError(format!("Error sending WS binary: {}", e)))?;
+                Ok(None)
+            }
+            methods::WEBSOCKET_CLOSE => {
+                // Send close frame to client
+                let frame = Self::build_ws_frame(0x8, &[]);
+                let tasks = vec![
+                    HttpTask::Body(Some(Bytes::from(frame)), false),
+                    HttpTask::Done,
+                ];
+                session
+                    .response_duplex_vec(tasks)
+                    .await
+                    .map_err(|e| NylonError::ConfigError(format!("Error sending WS close: {}", e)))?;
+                
+                // Notify plugin that connection is closing
+                // Spawn task to ensure event is sent before connection cleanup
+                tokio::spawn({
+                    let session_stream = session_stream.clone();
+                    async move {
+                        let _ = session_stream
+                            .event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[])
+                            .await;
+                    }
+                });
+                
+                // End the session
+                Ok(Some(PluginResult::new(false, true)))
             }
 
             // Unknown method
@@ -152,30 +273,30 @@ impl SessionHandler {
     }
 
     async fn handle_set_response_full_body(
-        data: &[u8],
+        data: Vec<u8>,
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
-        ctx.set_response_body = data.to_vec();
+        ctx.set_response_body = data;
         Ok(())
     }
 
-    async fn handle_set_response_stream_header(
-        ctx: &mut NylonContext,
+    async fn handle_set_response_stream_header<'a, T>(
+        proxy: &T,
+        ctx: &'a mut NylonContext,
         session: &mut Session,
-    ) -> Result<(), NylonError> {
+    ) -> Result<(), NylonError>
+    where
+        T: ProxyHttp + Send + Sync,
+        <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
+    {
         let mut headers = ResponseHeader::build(ctx.set_response_status, None)
             .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
 
-        // Add headers
-        for (key, value) in ctx.add_response_header.iter() {
-            let _ = headers.append_header(key.to_ascii_lowercase(), value);
-        }
-
-        // Remove headers
-        for key in ctx.remove_response_header.iter() {
-            let key = key.to_ascii_lowercase();
-            let _ = headers.remove_header(&key);
-        }
+        let mut proxy_ctx: <T as ProxyHttp>::CTX = ctx.clone().into();
+        proxy
+            .response_filter(session, &mut headers, &mut proxy_ctx)
+            .await
+            .map_err(|e| NylonError::ConfigError(format!("Error sending response: {}", e)))?;
 
         let tasks = vec![HttpTask::Header(Box::new(headers), false)];
         session
@@ -186,10 +307,10 @@ impl SessionHandler {
     }
 
     async fn handle_set_response_stream_data(
-        data: &[u8],
+        data: Vec<u8>,
         session: &mut Session,
     ) -> Result<(), NylonError> {
-        let tasks = vec![HttpTask::Body(Some(Bytes::from(data.to_vec())), false)];
+        let tasks = vec![HttpTask::Body(Some(Bytes::from(data)), false)];
         session
             .response_duplex_vec(tasks)
             .await

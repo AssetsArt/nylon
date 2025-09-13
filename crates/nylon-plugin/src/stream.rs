@@ -13,7 +13,7 @@ use std::{
 };
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
-use tracing::debug;
+use tracing::{debug, trace};
 
 // Active sessions
 type SessionSender = mpsc::UnboundedSender<(u32, Vec<u8>)>;
@@ -21,8 +21,10 @@ type SessionSender = mpsc::UnboundedSender<(u32, Vec<u8>)>;
 static ACTIVE_SESSIONS: Lazy<RwLock<HashMap<u32, SessionSender>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
-static SESSION_RX: Lazy<Arc<Mutex<HashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+// static SESSION_RX: Lazy<Arc<Mutex<HashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>>>> =
+//     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+static SESSION_RX: Lazy<Mutex<HashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
 #[unsafe(no_mangle)]
 pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
@@ -32,29 +34,31 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
     // let phase = ffi.phase;
     let len = ffi.len as usize;
     let ptr = ffi.ptr;
-    debug!(
-        "handle_ffi_event: session_id={}, method={}",
-        session_id, method
-    );
-    if ptr.is_null() {
-        debug!("handle_ffi_event: data is null (no payload)");
-        if let Ok(sessions) = ACTIVE_SESSIONS.read() {
-            if let Some(sender) = sessions.get(&(session_id)) {
-                let _ = sender.send((method, Vec::new()));
+    trace!("handle_ffi_event: session_id={}, method={}", session_id, method);
+    // Clone sender first to minimize time under the read lock
+    let sender_opt = ACTIVE_SESSIONS
+        .read()
+        .ok()
+        .and_then(|sessions| sessions.get(&session_id).cloned());
+
+    if let Some(sender) = sender_opt {
+        if ptr.is_null() {
+            trace!("handle_ffi_event: null payload");
+            let _ = sender.send((method, Vec::new()));
+            return;
+        }
+
+        unsafe {
+            // Fast copy from raw pointer
+            let mut buf = Vec::with_capacity(len);
+            buf.set_len(len);
+            std::ptr::copy_nonoverlapping(ptr, buf.as_mut_ptr(), len);
+            if let Err(_e) = sender.send((method, buf)) {
+                debug!("send error: {:?}", session_id);
             }
         }
-        return;
-    }
-    unsafe {
-        let mut buf = Vec::with_capacity(len);
-        buf.extend_from_slice(std::slice::from_raw_parts(ptr, len));
-        if let Ok(sessions) = ACTIVE_SESSIONS.read() {
-            if let Some(sender) = sessions.get(&(session_id)) {
-                if sender.send((method, buf)).is_err() {
-                    // Consumed
-                }
-            }
-        }
+    } else {
+        trace!("handle_ffi_event: no active session for sid={}", session_id);
     }
 }
 
@@ -105,8 +109,12 @@ impl PluginSessionStream for SessionStream {
             }
         }
         {
-            let mut sessions = SESSION_RX.lock().await;
-            sessions.insert(self.session_id, Arc::new(Mutex::new(rx)));
+            // let mut sessions = SESSION_RX.lock().await;
+            // sessions.insert(self.session_id, Arc::new(Mutex::new(rx)));
+            {
+                let mut sessions = SESSION_RX.lock().await;
+                sessions.insert(self.session_id, Arc::new(Mutex::new(rx)));
+            }
         }
         Ok(self.session_id)
     }
@@ -126,14 +134,7 @@ impl PluginSessionStream for SessionStream {
     }
 
     async fn close(&self) -> Result<(), NylonError> {
-        tokio::select! {
-            _ = close_session(self.plugin.clone(), self.session_id) => {
-                let _ = remove_rx(self.session_id).await;
-            }
-            _ = remove_rx(self.session_id) => {
-                let _ = close_session(self.plugin.clone(), self.session_id).await;
-            }
-        }
+        let _ = close_session(self.plugin.clone(), self.session_id).await?;
         Ok(())
     }
 }
@@ -142,30 +143,29 @@ pub async fn close_session(plugin: Arc<FfiPlugin>, session_id: u32) -> Result<()
     unsafe {
         (*plugin.close_session)(session_id);
     }
-
     if let Ok(mut sessions) = ACTIVE_SESSIONS.write() {
         sessions.remove(&session_id);
     }
     Ok(())
 }
 
-pub async fn get_rx(
+pub fn get_rx(
     session_id: u32,
 ) -> Result<Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>, NylonError> {
-    let sessions = SESSION_RX.lock().await;
-
-    sessions
-        .get(&session_id)
-        .cloned()
-        .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))
-}
-
-pub async fn remove_rx(session_id: u32) -> Result<(), NylonError> {
-    let mut sessions = SESSION_RX.lock().await;
-
-    sessions
-        .remove(&session_id)
-        .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))?;
-
-    Ok(())
+    let sessions = SESSION_RX.try_lock();
+    // sessions
+    //     .get(&session_id)
+    //     .cloned()
+    //     .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))
+    //     .map(|arc| arc.clone())
+    match sessions {
+        Ok(sessions) => sessions
+            .get(&session_id)
+            .cloned()
+            .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))
+            .map(|arc| arc.clone()),
+        Err(_) => Err(NylonError::ConfigError(format!(
+            "Failed to lock SESSION_RX"
+        ))),
+    }
 }

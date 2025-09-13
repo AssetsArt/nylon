@@ -19,6 +19,12 @@ services:
         port: 3002
         # weight: 1 # Optional
 
+  - name: ws-service
+    service_type: plugin
+    plugin:
+      name: plugin_sdk
+      entry: ws
+
 
 middleware_groups:
   example:

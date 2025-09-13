@@ -11,7 +11,7 @@ use pingora::{
     proxy::{ProxyHttp, Session},
 };
 use std::time::Duration;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 async fn handle_error_response<'a>(
     res: &'a mut Response<'a>,
@@ -46,11 +46,16 @@ fn process_tls_redirect(host: &str, tls: bool) -> Option<String> {
     }
 }
 
-async fn process_middleware(
+async fn process_middleware<T>(
+    proxy: &T,
     phase: u8,
     ctx: &mut NylonContext,
     session: &mut Session,
-) -> pingora::Result<bool> {
+) -> pingora::Result<bool>
+where
+    T: ProxyHttp + Send + Sync,
+    <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
+{
     // Collect all middleware items from route and path levels
     let Some(route) = &ctx.route else {
         return Ok(false);
@@ -67,6 +72,7 @@ async fn process_middleware(
         // debug!("Processing middleware: {:?}", middleware.0.plugin);
 
         match run_middleware(
+            proxy,
             phase,
             &MiddlewareContext {
                 middleware: middleware.0.clone(),
@@ -142,7 +148,7 @@ impl ProxyHttp for NylonRuntime {
         res.ctx.params = Some(params.clone());
 
         // Process middleware
-        match process_middleware(1, res.ctx, session).await {
+        match process_middleware(self, 1, res.ctx, session).await {
             Ok(true) => return Ok(true),
             Ok(false) => {}
             Err(e) => {
@@ -153,23 +159,48 @@ impl ProxyHttp for NylonRuntime {
 
         // Handle plugin service type
         if route.service.service_type == ServiceType::Plugin {
-            // TODO: implement plugin service type handling
-            warn!("Plugin service type not yet implemented");
+            if let Some(plugin) = &route.service.plugin {
+                match nylon_plugin::session_stream(
+                    self,
+                    plugin.name.as_str(),
+                    1,
+                    plugin.entry.as_str(),
+                    res.ctx,
+                    session,
+                    &plugin.payload,
+                    &None,
+                )
+                .await
+                {
+                    Ok(_result) => {
+                        // Plugin service handled the request lifecycle (HTTP or stream)
+                        return Ok(true);
+                    }
+                    Err(e) => {
+                        return handle_error_response(&mut res, session, e).await;
+                    }
+                }
+            } else {
+                let err = NylonError::ConfigError("Plugin service missing 'plugin' config".to_string());
+                return handle_error_response(&mut res, session, err).await;
+            }
         }
 
-        // Handle regular service type
-        let http_service = match nylon_store::lb_backends::get(&route.service.name).await {
-            Ok(backend) => backend,
-            Err(e) => return handle_error_response(&mut res, session, e).await,
-        };
+        // Handle regular HTTP service type only
+        if route.service.service_type == ServiceType::Http {
+            let http_service = match nylon_store::lb_backends::get(&route.service.name).await {
+                Ok(backend) => backend,
+                Err(e) => return handle_error_response(&mut res, session, e).await,
+            };
 
-        // Get backend selection
-        let selected_backend = match backend::selection(&http_service, session, res.ctx) {
-            Ok(b) => b,
-            Err(e) => return handle_error_response(&mut res, session, e).await,
-        };
+            // Get backend selection
+            let selected_backend = match backend::selection(&http_service, session, res.ctx) {
+                Ok(b) => b,
+                Err(e) => return handle_error_response(&mut res, session, e).await,
+            };
 
-        res.ctx.backend = selected_backend;
+            res.ctx.backend = selected_backend;
+        }
 
         Ok(false)
     }
@@ -199,7 +230,7 @@ impl ProxyHttp for NylonRuntime {
         Self::CTX: Send + Sync,
     {
         // Process middleware
-        let _ = process_middleware(2, ctx, session).await;
+        let _ = process_middleware(self, 2, ctx, session).await;
 
         // Add response headers
         for (key, value) in ctx.add_response_header.iter() {
@@ -247,12 +278,12 @@ impl ProxyHttp for NylonRuntime {
         &self,
         _session: &mut Session,
         _e: Option<&pingora::Error>,
-        _ctx: &mut Self::CTX,
+        ctx: &mut Self::CTX,
     ) where
         Self::CTX: Send + Sync,
     {
-        for (_, stream) in std::mem::take(&mut _ctx.session_stream) {
-            let _ = stream.close();
+        for (_, stream) in ctx.session_stream.iter() {
+            let _ = stream.close().await;
         }
     }
 }
