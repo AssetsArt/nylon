@@ -11,7 +11,7 @@ use pingora::{
     proxy::{ProxyHttp, Session},
 };
 use std::time::Duration;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 async fn handle_error_response<'a>(
     res: &'a mut Response<'a>,
@@ -159,23 +159,48 @@ impl ProxyHttp for NylonRuntime {
 
         // Handle plugin service type
         if route.service.service_type == ServiceType::Plugin {
-            // TODO: implement plugin service type handling
-            warn!("Plugin service type not yet implemented");
+            if let Some(plugin) = &route.service.plugin {
+                match nylon_plugin::session_stream(
+                    self,
+                    plugin.name.as_str(),
+                    1,
+                    plugin.entry.as_str(),
+                    res.ctx,
+                    session,
+                    &plugin.payload,
+                    &None,
+                )
+                .await
+                {
+                    Ok(_result) => {
+                        // Plugin service handled the request lifecycle (HTTP or stream)
+                        return Ok(true);
+                    }
+                    Err(e) => {
+                        return handle_error_response(&mut res, session, e).await;
+                    }
+                }
+            } else {
+                let err = NylonError::ConfigError("Plugin service missing 'plugin' config".to_string());
+                return handle_error_response(&mut res, session, err).await;
+            }
         }
 
-        // Handle regular service type
-        let http_service = match nylon_store::lb_backends::get(&route.service.name).await {
-            Ok(backend) => backend,
-            Err(e) => return handle_error_response(&mut res, session, e).await,
-        };
+        // Handle regular HTTP service type only
+        if route.service.service_type == ServiceType::Http {
+            let http_service = match nylon_store::lb_backends::get(&route.service.name).await {
+                Ok(backend) => backend,
+                Err(e) => return handle_error_response(&mut res, session, e).await,
+            };
 
-        // Get backend selection
-        let selected_backend = match backend::selection(&http_service, session, res.ctx) {
-            Ok(b) => b,
-            Err(e) => return handle_error_response(&mut res, session, e).await,
-        };
+            // Get backend selection
+            let selected_backend = match backend::selection(&http_service, session, res.ctx) {
+                Ok(b) => b,
+                Err(e) => return handle_error_response(&mut res, session, e).await,
+            };
 
-        res.ctx.backend = selected_backend;
+            res.ctx.backend = selected_backend;
+        }
 
         Ok(false)
     }

@@ -180,14 +180,57 @@ func event_stream(ffiBuffer *C.FfiBuffer) {
 			ctx.cond.Broadcast()
 			return
 		}
-		method := ffiBuffer.method
+		method := uint32(ffiBuffer.method)
 		data := ffiBuffer.ptr
+
+		// WebSocket event dispatch
+		switch method {
+		case MethodIDMapping[NylonMethodWebSocketOnOpen]:
+			ctx.wsUpgraded = true
+			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnOpen != nil {
+				go ctx.wsCallbacks.OnOpen(&WebSocketConn{ctx: ctx})
+			}
+			return
+		case MethodIDMapping[NylonMethodWebSocketOnClose]:
+			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnClose != nil {
+				go ctx.wsCallbacks.OnClose(&WebSocketConn{ctx: ctx})
+			}
+			return
+		case MethodIDMapping[NylonMethodWebSocketOnError]:
+			msg := C.GoStringN((*C.char)(unsafe.Pointer(data)), C.int(length))
+			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnError != nil {
+				go ctx.wsCallbacks.OnError(&WebSocketConn{ctx: ctx}, msg)
+			}
+			return
+		case MethodIDMapping[NylonMethodWebSocketOnMessageText]:
+			msg := C.GoStringN((*C.char)(unsafe.Pointer(data)), C.int(length))
+			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnMessageText != nil {
+				go ctx.wsCallbacks.OnMessageText(&WebSocketConn{ctx: ctx}, msg)
+			}
+			return
+		case MethodIDMapping[NylonMethodWebSocketOnMessageBinary]:
+			buf := ctx.dataMap[method]
+			if cap(buf) < length {
+				buf = make([]byte, length)
+			} else {
+				buf = buf[:length]
+			}
+			copy(buf, (*[1 << 30]byte)(unsafe.Pointer(data))[:length:length])
+			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnMessageBinary != nil {
+				dataCopy := make([]byte, length)
+				copy(dataCopy, buf)
+				go ctx.wsCallbacks.OnMessageBinary(&WebSocketConn{ctx: ctx}, dataCopy)
+			}
+			return
+		}
+
+		// default behavior: store data and wake waiter
 		var dataBytes []byte
 		if length > 0 {
 			dataBytes = make([]byte, length)
 			copy(dataBytes, (*[1 << 30]byte)(unsafe.Pointer(data))[:length:length])
 		}
-		ctx.dataMap[uint32(method)] = dataBytes
+		ctx.dataMap[method] = dataBytes
 		ctx.cond.Broadcast()
 	}
 }
@@ -205,6 +248,7 @@ func RequestMethod(sessionID int32, phase int8, method NylonMethods, data []byte
 	var dataPtr *C.uchar
 	dataLen := len(data)
 	if dataLen > 0 {
+		// Allocate C memory and copy to satisfy cgo pointer passing rules
 		dataPtr = (*C.uchar)(C.malloc(C.size_t(dataLen)))
 		if dataPtr == nil {
 			return fmt.Errorf("failed to allocate memory for data")

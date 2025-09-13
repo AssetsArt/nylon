@@ -12,6 +12,8 @@ use crate::{
     stream::{PluginSessionStream, get_rx},
     types::{BuiltinPlugin, MiddlewareContext, PluginResult},
 };
+use crate::constants::methods;
+use bytes::Bytes;
 use nylon_error::NylonError;
 use nylon_types::{context::NylonContext, plugins::SessionStream, template::Expr};
 use pingora::proxy::{ProxyHttp, Session};
@@ -80,8 +82,54 @@ where
     tokio::spawn(async move {
         let _ = session_stream_clone.event_stream(phase, 0, b"").await;
     });
+    // WebSocket read/relay state
+    let mut ws_active = false;
+    let mut read_buf: Vec<u8> = Vec::with_capacity(4096);
+
+    fn build_ws_frame(opcode: u8, payload: &[u8]) -> Vec<u8> {
+        let mut frame = Vec::with_capacity(2 + payload.len() + 8);
+        frame.push(0x80 | (opcode & 0x0F));
+        let len = payload.len();
+        if len <= 125 {
+            frame.push(len as u8);
+        } else if len <= 65535 {
+            frame.push(126);
+            frame.extend_from_slice(&(len as u16).to_be_bytes());
+        } else {
+            frame.push(127);
+            frame.extend_from_slice(&(len as u64).to_be_bytes());
+        }
+        frame.extend_from_slice(payload);
+        frame
+    }
+
     loop {
+        if !ws_active {
+            if let Some((method, data)) = rx.recv().await {
+                if method == methods::WEBSOCKET_UPGRADE {
+                    ws_active = true;
+                }
+                if let Some(result) = SessionHandler::process_method(
+                    proxy,
+                    method,
+                    data,
+                    ctx,
+                    session,
+                    &session_stream,
+                    payload,
+                    payload_ast,
+                ).await? {
+                    return Ok(result);
+                }
+            } else {
+                // channel closed
+                return Ok(PluginResult::default());
+            }
+            continue;
+        }
+
         tokio::select! {
+            // Plugin -> server events
             Some((method, data)) = rx.recv() => {
                 if let Some(result) = SessionHandler::process_method(
                     proxy,
@@ -94,6 +142,70 @@ where
                     payload_ast,
                 ).await? {
                     return Ok(result);
+                }
+            }
+            // Client -> server frames
+            Ok(Some(chunk)) = session.read_request_body() => {
+                read_buf.extend_from_slice(&chunk);
+                // parse frames in read_buf
+                loop {
+                    if read_buf.len() < 2 { break; }
+                    let b0 = read_buf[0];
+                    let b1 = read_buf[1];
+                    let fin = (b0 & 0x80) != 0;
+                    let opcode = b0 & 0x0F;
+                    let masked = (b1 & 0x80) != 0;
+                    let mut idx = 2usize;
+                    let mut payload_len: usize = (b1 & 0x7F) as usize;
+                    if payload_len == 126 {
+                        if read_buf.len() < idx + 2 { break; }
+                        payload_len = u16::from_be_bytes([read_buf[idx], read_buf[idx+1]]) as usize;
+                        idx += 2;
+                    } else if payload_len == 127 {
+                        if read_buf.len() < idx + 8 { break; }
+                        payload_len = u64::from_be_bytes([
+                            read_buf[idx],read_buf[idx+1],read_buf[idx+2],read_buf[idx+3],
+                            read_buf[idx+4],read_buf[idx+5],read_buf[idx+6],read_buf[idx+7]
+                        ]) as usize;
+                        idx += 8;
+                    }
+                    let mut mask_key = [0u8;4];
+                    if masked {
+                        if read_buf.len() < idx + 4 { break; }
+                        mask_key.copy_from_slice(&read_buf[idx..idx+4]);
+                        idx += 4;
+                    }
+                    if read_buf.len() < idx + payload_len { break; }
+                    let mut payload = read_buf[idx..idx+payload_len].to_vec();
+                    if masked {
+                        for i in 0..payload_len { payload[i] ^= mask_key[i % 4]; }
+                    }
+                    // remove frame from buffer
+                    let remove_len = idx + payload_len;
+                    read_buf.drain(0..remove_len);
+
+                    // handle opcodes
+                    match opcode {
+                        0x1 => { // text
+                            session_stream.event_stream(0, methods::WEBSOCKET_ON_MESSAGE_TEXT, &payload).await?;
+                        }
+                        0x2 => { // binary
+                            session_stream.event_stream(0, methods::WEBSOCKET_ON_MESSAGE_BINARY, &payload).await?;
+                        }
+                        0x8 => { // close
+                            let frame = build_ws_frame(0x8, &payload);
+                            let _ = session.response_duplex_vec(vec![pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false), pingora::protocols::http::HttpTask::Done]).await;
+                            let _ = session_stream.event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[]).await;
+                            return Ok(PluginResult::new(false, true));
+                        }
+                        0x9 => { // ping -> pong
+                            let frame = build_ws_frame(0xA, &payload);
+                            let _ = session.response_duplex_vec(vec![pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false)]).await;
+                        }
+                        0xA => { /* pong: ignore */ }
+                        _ => { /* ignore */ }
+                    }
+                    if !fin { /* fragmentation not supported in stub */ }
                 }
             }
         }

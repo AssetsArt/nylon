@@ -13,7 +13,7 @@ use std::{
 };
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
-use tracing::debug;
+use tracing::{debug, trace};
 
 // Active sessions
 type SessionSender = mpsc::UnboundedSender<(u32, Vec<u8>)>;
@@ -34,34 +34,31 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
     // let phase = ffi.phase;
     let len = ffi.len as usize;
     let ptr = ffi.ptr;
-    debug!(
-        "handle_ffi_event: session_id={}, method={}",
-        session_id, method
-    );
-    if ptr.is_null() {
-        debug!("handle_ffi_event: data is null (no payload)");
-        if let Ok(sessions) = ACTIVE_SESSIONS.read() {
-            if let Some(sender) = sessions.get(&(session_id)) {
-                let _ = sender.send((method, Vec::new()));
+    trace!("handle_ffi_event: session_id={}, method={}", session_id, method);
+    // Clone sender first to minimize time under the read lock
+    let sender_opt = ACTIVE_SESSIONS
+        .read()
+        .ok()
+        .and_then(|sessions| sessions.get(&session_id).cloned());
+
+    if let Some(sender) = sender_opt {
+        if ptr.is_null() {
+            trace!("handle_ffi_event: null payload");
+            let _ = sender.send((method, Vec::new()));
+            return;
+        }
+
+        unsafe {
+            // Fast copy from raw pointer
+            let mut buf = Vec::with_capacity(len);
+            buf.set_len(len);
+            std::ptr::copy_nonoverlapping(ptr, buf.as_mut_ptr(), len);
+            if let Err(_e) = sender.send((method, buf)) {
+                debug!("send error: {:?}", session_id);
             }
         }
-        return;
-    }
-    unsafe {
-        let mut buf = Vec::with_capacity(len);
-        buf.extend_from_slice(std::slice::from_raw_parts(ptr, len));
-        // println!("send: {:?} {}", buf, session_id);
-        if let Ok(sessions) = ACTIVE_SESSIONS.read() {
-            if let Some(sender) = sessions.get(&(session_id)) {
-                // println!("send: {} {:?}", session_id, sender);
-                match sender.send((method, buf)) {
-                    Ok(_) => {}
-                    Err(_) => {
-                        debug!("send error: {:?}", session_id);
-                    }
-                }
-            }
-        }
+    } else {
+        trace!("handle_ffi_event: no active session for sid={}", session_id);
     }
 }
 

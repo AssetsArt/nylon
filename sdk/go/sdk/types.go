@@ -14,6 +14,10 @@ type NylonHttpPluginCtx struct {
 	mu      sync.Mutex
 	cond    *sync.Cond
 	dataMap map[uint32][]byte
+
+	// WebSocket state
+	wsCallbacks *WebSocketCallbacks
+	wsUpgraded  bool
 }
 
 type Headers struct {
@@ -38,4 +42,18 @@ type PhaseRequestFilter struct {
 
 type PhaseResponseFilter struct {
 	ctx *NylonHttpPluginCtx
+}
+
+// WebSocket types
+
+type WebSocketConn struct {
+	ctx *NylonHttpPluginCtx
+}
+
+type WebSocketCallbacks struct {
+	OnOpen          func(ws *WebSocketConn)
+	OnMessageText   func(ws *WebSocketConn, msg string)
+	OnMessageBinary func(ws *WebSocketConn, data []byte)
+	OnClose         func(ws *WebSocketConn)
+	OnError         func(ws *WebSocketConn, err string)
 }

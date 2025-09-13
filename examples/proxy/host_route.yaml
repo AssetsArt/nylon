@@ -7,9 +7,15 @@ routes:
       type: host
       value: localhost # domain.com|domain2.com|domain3.com
     name: http-route-1
-    middleware:
-      - group: example
     paths:
+      - path:
+          - /ws
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+        service:
+          name: ws-service
       - path: 
           - /
           - /{*path}
@@ -17,5 +23,7 @@ routes:
           - GET
           - POST
           - OPTIONS
+        middleware:
+          - group: example
         service:
           name: http-service

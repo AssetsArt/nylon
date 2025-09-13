@@ -100,4 +100,37 @@ func init() {
 			stream.End()
 		})
 	})
+
+	// WebSocket example
+	plugin.AddPhaseHandler("ws", func(phase *sdk.PhaseHandler) {
+		fmt.Println("Start WS[Go] sessionID", phase.SessionId)
+		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
+			fmt.Println("WS[Go] RequestFilter sessionID", phase.SessionId)
+			err := ctx.WebSocketUpgrade(sdk.WebSocketCallbacks{
+				OnOpen: func(ws *sdk.WebSocketConn) {
+					fmt.Println("[WS][Go] onOpen")
+					ws.SendText("hello from plugin")
+				},
+				OnMessageText: func(ws *sdk.WebSocketConn, msg string) {
+					fmt.Println("[WS][Go] onMessageText:", msg)
+					ws.SendText("echo: " + msg)
+				},
+				OnMessageBinary: func(ws *sdk.WebSocketConn, data []byte) {
+					fmt.Println("[WS][Go] onMessageBinary", len(data))
+					ws.SendBinary(data)
+				},
+				OnClose: func(ws *sdk.WebSocketConn) {
+					fmt.Println("[WS][Go] onClose")
+				},
+				OnError: func(ws *sdk.WebSocketConn, err string) {
+					fmt.Println("[WS][Go] onError:", err)
+				},
+			})
+			if err != nil {
+				fmt.Println("[WS][Go] upgrade error:", err)
+				// On error fallback to HTTP
+				ctx.Next()
+			}
+		})
+	})
 }

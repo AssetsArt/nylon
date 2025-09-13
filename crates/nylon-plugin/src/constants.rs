@@ -21,6 +21,19 @@ pub mod methods {
     pub const READ_REQUEST_FULL_BODY: u32 = 200;
     pub const READ_REQUEST_HEADER: u32 = 201;
     pub const READ_REQUEST_HEADERS: u32 = 202;
+
+    // WebSocket methods (Plugin -> Rust)
+    pub const WEBSOCKET_UPGRADE: u32 = 300;
+    pub const WEBSOCKET_SEND_TEXT: u32 = 301;
+    pub const WEBSOCKET_SEND_BINARY: u32 = 302;
+    pub const WEBSOCKET_CLOSE: u32 = 303;
+
+    // WebSocket events (Rust -> Plugin)
+    pub const WEBSOCKET_ON_OPEN: u32 = 350;
+    pub const WEBSOCKET_ON_MESSAGE_TEXT: u32 = 351;
+    pub const WEBSOCKET_ON_MESSAGE_BINARY: u32 = 352;
+    pub const WEBSOCKET_ON_CLOSE: u32 = 353;
+    pub const WEBSOCKET_ON_ERROR: u32 = 354;
 }
 
 // FFI symbol names

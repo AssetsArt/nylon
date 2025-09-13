@@ -173,3 +173,16 @@ func (r *Request) Headers() *Headers {
 		headers: headersMap,
 	}
 }
+
+// WebSocket send helpers
+func (ws *WebSocketConn) SendText(msg string) error {
+	return RequestMethod(ws.ctx.sessionID, 0, NylonMethodWebSocketSendText, []byte(msg))
+}
+
+func (ws *WebSocketConn) SendBinary(data []byte) error {
+	return RequestMethod(ws.ctx.sessionID, 0, NylonMethodWebSocketSendBinary, data)
+}
+
+func (ws *WebSocketConn) Close() error {
+	return RequestMethod(ws.ctx.sessionID, 0, NylonMethodWebSocketClose, nil)
+}
