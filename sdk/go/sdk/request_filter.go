@@ -26,10 +26,13 @@ func (p *PhaseRequestFilter) End() {
 
 // WebSocket helpers
 func (p *PhaseRequestFilter) WebSocketUpgrade(cbs WebSocketCallbacks) error {
-	// store callbacks in context for dispatch
+	// Store callbacks in context for dispatch before requesting upgrade
+	// This ensures callbacks are available when events arrive
 	p.ctx.mu.Lock()
 	p.ctx.wsCallbacks = &cbs
+	p.ctx.wsUpgraded = false // Reset state before upgrade
 	p.ctx.mu.Unlock()
-	// ask Rust to upgrade
+
+	// Ask Rust to upgrade - this will trigger OnOpen event after handshake
 	return RequestMethod(p.ctx.sessionID, 0, NylonMethodWebSocketUpgrade, nil)
 }

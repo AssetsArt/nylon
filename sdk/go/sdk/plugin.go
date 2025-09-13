@@ -176,14 +176,10 @@ func event_stream(ffiBuffer *C.FfiBuffer) {
 		ctx.mu.Lock()
 		defer ctx.mu.Unlock()
 		length := int(ffiBuffer.len)
-		if length == 0 {
-			ctx.cond.Broadcast()
-			return
-		}
 		method := uint32(ffiBuffer.method)
 		data := ffiBuffer.ptr
 
-		// WebSocket event dispatch
+		// WebSocket event dispatch (handle these even with length == 0)
 		switch method {
 		case MethodIDMapping[NylonMethodWebSocketOnOpen]:
 			ctx.wsUpgraded = true
@@ -222,6 +218,12 @@ func event_stream(ffiBuffer *C.FfiBuffer) {
 				go ctx.wsCallbacks.OnMessageBinary(&WebSocketConn{ctx: ctx}, dataCopy)
 			}
 			return
+		default:
+			// For non-WebSocket events, check length and handle normally
+			if length == 0 {
+				ctx.cond.Broadcast()
+				return
+			}
 		}
 
 		// default behavior: store data and wake waiter

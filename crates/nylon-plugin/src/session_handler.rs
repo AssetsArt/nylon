@@ -154,10 +154,10 @@ impl SessionHandler {
                     .await
                     .map_err(|e| NylonError::ConfigError(format!("Error sending response: {}", e)))?;
 
-                // Notify plugin side
-                session_stream
+                // Notify plugin side that WebSocket connection is established immediately
+                let _ = session_stream
                     .event_stream(0, methods::WEBSOCKET_ON_OPEN, &[])
-                    .await?;
+                    .await;
 
                 // Keep session open (wait for future events)
                 Ok(None)
@@ -183,6 +183,7 @@ impl SessionHandler {
                 Ok(None)
             }
             methods::WEBSOCKET_CLOSE => {
+                // Send close frame to client
                 let frame = Self::build_ws_frame(0x8, &[]);
                 let tasks = vec![
                     HttpTask::Body(Some(Bytes::from(frame)), false),
@@ -192,10 +193,19 @@ impl SessionHandler {
                     .response_duplex_vec(tasks)
                     .await
                     .map_err(|e| NylonError::ConfigError(format!("Error sending WS close: {}", e)))?;
-                // notify plugin
-                let _ = session_stream
-                    .event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[])
-                    .await;
+                
+                // Notify plugin that connection is closing
+                // Spawn task to ensure event is sent before connection cleanup
+                tokio::spawn({
+                    let session_stream = session_stream.clone();
+                    async move {
+                        let _ = session_stream
+                            .event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[])
+                            .await;
+                    }
+                });
+                
+                // End the session
                 Ok(Some(PluginResult::new(false, true)))
             }
 

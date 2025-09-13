@@ -193,9 +193,20 @@ where
                             session_stream.event_stream(0, methods::WEBSOCKET_ON_MESSAGE_BINARY, &payload).await?;
                         }
                         0x8 => { // close
+                            // Send close frame response to client
                             let frame = build_ws_frame(0x8, &payload);
-                            let _ = session.response_duplex_vec(vec![pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false), pingora::protocols::http::HttpTask::Done]).await;
-                            let _ = session_stream.event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[]).await;
+                            let _ = session.response_duplex_vec(vec![
+                                pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false), 
+                                pingora::protocols::http::HttpTask::Done
+                            ]).await;
+                            
+                            // Notify plugin that connection is closing
+                            // Use spawn to ensure event is delivered before session ends
+                            let session_stream_clone = session_stream.clone();
+                            tokio::spawn(async move {
+                                let _ = session_stream_clone.event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[]).await;
+                            });
+                            
                             return Ok(PluginResult::new(false, true));
                         }
                         0x9 => { // ping -> pong
