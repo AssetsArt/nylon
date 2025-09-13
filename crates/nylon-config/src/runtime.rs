@@ -1,4 +1,5 @@
 use nylon_error::NylonError;
+use nylon_types::websocket::WebSocketAdapterConfig;
 use serde::{Deserialize, Serialize};
 use std::{path::PathBuf, str::FromStr};
 
@@ -61,6 +62,10 @@ pub struct RuntimeConfig {
     /// Pingora runtime configuration
     #[serde(default)]
     pub pingora: PingoraConfig,
+
+    /// WebSocket adapter configuration
+    #[serde(default)]
+    pub websocket: Option<WebSocketAdapterConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -123,6 +128,7 @@ impl Default for RuntimeConfig {
             config_dir: default_config_dir(),
             acme: default_acme_dir(),
             pingora: PingoraConfig::default(),
+            websocket: None,
         }
     }
 }

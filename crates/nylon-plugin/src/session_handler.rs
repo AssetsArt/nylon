@@ -18,6 +18,7 @@ use pingora::{
     proxy::{ProxyHttp, Session},
 };
 use std::collections::HashMap;
+use tokio::sync::mpsc;
 
 /// Handles session stream operations for plugins
 pub struct SessionHandler;
@@ -154,10 +155,31 @@ impl SessionHandler {
                     .await
                     .map_err(|e| NylonError::ConfigError(format!("Error sending response: {}", e)))?;
 
+                // Register connection in adapter and start local dispatcher
+                let connection_id = format!("{}:{}", nylon_store::websockets::get_node_id().await.unwrap_or_else(|_| "node".into()), session_stream.session_id);
+                let connection = nylon_types::websocket::WebSocketConnection {
+                    id: connection_id.clone(),
+                    session_id: session_stream.session_id,
+                    rooms: vec![],
+                    node_id: nylon_store::websockets::get_node_id().await.unwrap_or_default(),
+                    connected_at: chrono::Utc::now().timestamp() as u64,
+                    metadata: HashMap::new(),
+                };
+                let _ = nylon_store::websockets::add_connection(connection).await;
+
+                // local rx for cluster events
+                let (tx, rx): (mpsc::UnboundedSender<nylon_types::websocket::WebSocketMessage>, mpsc::UnboundedReceiver<nylon_types::websocket::WebSocketMessage>) = mpsc::unbounded_channel();
+                nylon_store::websockets::register_local_sender(connection_id.clone(), tx);
+                // store ws rx per session for use in outer event loop if needed
+                let _ = crate::stream::set_ws_rx(session_stream.session_id, rx).await;
+
                 // Notify plugin side that WebSocket connection is established immediately
                 let _ = session_stream
                     .event_stream(0, methods::WEBSOCKET_ON_OPEN, &[])
                     .await;
+
+                // Spawn task to forward cluster messages to client frames
+                // NOTE: actual forwarding is handled in lib.rs select loop via get_ws_rx
 
                 // Keep session open (wait for future events)
                 Ok(None)
@@ -205,6 +227,17 @@ impl SessionHandler {
                     }
                 });
                 
+                // Cleanup adapter registration
+                let conn_id = format!(
+                    "{}:{}",
+                    nylon_store::websockets::get_node_id().await.unwrap_or_default(),
+                    session_stream.session_id
+                );
+                nylon_store::websockets::unregister_local_sender(&conn_id);
+                tokio::spawn(async move {
+                    let _ = nylon_store::websockets::remove_connection(&conn_id).await;
+                });
+
                 // End the session
                 Ok(Some(PluginResult::new(false, true)))
             }

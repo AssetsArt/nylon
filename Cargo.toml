@@ -20,6 +20,7 @@ pingora = { version="0.6", features = ["lb", "openssl"] }
 async-trait = "0.1"
 openssl = { version = "0.10", features = ["vendored"] }
 tokio = { version = "1", features = ["rt"] }
+tokio-stream = "0.1"
 fnv = "1.0"
 matchit = "0.8"
 bytes = "1.7"

@@ -103,6 +103,9 @@ where
         frame
     }
 
+    // try to get WS rx to forward cluster messages when ws_active
+    let ws_rx_arc = crate::stream::get_ws_rx(session_stream.session_id).ok();
+
     loop {
         if !ws_active {
             if let Some((method, data)) = rx.recv().await {
@@ -144,79 +147,114 @@ where
                     return Ok(result);
                 }
             }
-            // Client -> server frames
-            Ok(Some(chunk)) = session.read_request_body() => {
-                read_buf.extend_from_slice(&chunk);
-                // parse frames in read_buf
-                loop {
-                    if read_buf.len() < 2 { break; }
-                    let b0 = read_buf[0];
-                    let b1 = read_buf[1];
-                    let fin = (b0 & 0x80) != 0;
-                    let opcode = b0 & 0x0F;
-                    let masked = (b1 & 0x80) != 0;
-                    let mut idx = 2usize;
-                    let mut payload_len: usize = (b1 & 0x7F) as usize;
-                    if payload_len == 126 {
-                        if read_buf.len() < idx + 2 { break; }
-                        payload_len = u16::from_be_bytes([read_buf[idx], read_buf[idx+1]]) as usize;
-                        idx += 2;
-                    } else if payload_len == 127 {
-                        if read_buf.len() < idx + 8 { break; }
-                        payload_len = u64::from_be_bytes([
-                            read_buf[idx],read_buf[idx+1],read_buf[idx+2],read_buf[idx+3],
-                            read_buf[idx+4],read_buf[idx+5],read_buf[idx+6],read_buf[idx+7]
-                        ]) as usize;
-                        idx += 8;
+            // Cluster/local adapter -> client frames
+            Some(msg) = async {
+                match &ws_rx_arc {
+                    Some(arc) => {
+                        let mut rx = arc.lock().await;
+                        rx.recv().await
                     }
-                    let mut mask_key = [0u8;4];
-                    if masked {
-                        if read_buf.len() < idx + 4 { break; }
-                        mask_key.copy_from_slice(&read_buf[idx..idx+4]);
-                        idx += 4;
-                    }
-                    if read_buf.len() < idx + payload_len { break; }
-                    let mut payload = read_buf[idx..idx+payload_len].to_vec();
-                    if masked {
-                        for i in 0..payload_len { payload[i] ^= mask_key[i % 4]; }
-                    }
-                    // remove frame from buffer
-                    let remove_len = idx + payload_len;
-                    read_buf.drain(0..remove_len);
+                    None => None
+                }
+            } => {
+                let frame = match msg {
+                    nylon_types::websocket::WebSocketMessage::Text(s) => build_ws_frame(0x1, s.as_bytes()),
+                    nylon_types::websocket::WebSocketMessage::Binary(b) => build_ws_frame(0x2, &b),
+                    nylon_types::websocket::WebSocketMessage::Close { code:_, reason:_ } => build_ws_frame(0x8, &[]),
+                    nylon_types::websocket::WebSocketMessage::Ping(p) => build_ws_frame(0x9, &p),
+                    nylon_types::websocket::WebSocketMessage::Pong(p) => build_ws_frame(0xA, &p),
+                };
+                let _ = session.response_duplex_vec(vec![pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false)]).await;
+            }
+            // Client -> server frames (including EOF/Err)
+            result = session.read_request_body() => {
+                match result {
+                    Ok(Some(chunk)) => {
+                        read_buf.extend_from_slice(&chunk);
+                        // parse frames in read_buf
+                        loop {
+                            if read_buf.len() < 2 { break; }
+                            let b0 = read_buf[0];
+                            let b1 = read_buf[1];
+                            let fin = (b0 & 0x80) != 0;
+                            let opcode = b0 & 0x0F;
+                            let masked = (b1 & 0x80) != 0;
+                            let mut idx = 2usize;
+                            let mut payload_len: usize = (b1 & 0x7F) as usize;
+                            if payload_len == 126 {
+                                if read_buf.len() < idx + 2 { break; }
+                                payload_len = u16::from_be_bytes([read_buf[idx], read_buf[idx+1]]) as usize;
+                                idx += 2;
+                            } else if payload_len == 127 {
+                                if read_buf.len() < idx + 8 { break; }
+                                payload_len = u64::from_be_bytes([
+                                    read_buf[idx],read_buf[idx+1],read_buf[idx+2],read_buf[idx+3],
+                                    read_buf[idx+4],read_buf[idx+5],read_buf[idx+6],read_buf[idx+7]
+                                ]) as usize;
+                                idx += 8;
+                            }
+                            let mut mask_key = [0u8;4];
+                            if masked {
+                                if read_buf.len() < idx + 4 { break; }
+                                mask_key.copy_from_slice(&read_buf[idx..idx+4]);
+                                idx += 4;
+                            }
+                            if read_buf.len() < idx + payload_len { break; }
+                            let mut payload = read_buf[idx..idx+payload_len].to_vec();
+                            if masked {
+                                for i in 0..payload_len { payload[i] ^= mask_key[i % 4]; }
+                            }
+                            // remove frame from buffer
+                            let remove_len = idx + payload_len;
+                            read_buf.drain(0..remove_len);
 
-                    // handle opcodes
-                    match opcode {
-                        0x1 => { // text
-                            session_stream.event_stream(0, methods::WEBSOCKET_ON_MESSAGE_TEXT, &payload).await?;
+                            // handle opcodes
+                            match opcode {
+                                0x1 => { // text
+                                    session_stream.event_stream(0, methods::WEBSOCKET_ON_MESSAGE_TEXT, &payload).await?;
+                                }
+                                0x2 => { // binary
+                                    session_stream.event_stream(0, methods::WEBSOCKET_ON_MESSAGE_BINARY, &payload).await?;
+                                }
+                                0x8 => { // close
+                                    // Send close frame response to client
+                                    let frame = build_ws_frame(0x8, &payload);
+                                    let _ = session.response_duplex_vec(vec![
+                                        pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false), 
+                                        pingora::protocols::http::HttpTask::Done
+                                    ]).await;
+                                    
+                                    // Notify plugin that connection is closing (await to ensure delivery)
+                                    session_stream.event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[]).await?;
+                                    // unregister and remove from adapter
+                                    let conn_id = format!("{}:{}", nylon_store::websockets::get_node_id().await.unwrap_or_default(), session_stream.session_id);
+                                    nylon_store::websockets::unregister_local_sender(&conn_id);
+                                    tokio::spawn(async move {
+                                        let _ = nylon_store::websockets::remove_connection(&conn_id).await;
+                                    });
+                                    
+                                    return Ok(PluginResult::new(false, true));
+                                }
+                                0x9 => { // ping -> pong
+                                    let frame = build_ws_frame(0xA, &payload);
+                                    let _ = session.response_duplex_vec(vec![pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false)]).await;
+                                }
+                                0xA => { /* pong: ignore */ }
+                                _ => { /* ignore */ }
+                            }
+                            if !fin { /* fragmentation not supported in stub */ }
                         }
-                        0x2 => { // binary
-                            session_stream.event_stream(0, methods::WEBSOCKET_ON_MESSAGE_BINARY, &payload).await?;
-                        }
-                        0x8 => { // close
-                            // Send close frame response to client
-                            let frame = build_ws_frame(0x8, &payload);
-                            let _ = session.response_duplex_vec(vec![
-                                pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false), 
-                                pingora::protocols::http::HttpTask::Done
-                            ]).await;
-                            
-                            // Notify plugin that connection is closing
-                            // Use spawn to ensure event is delivered before session ends
-                            let session_stream_clone = session_stream.clone();
-                            tokio::spawn(async move {
-                                let _ = session_stream_clone.event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[]).await;
-                            });
-                            
-                            return Ok(PluginResult::new(false, true));
-                        }
-                        0x9 => { // ping -> pong
-                            let frame = build_ws_frame(0xA, &payload);
-                            let _ = session.response_duplex_vec(vec![pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false)]).await;
-                        }
-                        0xA => { /* pong: ignore */ }
-                        _ => { /* ignore */ }
                     }
-                    if !fin { /* fragmentation not supported in stub */ }
+                    Ok(None) | Err(_) => {
+                        // client closed or error
+                        session_stream.event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[]).await?;
+                        let conn_id = format!("{}:{}", nylon_store::websockets::get_node_id().await.unwrap_or_default(), session_stream.session_id);
+                        nylon_store::websockets::unregister_local_sender(&conn_id);
+                        tokio::spawn(async move {
+                            let _ = nylon_store::websockets::remove_connection(&conn_id).await;
+                        });
+                        return Ok(PluginResult::new(false, true));
+                    }
                 }
             }
         }
