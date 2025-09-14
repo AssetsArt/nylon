@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Docs](https://img.shields.io/badge/docs-online-blue)](https://nylon.sh/)
 
-**Nylon** is a lightweight, high-performance, and extensible proxy server built on top of the robust [Cloudflare Pingora](https://blog.cloudflare.com/introducing-pingora/) framework. Designed for modern infrastructure.
+**Nylon** is a lightweight, high-performance, and extensible proxy server built on top of the robust [Cloudflare Pingora](https://github.com/cloudflare/pingora) framework. Designed for modern infrastructure.
 
 ---
 
@@ -36,23 +36,14 @@ Nylon features a **powerful plugin system** — use any language with FFI.
 
 ```yaml
 # proxy/my-config.yaml
+header_selector: x-nylon-proxy
+
 plugins:
   - name: plugin_sdk
     type: ffi
     file: ./target/examples/go/plugin_sdk.so
     config:
       debug: true
-      # ... other config
-
-middleware_groups:
-  example:
-    - plugin: plugin_sdk
-      request_filter: "authz"
-      payload:
-        client_ip: "${request(client_ip)}"
-				
-    - plugin: plugin_sdk
-      entry: "stream"
 
 services:
   - name: http-service
@@ -60,10 +51,10 @@ services:
     algorithm: round_robin # Options: round_robin, random, consistent, weighted
     endpoints:
       - ip: 127.0.0.1
-        port: 3001
+        port: 3000
         # weight: 10 # Optional
       - ip: 127.0.0.1
-        port: 3002
+        port: 3001
         # weight: 1 # Optional
 
   - name: ws-service
@@ -71,6 +62,19 @@ services:
     plugin:
       name: plugin_sdk
       entry: ws
+
+  - name: stream-service
+    service_type: plugin
+    plugin:
+      name: plugin_sdk
+      entry: stream
+
+middleware_groups:
+  example:
+    - plugin: plugin_sdk
+      entry: "authz"
+      payload:
+        client_ip: "${request(client_ip)}"
 
 routes:
   - route:
@@ -86,6 +90,14 @@ routes:
           - OPTIONS
         service:
           name: ws-service
+      - path:
+          - /stream
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+        service:
+          name: stream-service
       - path: 
           - /
           - /{*path}

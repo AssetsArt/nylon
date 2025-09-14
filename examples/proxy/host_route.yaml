@@ -16,6 +16,14 @@ routes:
           - OPTIONS
         service:
           name: ws-service
+      - path:
+          - /stream
+        methods:
+          - GET
+          - POST
+          - OPTIONS
+        service:
+          name: stream-service
       - path: 
           - /
           - /{*path}

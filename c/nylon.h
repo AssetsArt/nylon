@@ -7,7 +7,6 @@
 
 typedef struct {
     uint32_t sid;
-    uint32_t csid;
     uint8_t phase;
     uint32_t method;
     const unsigned char *ptr;

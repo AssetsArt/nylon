@@ -3,7 +3,6 @@ package main
 import "C"
 import (
 	"fmt"
-	"time"
 
 	"github.com/AssetsArt/easy-proxy/sdk/go/sdk"
 )
@@ -60,7 +59,7 @@ func init() {
 			response := ctx.Response()
 			response.SetHeader("X-RequestFilter", "authz-1")
 			// sleep 2 seconds
-			time.Sleep(2 * time.Second)
+			// time.Sleep(2 * time.Second)
 			// next phase
 			ctx.Next()
 		})
