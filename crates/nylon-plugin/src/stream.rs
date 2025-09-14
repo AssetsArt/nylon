@@ -13,7 +13,9 @@ use std::{
 };
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio::sync::mpsc::UnboundedReceiver as UnboundedWsReceiver;
 use tracing::{debug, trace};
+use nylon_types::websocket::WebSocketMessage;
 
 // Active sessions
 type SessionSender = mpsc::UnboundedSender<(u32, Vec<u8>)>;
@@ -24,6 +26,10 @@ static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
 // static SESSION_RX: Lazy<Arc<Mutex<HashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>>>> =
 //     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
 static SESSION_RX: Lazy<Mutex<HashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+// WS message receivers per session for cluster/local adapter dispatch
+static SESSION_WS_RX: Lazy<Mutex<HashMap<u32, Arc<Mutex<UnboundedWsReceiver<WebSocketMessage>>>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
 #[unsafe(no_mangle)]
@@ -167,5 +173,30 @@ pub fn get_rx(
         Err(_) => Err(NylonError::ConfigError(format!(
             "Failed to lock SESSION_RX"
         ))),
+    }
+}
+
+pub async fn set_ws_rx(
+    session_id: u32,
+    rx: UnboundedWsReceiver<WebSocketMessage>,
+) -> Result<(), NylonError> {
+    let mut sessions = SESSION_WS_RX.lock().await;
+    sessions.insert(session_id, Arc::new(Mutex::new(rx)));
+    Ok(())
+}
+
+pub fn get_ws_rx(
+    session_id: u32,
+) -> Result<Arc<Mutex<UnboundedWsReceiver<WebSocketMessage>>>, NylonError> {
+    let sessions = SESSION_WS_RX.try_lock();
+    match sessions {
+        Ok(sessions) => sessions
+            .get(&session_id)
+            .cloned()
+            .ok_or_else(|| NylonError::ConfigError(format!("WS Session {} not found", session_id)))
+            .map(|arc| arc.clone()),
+        Err(_) => Err(NylonError::ConfigError(
+            "Failed to lock SESSION_WS_RX".to_string(),
+        )),
     }
 }
