@@ -33,6 +33,12 @@ const (
 	NylonMethodWebSocketSendBinary NylonMethods = "websocket_send_binary"
 	NylonMethodWebSocketClose      NylonMethods = "websocket_close"
 
+	// WebSocket room methods (Plugin -> Rust)
+	NylonMethodWebSocketJoinRoom            NylonMethods = "websocket_join_room"
+	NylonMethodWebSocketLeaveRoom           NylonMethods = "websocket_leave_room"
+	NylonMethodWebSocketBroadcastRoomText   NylonMethods = "websocket_broadcast_room_text"
+	NylonMethodWebSocketBroadcastRoomBinary NylonMethods = "websocket_broadcast_room_binary"
+
 	// Rust -> Plugin
 	NylonMethodWebSocketOnOpen          NylonMethods = "websocket_on_open"
 	NylonMethodWebSocketOnMessageText   NylonMethods = "websocket_on_message_text"
@@ -62,15 +68,19 @@ var MethodIDMapping = map[NylonMethods]uint32{
 	NylonMethodReadRequestHeaders:  202,
 
 	// WebSocket methods
-	NylonMethodWebSocketUpgrade:         300,
-	NylonMethodWebSocketSendText:        301,
-	NylonMethodWebSocketSendBinary:      302,
-	NylonMethodWebSocketClose:           303,
-	NylonMethodWebSocketOnOpen:          350,
-	NylonMethodWebSocketOnMessageText:   351,
-	NylonMethodWebSocketOnMessageBinary: 352,
-	NylonMethodWebSocketOnClose:         353,
-	NylonMethodWebSocketOnError:         354,
+	NylonMethodWebSocketUpgrade:             300,
+	NylonMethodWebSocketSendText:            301,
+	NylonMethodWebSocketSendBinary:          302,
+	NylonMethodWebSocketClose:               303,
+	NylonMethodWebSocketJoinRoom:            310,
+	NylonMethodWebSocketLeaveRoom:           311,
+	NylonMethodWebSocketBroadcastRoomText:   312,
+	NylonMethodWebSocketBroadcastRoomBinary: 313,
+	NylonMethodWebSocketOnOpen:              350,
+	NylonMethodWebSocketOnMessageText:       351,
+	NylonMethodWebSocketOnMessageBinary:     352,
+	NylonMethodWebSocketOnClose:             353,
+	NylonMethodWebSocketOnError:             354,
 }
 
 const (

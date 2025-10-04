@@ -10,7 +10,7 @@ thiserror = "2.0"
 clap = { version = "4.5", features = ["derive"] }
 tracing-subscriber = "0.3"
 tracing = "0.1"
-serde_yml = "0.0.11"
+serde_yaml_ng = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 num_cpus = "1.0"
@@ -28,11 +28,13 @@ http = "1.3"
 regex = "1.11"
 chrono = "0.4"
 uuid = { version = "1.13", features = ["v4", "v7"] }
-flatbuffers = { version = "25.2", features = ["serde"] }
+flatbuffers = { version = "25.9", features = ["serde"] }
 libloading = "0.8"
 instant-acme = "0.8"
 sha1 = "0.10"
 base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+redis = { version = "0.32", features = ["aio", "tokio-comp"] }
+mime_guess = "2.0"
 
 [profile.release]
 overflow-checks = true

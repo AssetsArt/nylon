@@ -1,12 +1,12 @@
 use crate::{constants::methods, stream::PluginSessionStream, types::PluginResult};
-use bytes::Bytes;
-use sha1::{Digest, Sha1};
 use base64::Engine;
+use bytes::Bytes;
 use http::{HeaderMap, HeaderValue};
 use nylon_error::NylonError;
 use nylon_sdk::fbs::plugin_generated::nylon_plugin::{
     HeaderKeyValue, HeaderKeyValueArgs, NylonHttpHeaders, NylonHttpHeadersArgs,
 };
+use nylon_types::websocket::WebSocketMessage;
 use nylon_types::{
     context::NylonContext,
     plugins::SessionStream,
@@ -17,6 +17,7 @@ use pingora::{
     protocols::http::HttpTask,
     proxy::{ProxyHttp, Session},
 };
+use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
@@ -43,7 +44,7 @@ impl SessionHandler {
         frame
     }
     /// Process a method from the plugin session stream
-    pub async fn process_method<'a, T>(
+    pub async fn process_method<T>(
         proxy: &T,
         method: u32,
         data: Vec<u8>,
@@ -120,7 +121,11 @@ impl SessionHandler {
             methods::WEBSOCKET_UPGRADE => {
                 // Perform WebSocket handshake (101)
                 let headers = session.req_header();
-                let key = headers.headers.get("sec-websocket-key").and_then(|v| v.to_str().ok()).unwrap_or("");
+                let key = headers
+                    .headers
+                    .get("sec-websocket-key")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("");
                 if key.is_empty() {
                     // Fallback text response if no key
                     let mut headers = ResponseHeader::build(400u16, None)
@@ -128,13 +133,15 @@ impl SessionHandler {
                     let _ = headers.append_header("content-type", "text/plain");
                     let tasks = vec![
                         HttpTask::Header(Box::new(headers), false),
-                        HttpTask::Body(Some(Bytes::from_static(b"Missing Sec-WebSocket-Key")), false),
+                        HttpTask::Body(
+                            Some(Bytes::from_static(b"Missing Sec-WebSocket-Key")),
+                            false,
+                        ),
                         HttpTask::Done,
                     ];
-                    session
-                        .response_duplex_vec(tasks)
-                        .await
-                        .map_err(|e| NylonError::ConfigError(format!("Error sending response: {}", e)))?;
+                    session.response_duplex_vec(tasks).await.map_err(|e| {
+                        NylonError::ConfigError(format!("Error sending response: {}", e))
+                    })?;
                     return Ok(Some(PluginResult::new(true, false)));
                 }
 
@@ -142,7 +149,8 @@ impl SessionHandler {
                 let mut hasher = Sha1::new();
                 hasher.update(key.as_bytes());
                 hasher.update(nylon_store::websockets::WEBSOCKET_GUID.as_bytes());
-                let accept_key = base64::engine::general_purpose::STANDARD.encode(hasher.finalize());
+                let accept_key =
+                    base64::engine::general_purpose::STANDARD.encode(hasher.finalize());
 
                 let mut resp = ResponseHeader::build(101u16, None)
                     .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
@@ -153,22 +161,35 @@ impl SessionHandler {
                 session
                     .response_duplex_vec(vec![HttpTask::Header(Box::new(resp), false)])
                     .await
-                    .map_err(|e| NylonError::ConfigError(format!("Error sending response: {}", e)))?;
+                    .map_err(|e| {
+                        NylonError::ConfigError(format!("Error sending response: {}", e))
+                    })?;
 
                 // Register connection in adapter and start local dispatcher
-                let connection_id = format!("{}:{}", nylon_store::websockets::get_node_id().await.unwrap_or_else(|_| "node".into()), session_stream.session_id);
+                let connection_id = format!(
+                    "{}:{}",
+                    nylon_store::websockets::get_node_id()
+                        .await
+                        .unwrap_or_else(|_| "node".into()),
+                    session_stream.session_id
+                );
                 let connection = nylon_types::websocket::WebSocketConnection {
                     id: connection_id.clone(),
                     session_id: session_stream.session_id,
                     rooms: vec![],
-                    node_id: nylon_store::websockets::get_node_id().await.unwrap_or_default(),
+                    node_id: nylon_store::websockets::get_node_id()
+                        .await
+                        .unwrap_or_default(),
                     connected_at: chrono::Utc::now().timestamp() as u64,
                     metadata: HashMap::new(),
                 };
                 let _ = nylon_store::websockets::add_connection(connection).await;
 
                 // local rx for cluster events
-                let (tx, rx): (mpsc::UnboundedSender<nylon_types::websocket::WebSocketMessage>, mpsc::UnboundedReceiver<nylon_types::websocket::WebSocketMessage>) = mpsc::unbounded_channel();
+                let (tx, rx): (
+                    mpsc::UnboundedSender<nylon_types::websocket::WebSocketMessage>,
+                    mpsc::UnboundedReceiver<nylon_types::websocket::WebSocketMessage>,
+                ) = mpsc::unbounded_channel();
                 nylon_store::websockets::register_local_sender(connection_id.clone(), tx);
                 // store ws rx per session for use in outer event loop if needed
                 let _ = crate::stream::set_ws_rx(session_stream.session_id, rx).await;
@@ -188,20 +209,18 @@ impl SessionHandler {
                 // Send a text frame to client
                 let frame = Self::build_ws_frame(0x1, &data);
                 let tasks = vec![HttpTask::Body(Some(Bytes::from(frame)), false)];
-                session
-                    .response_duplex_vec(tasks)
-                    .await
-                    .map_err(|e| NylonError::ConfigError(format!("Error sending WS text: {}", e)))?;
+                session.response_duplex_vec(tasks).await.map_err(|e| {
+                    NylonError::ConfigError(format!("Error sending WS text: {}", e))
+                })?;
                 Ok(None)
             }
             methods::WEBSOCKET_SEND_BINARY => {
                 // Send a binary frame to client
                 let frame = Self::build_ws_frame(0x2, &data);
                 let tasks = vec![HttpTask::Body(Some(Bytes::from(frame)), false)];
-                session
-                    .response_duplex_vec(tasks)
-                    .await
-                    .map_err(|e| NylonError::ConfigError(format!("Error sending WS binary: {}", e)))?;
+                session.response_duplex_vec(tasks).await.map_err(|e| {
+                    NylonError::ConfigError(format!("Error sending WS binary: {}", e))
+                })?;
                 Ok(None)
             }
             methods::WEBSOCKET_CLOSE => {
@@ -211,11 +230,10 @@ impl SessionHandler {
                     HttpTask::Body(Some(Bytes::from(frame)), false),
                     HttpTask::Done,
                 ];
-                session
-                    .response_duplex_vec(tasks)
-                    .await
-                    .map_err(|e| NylonError::ConfigError(format!("Error sending WS close: {}", e)))?;
-                
+                session.response_duplex_vec(tasks).await.map_err(|e| {
+                    NylonError::ConfigError(format!("Error sending WS close: {}", e))
+                })?;
+
                 // Notify plugin that connection is closing
                 // Spawn task to ensure event is sent before connection cleanup
                 tokio::spawn({
@@ -226,11 +244,13 @@ impl SessionHandler {
                             .await;
                     }
                 });
-                
+
                 // Cleanup adapter registration
                 let conn_id = format!(
                     "{}:{}",
-                    nylon_store::websockets::get_node_id().await.unwrap_or_default(),
+                    nylon_store::websockets::get_node_id()
+                        .await
+                        .unwrap_or_default(),
                     session_stream.session_id
                 );
                 nylon_store::websockets::unregister_local_sender(&conn_id);
@@ -242,12 +262,77 @@ impl SessionHandler {
                 Ok(Some(PluginResult::new(false, true)))
             }
 
+            // WebSocket room operations
+            methods::WEBSOCKET_JOIN_ROOM => {
+                let room = String::from_utf8_lossy(&data).to_string();
+                if !room.is_empty() {
+                    let conn_id = format!(
+                        "{}:{}",
+                        nylon_store::websockets::get_node_id()
+                            .await
+                            .unwrap_or_default(),
+                        session_stream.session_id
+                    );
+                    let _ = nylon_store::websockets::join_room(&conn_id, &room).await;
+                }
+                Ok(None)
+            }
+            methods::WEBSOCKET_LEAVE_ROOM => {
+                let room = String::from_utf8_lossy(&data).to_string();
+                if !room.is_empty() {
+                    let conn_id = format!(
+                        "{}:{}",
+                        nylon_store::websockets::get_node_id()
+                            .await
+                            .unwrap_or_default(),
+                        session_stream.session_id
+                    );
+                    let _ = nylon_store::websockets::leave_room(&conn_id, &room).await;
+                }
+                Ok(None)
+            }
+            methods::WEBSOCKET_BROADCAST_ROOM_TEXT => {
+                if let Some((room, payload)) = Self::split_room_payload(&data) {
+                    let message = String::from_utf8_lossy(&payload).to_string();
+                    let _ = nylon_store::websockets::broadcast_to_room(
+                        &room,
+                        WebSocketMessage::Text(message),
+                        None,
+                    )
+                    .await;
+                }
+                Ok(None)
+            }
+            methods::WEBSOCKET_BROADCAST_ROOM_BINARY => {
+                if let Some((room, payload)) = Self::split_room_payload(&data) {
+                    let _ = nylon_store::websockets::broadcast_to_room(
+                        &room,
+                        WebSocketMessage::Binary(payload),
+                        None,
+                    )
+                    .await;
+                }
+                Ok(None)
+            }
+
             // Unknown method
             _ => Err(NylonError::ConfigError(format!(
                 "Invalid method: {}",
                 method
             ))),
         }
+    }
+
+    /// Split room and payload using a NUL (0x00) delimiter: [room_bytes, 0x00, payload_bytes]
+    fn split_room_payload(data: &[u8]) -> Option<(String, Vec<u8>)> {
+        if let Some(pos) = data.iter().position(|b| *b == 0) {
+            let room = String::from_utf8_lossy(&data[..pos]).to_string();
+            let payload = data[pos + 1..].to_vec();
+            if !room.is_empty() {
+                return Some((room, payload));
+            }
+        }
+        None
     }
 
     async fn handle_get_payload(
@@ -268,7 +353,7 @@ impl SessionHandler {
             }
             None => None,
         };
-        let payload_slice = payload.as_ref().map(|p| p.as_slice()).unwrap_or_default();
+        let payload_slice = payload.as_deref().unwrap_or_default();
         session_stream
             .event_stream(0, methods::GET_PAYLOAD, payload_slice)
             .await
@@ -281,6 +366,8 @@ impl SessionHandler {
         let headers = flatbuffers::root::<HeaderKeyValue>(data)
             .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
         ctx.add_response_header
+            .write()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
             .insert(headers.key().to_string(), headers.value().to_string());
         Ok(())
     }
@@ -290,7 +377,10 @@ impl SessionHandler {
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
         let header_key = String::from_utf8_lossy(data).to_string();
-        ctx.remove_response_header.push(header_key);
+        ctx.remove_response_header
+            .write()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+            .push(header_key);
         Ok(())
     }
 
@@ -300,7 +390,8 @@ impl SessionHandler {
     ) -> Result<(), NylonError> {
         if data.len() >= 2 {
             let status = u16::from_be_bytes([data[0], data[1]]);
-            ctx.set_response_status = status;
+            ctx.set_response_status
+                .store(status, std::sync::atomic::Ordering::Relaxed);
         }
         Ok(())
     }
@@ -309,21 +400,27 @@ impl SessionHandler {
         data: Vec<u8>,
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
-        ctx.set_response_body = data;
+        *ctx.set_response_body
+            .write()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))? = data;
         Ok(())
     }
 
-    async fn handle_set_response_stream_header<'a, T>(
+    async fn handle_set_response_stream_header<T>(
         proxy: &T,
-        ctx: &'a mut NylonContext,
+        ctx: &mut NylonContext,
         session: &mut Session,
     ) -> Result<(), NylonError>
     where
         T: ProxyHttp + Send + Sync,
         <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
     {
-        let mut headers = ResponseHeader::build(ctx.set_response_status, None)
-            .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
+        let mut headers = ResponseHeader::build(
+            ctx.set_response_status
+                .load(std::sync::atomic::Ordering::Relaxed),
+            None,
+        )
+        .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
 
         let mut proxy_ctx: <T as ProxyHttp>::CTX = ctx.clone().into();
         proxy
@@ -364,8 +461,14 @@ impl SessionHandler {
         session_stream: &SessionStream,
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
+        let body = {
+            ctx.set_response_body
+                .read()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+                .clone()
+        };
         session_stream
-            .event_stream(0, methods::READ_RESPONSE_FULL_BODY, &ctx.set_response_body)
+            .event_stream(0, methods::READ_RESPONSE_FULL_BODY, &body)
             .await
     }
 
@@ -374,15 +477,25 @@ impl SessionHandler {
         ctx: &mut NylonContext,
         session: &mut Session,
     ) -> Result<(), NylonError> {
-        if !session.is_body_empty() && !ctx.read_body {
-            ctx.read_body = true;
+        if !session.is_body_empty() && !ctx.read_body.load(std::sync::atomic::Ordering::Relaxed) {
+            ctx.read_body
+                .store(true, std::sync::atomic::Ordering::Relaxed);
             session.enable_retry_buffering();
             while let Ok(Some(data)) = session.read_request_body().await {
-                ctx.request_body.extend_from_slice(&data);
+                ctx.request_body
+                    .write()
+                    .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+                    .extend_from_slice(&data);
             }
         }
+        let req_body = {
+            ctx.request_body
+                .read()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+                .clone()
+        };
         session_stream
-            .event_stream(0, methods::READ_REQUEST_FULL_BODY, &ctx.request_body)
+            .event_stream(0, methods::READ_REQUEST_FULL_BODY, &req_body)
             .await
     }
 

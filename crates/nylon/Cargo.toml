@@ -22,3 +22,4 @@ serde_json = { workspace = true }
 http = { workspace = true }
 flatbuffers = { workspace = true }
 dashmap = { workspace = true }
+mime_guess = { workspace = true }

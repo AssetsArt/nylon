@@ -186,3 +186,29 @@ func (ws *WebSocketConn) SendBinary(data []byte) error {
 func (ws *WebSocketConn) Close() error {
 	return RequestMethod(ws.ctx.sessionID, 0, NylonMethodWebSocketClose, nil)
 }
+
+// Room helpers
+func (ws *WebSocketConn) JoinRoom(room string) error {
+	return RequestMethod(ws.ctx.sessionID, 0, NylonMethodWebSocketJoinRoom, []byte(room))
+}
+
+func (ws *WebSocketConn) LeaveRoom(room string) error {
+	return RequestMethod(ws.ctx.sessionID, 0, NylonMethodWebSocketLeaveRoom, []byte(room))
+}
+
+// Broadcast helpers (room + NUL + payload)
+func (ws *WebSocketConn) BroadcastText(room string, message string) error {
+	data := make([]byte, 0, len(room)+1+len(message))
+	data = append(data, []byte(room)...)
+	data = append(data, 0)
+	data = append(data, []byte(message)...)
+	return RequestMethod(ws.ctx.sessionID, 0, NylonMethodWebSocketBroadcastRoomText, data)
+}
+
+func (ws *WebSocketConn) BroadcastBinary(room string, payload []byte) error {
+	data := make([]byte, 0, len(room)+1+len(payload))
+	data = append(data, []byte(room)...)
+	data = append(data, 0)
+	data = append(data, payload...)
+	return RequestMethod(ws.ctx.sessionID, 0, NylonMethodWebSocketBroadcastRoomBinary, data)
+}

@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_types::plugins::{FfiBuffer, FfiPlugin, SessionStream};
+use nylon_types::websocket::WebSocketMessage;
 use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
@@ -12,10 +13,9 @@ use std::{
     },
 };
 use tokio::sync::Mutex;
-use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio::sync::mpsc::UnboundedReceiver as UnboundedWsReceiver;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tracing::{debug, trace};
-use nylon_types::websocket::WebSocketMessage;
 
 // Active sessions
 type SessionSender = mpsc::UnboundedSender<(u32, Vec<u8>)>;
@@ -40,7 +40,10 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
     // let phase = ffi.phase;
     let len = ffi.len as usize;
     let ptr = ffi.ptr;
-    trace!("handle_ffi_event: session_id={}, method={}", session_id, method);
+    trace!(
+        "handle_ffi_event: session_id={}, method={}",
+        session_id, method
+    );
     // Clone sender first to minimize time under the read lock
     let sender_opt = ACTIVE_SESSIONS
         .read()
@@ -55,10 +58,9 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
         }
 
         unsafe {
-            // Fast copy from raw pointer
-            let mut buf = Vec::with_capacity(len);
-            buf.set_len(len);
-            std::ptr::copy_nonoverlapping(ptr, buf.as_mut_ptr(), len);
+            // Fast copy from raw pointer without creating uninitialized values
+            let slice = std::slice::from_raw_parts(ptr, len);
+            let buf = slice.to_vec();
             if let Err(_e) = sender.send((method, buf)) {
                 debug!("send error: {:?}", session_id);
             }
@@ -168,11 +170,10 @@ pub fn get_rx(
         Ok(sessions) => sessions
             .get(&session_id)
             .cloned()
-            .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))
-            .map(|arc| arc.clone()),
-        Err(_) => Err(NylonError::ConfigError(format!(
-            "Failed to lock SESSION_RX"
-        ))),
+            .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id))),
+        Err(_) => Err(NylonError::ConfigError(
+            "Failed to lock SESSION_RX".to_string(),
+        )),
     }
 }
 
@@ -193,8 +194,7 @@ pub fn get_ws_rx(
         Ok(sessions) => sessions
             .get(&session_id)
             .cloned()
-            .ok_or_else(|| NylonError::ConfigError(format!("WS Session {} not found", session_id)))
-            .map(|arc| arc.clone()),
+            .ok_or_else(|| NylonError::ConfigError(format!("WS Session {} not found", session_id))),
         Err(_) => Err(NylonError::ConfigError(
             "Failed to lock SESSION_WS_RX".to_string(),
         )),

@@ -29,7 +29,7 @@ impl ProxyConfigExt for ProxyConfig {
     fn from_file(path: &str) -> Result<Self, NylonError> {
         let content =
             std::fs::read_to_string(path).map_err(|e| NylonError::ConfigError(e.to_string()))?;
-        serde_yml::from_str(&content).map_err(|e| NylonError::ConfigError(e.to_string()))
+        serde_yaml_ng::from_str(&content).map_err(|e| NylonError::ConfigError(e.to_string()))
     }
 
     fn from_dir(dir: &str) -> Result<Self, NylonError> {
@@ -38,7 +38,7 @@ impl ProxyConfigExt for ProxyConfig {
         for file in files {
             let content = std::fs::read_to_string(file)
                 .map_err(|e| NylonError::ConfigError(e.to_string()))?;
-            let file_config: ProxyConfig = serde_yml::from_str(&content)
+            let file_config: ProxyConfig = serde_yaml_ng::from_str(&content)
                 .map_err(|e| NylonError::ConfigError(e.to_string()))?;
             config.merge(file_config);
         }

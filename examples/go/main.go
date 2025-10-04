@@ -3,7 +3,6 @@ package main
 import "C"
 import (
 	"fmt"
-	"time"
 
 	"github.com/AssetsArt/easy-proxy/sdk/go/sdk"
 )
@@ -60,7 +59,7 @@ func init() {
 			response := ctx.Response()
 			response.SetHeader("X-RequestFilter", "authz-1")
 			// sleep 2 seconds
-			time.Sleep(2 * time.Second)
+			// time.Sleep(2 * time.Second)
 			// next phase
 			ctx.Next()
 		})
@@ -110,10 +109,15 @@ func init() {
 				OnOpen: func(ws *sdk.WebSocketConn) {
 					fmt.Println("[WS][Go] onOpen")
 					ws.SendText("hello from plugin")
+					// Join default room and broadcast welcome
+					_ = ws.JoinRoom("lobby")
+					_ = ws.BroadcastText("lobby", "user joined")
 				},
 				OnMessageText: func(ws *sdk.WebSocketConn, msg string) {
 					fmt.Println("[WS][Go] onMessageText:", msg)
 					ws.SendText("echo: " + msg)
+					// Broadcast to room
+					_ = ws.BroadcastText("lobby", msg)
 				},
 				OnMessageBinary: func(ws *sdk.WebSocketConn, data []byte) {
 					fmt.Println("[WS][Go] onMessageBinary", len(data))
@@ -121,6 +125,7 @@ func init() {
 				},
 				OnClose: func(ws *sdk.WebSocketConn) {
 					fmt.Println("[WS][Go] onClose")
+					_ = ws.LeaveRoom("lobby")
 				},
 				OnError: func(ws *sdk.WebSocketConn, err string) {
 					fmt.Println("[WS][Go] onError:", err)

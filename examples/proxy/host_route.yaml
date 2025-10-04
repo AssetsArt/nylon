@@ -1,29 +1,34 @@
 
 # https://github.com/ibraheemdev/matchit
 
-# host route
+# host & path routing
 routes:
+  # App
   - route:
       type: host
-      value: localhost # domain.com|domain2.com|domain3.com
-    name: http-route-1
+      value: localhost # localhost|api.localhost
+    name: app-route
     paths:
       - path:
+          - /static
+          - /static/{*path}
+        service:
+          name: static
+          rewrite: /static
+      - path:
           - /ws
-        methods:
-          - GET
-          - POST
-          - OPTIONS
+        methods: [GET, POST, OPTIONS]
         service:
           name: ws-service
-      - path: 
+      - path:
+          - /stream
+        methods: [GET, POST, OPTIONS]
+        service:
+          name: stream-service
+      - path:
           - /
           - /{*path}
-        methods:
-          - GET
-          - POST
-          - OPTIONS
         middleware:
-          - group: example
+          - group: security
         service:
-          name: http-service
+          name: app-service

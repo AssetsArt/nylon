@@ -8,7 +8,7 @@ pub fn selection(
     session: &mut Session,
     ctx: &mut NylonContext,
 ) -> Result<Backend, NylonError> {
-    let mut selection_key = ctx.client_ip.clone();
+    let mut selection_key = ctx.client_ip.read().expect("lock").clone();
     if let Some(header_value) = session.req_header().headers.get("x-forwarded-for") {
         let value = header_value.to_str().unwrap_or_default();
         selection_key.push_str(value);

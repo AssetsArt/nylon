@@ -10,8 +10,11 @@ use pingora::{
     prelude::HttpPeer,
     proxy::{ProxyHttp, Session},
 };
+use std::fs;
+use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 async fn handle_error_response<'a>(
     res: &'a mut Response<'a>,
@@ -57,7 +60,18 @@ where
     <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
 {
     // Collect all middleware items from route and path levels
-    let Some(route) = &ctx.route else {
+    let route_opt = ctx
+        .route
+        .read()
+        .map_err(|_| {
+            pingora::Error::because(
+                ErrorType::InternalError,
+                "[middleware]",
+                NylonError::InternalServerError("lock poisoned".into()),
+            )
+        })?
+        .clone();
+    let Some(route) = &route_opt else {
         return Ok(false);
     };
     let path_middleware = &route.path_middleware;
@@ -137,15 +151,46 @@ impl ProxyHttp for NylonRuntime {
         // TODO: handle acme request
 
         // Check for TLS redirect
-        if let Some(redirect_url) = process_tls_redirect(&res.ctx.host, res.ctx.tls) {
+        let host_owned = res
+            .ctx
+            .host
+            .read()
+            .map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[proxy]",
+                    "host lock".to_string(),
+                )
+            })?
+            .clone();
+        let tls = res.ctx.tls.load(Ordering::Relaxed);
+        if let Some(redirect_url) = process_tls_redirect(&host_owned, tls) {
             info!("Redirecting to TLS: {}", redirect_url);
             res.redirect(redirect_url);
             return res.send(session).await;
         }
 
         // Store route and params in context
-        res.ctx.route = Some(route.clone());
-        res.ctx.params = Some(params.clone());
+        {
+            let mut r = res.ctx.route.write().map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[proxy]",
+                    "route lock".to_string(),
+                )
+            })?;
+            *r = Some(route.clone());
+        }
+        {
+            let mut p = res.ctx.params.write().map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[proxy]",
+                    "params lock".to_string(),
+                )
+            })?;
+            *p = Some(params.clone());
+        }
 
         // Process middleware
         match process_middleware(self, 1, res.ctx, session).await {
@@ -181,7 +226,8 @@ impl ProxyHttp for NylonRuntime {
                     }
                 }
             } else {
-                let err = NylonError::ConfigError("Plugin service missing 'plugin' config".to_string());
+                let err =
+                    NylonError::ConfigError("Plugin service missing 'plugin' config".to_string());
                 return handle_error_response(&mut res, session, err).await;
             }
         }
@@ -199,7 +245,105 @@ impl ProxyHttp for NylonRuntime {
                 Err(e) => return handle_error_response(&mut res, session, e).await,
             };
 
-            res.ctx.backend = selected_backend;
+            {
+                let mut b = res.ctx.backend.write().map_err(|_| {
+                    pingora::Error::because(
+                        ErrorType::InternalError,
+                        "[proxy]",
+                        "backend lock".to_string(),
+                    )
+                })?;
+                *b = selected_backend;
+            }
+        }
+
+        // Handle static file service type (serve from disk, optional SPA fallback)
+        if route.service.service_type == ServiceType::Static {
+            let Some(conf) = &route.service.static_conf else {
+                let err =
+                    NylonError::ConfigError("Static service missing 'static' config".to_string());
+                return handle_error_response(&mut res, session, err).await;
+            };
+
+            // Build requested path
+            let uri_path = if session.is_http2() {
+                session
+                    .as_http2()
+                    .map(|s| s.req_header().uri.path().to_string())
+                    .unwrap_or_else(|| "/".to_string())
+            } else {
+                session.req_header().uri.path().to_string()
+            };
+
+            let rewrite_prefix = route.rewrite.clone().unwrap_or_default();
+            let rel_path = if !rewrite_prefix.is_empty() && uri_path.starts_with(&rewrite_prefix) {
+                uri_path[rewrite_prefix.len()..].to_string()
+            } else {
+                uri_path.clone()
+            };
+
+            // Security: Prevent directory traversal (e.g., /static/../secret)
+            if rel_path.split('/').any(|seg| seg == "..") {
+                let err = NylonError::HttpException(403, "FORBIDDEN", "Invalid path");
+                return handle_error_response(&mut res, session, err).await;
+            }
+
+            let root = PathBuf::from(&conf.root);
+            let mut file_path = root.join(rel_path.trim_start_matches('/'));
+
+            // If path is a directory or ends with slash, append index file
+            let index_name = conf
+                .index
+                .clone()
+                .unwrap_or_else(|| "index.html".to_string());
+            if uri_path.ends_with('/')
+                || fs::metadata(&file_path)
+                    .map(|m| m.is_dir())
+                    .unwrap_or(false)
+            {
+                file_path = file_path.join(&index_name);
+            }
+
+            // Try to read file
+            debug!("[static] file_path: {}", file_path.display());
+            match fs::read(&file_path) {
+                Ok(bytes) => {
+                    let mime = mime_guess::from_path(&file_path).first_or_octet_stream();
+                    {
+                        let mut headers = res.ctx.add_response_header.write().expect("lock");
+                        headers.insert("Content-Type".to_string(), mime.to_string());
+                    }
+                    res.status(200).body(Bytes::from(bytes));
+                    return res.send(session).await;
+                }
+                Err(_) => {
+                    // If SPA enabled, serve index.html from root
+                    if conf.spa.unwrap_or(false) {
+                        let spa_index = root.join(&index_name);
+                        match fs::read(&spa_index) {
+                            Ok(bytes) => {
+                                let mime =
+                                    mime_guess::from_path(&spa_index).first_or_octet_stream();
+                                {
+                                    let mut headers =
+                                        res.ctx.add_response_header.write().expect("lock");
+                                    headers.insert("Content-Type".to_string(), mime.to_string());
+                                }
+                                res.status(200).body(Bytes::from(bytes));
+                                return res.send(session).await;
+                            }
+                            Err(_) => {
+                                let err =
+                                    NylonError::HttpException(404, "NOT_FOUND", "File not found");
+                                return handle_error_response(&mut res, session, err).await;
+                            }
+                        }
+                    } else {
+                        let err = NylonError::HttpException(404, "NOT_FOUND", "File not found");
+                        return handle_error_response(&mut res, session, err).await;
+                    }
+                }
+            }
         }
 
         Ok(false)
@@ -210,11 +354,18 @@ impl ProxyHttp for NylonRuntime {
         _session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
-        let peer = ctx.backend.ext.get::<HttpPeer>().ok_or_else(|| {
+        let backend_guard = ctx.backend.read().map_err(|_| {
             pingora::Error::because(
                 ErrorType::InternalError,
                 "[upstream_peer]",
-                NylonError::ConfigError(format!("[backend:{}] no peer found", ctx.backend.addr)),
+                "backend lock".to_string(),
+            )
+        })?;
+        let peer = backend_guard.ext.get::<HttpPeer>().ok_or_else(|| {
+            pingora::Error::because(
+                ErrorType::InternalError,
+                "[upstream_peer]",
+                NylonError::ConfigError("[backend] no peer found".to_string()),
             )
         })?;
         Ok(Box::new(peer.clone()))
@@ -233,18 +384,40 @@ impl ProxyHttp for NylonRuntime {
         let _ = process_middleware(self, 2, ctx, session).await;
 
         // Add response headers
-        for (key, value) in ctx.add_response_header.iter() {
+        for (key, value) in ctx
+            .add_response_header
+            .read()
+            .map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[response_filter]",
+                    "add_header lock".to_string(),
+                )
+            })?
+            .iter()
+        {
             let _ = upstream_response.append_header(key.to_ascii_lowercase(), value);
         }
 
         // Remove response headers
-        for key in ctx.remove_response_header.iter() {
+        for key in ctx
+            .remove_response_header
+            .read()
+            .map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[response_filter]",
+                    "remove_header lock".to_string(),
+                )
+            })?
+            .iter()
+        {
             let key = key.to_ascii_lowercase();
             let _ = upstream_response.remove_header(&key);
         }
 
         // Set response status if modified
-        upstream_response.set_status(ctx.set_response_status)?;
+        upstream_response.set_status(ctx.set_response_status.load(Ordering::Relaxed))?;
 
         Ok(())
     }
@@ -259,16 +432,25 @@ impl ProxyHttp for NylonRuntime {
     where
         Self::CTX: Send + Sync,
     {
-        if !ctx.set_response_body.is_empty() {
-            if let Some(old_body) = body {
-                let mut rs_body = old_body.to_vec();
-                rs_body.extend_from_slice(&ctx.set_response_body);
-                ctx.set_response_body.clear();
-                *body = Some(Bytes::from(rs_body));
-            } else {
-                let rs_body = Bytes::from(ctx.set_response_body.to_vec());
-                ctx.set_response_body.clear();
-                *body = Some(rs_body);
+        {
+            let mut buf = ctx.set_response_body.write().map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[body_filter]",
+                    "set_response_body lock".to_string(),
+                )
+            })?;
+            if !buf.is_empty() {
+                if let Some(old_body) = body {
+                    let mut rs_body = old_body.to_vec();
+                    rs_body.extend_from_slice(&buf);
+                    buf.clear();
+                    *body = Some(Bytes::from(rs_body));
+                } else {
+                    let rs_body = Bytes::from(buf.clone());
+                    buf.clear();
+                    *body = Some(rs_body);
+                }
             }
         }
         Ok(None)
@@ -282,7 +464,12 @@ impl ProxyHttp for NylonRuntime {
     ) where
         Self::CTX: Send + Sync,
     {
-        for (_, stream) in ctx.session_stream.iter() {
+        let streams = ctx
+            .session_stream
+            .read()
+            .map(|m| m.values().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
+        for stream in streams {
             let _ = stream.close().await;
         }
     }
