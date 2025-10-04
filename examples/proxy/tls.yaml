@@ -6,9 +6,14 @@ tls:
     #   - ./examples/cert/chain.pem
     domains:
       - localhost
+      - app.localhost
+      - api.localhost
+      - admin.localhost
 
   # - type: acme
   #   email: test@example.com
   #   provider: letsencrypt # Options: letsencrypt, buypass
   #   domains:
-  #     - localhost
+  #     - example.com
+  #     - api.example.com
+  #     - admin.example.com

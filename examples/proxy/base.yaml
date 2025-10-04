@@ -8,24 +8,24 @@ plugins:
       debug: true
 
 services:
-  - name: http-service
+  # Http service
+  - name: app-service
     service_type: http
     algorithm: round_robin # Options: round_robin, random, consistent, weighted
     endpoints:
       - ip: 127.0.0.1
         port: 3000
-        # weight: 10 # Optional
       - ip: 127.0.0.1
         port: 3001
-        # weight: 1 # Optional
     health_check:
       enabled: true
-      path: /health # Reserved for HTTP checks (อนาคต)
+      path: /health
       interval: 3s
       timeout: 1s
       healthy_threshold: 2
       unhealthy_threshold: 2
 
+  # WebSocket and streaming via plugin
   - name: ws-service
     service_type: plugin
     plugin:
@@ -38,6 +38,7 @@ services:
       name: plugin_sdk
       entry: stream
 
+  # Static assets / SPA
   - name: static
     service_type: static
     static:
@@ -46,34 +47,41 @@ services:
       spa: true
 
 middleware_groups:
-  example:
-    - plugin: plugin_sdk
-      entry: "authz"
-      payload:
-        client_ip: "${request(client_ip)}"
-
+  # Security & request metadata headers applied to most routes
+  security:
     - plugin: RequestHeaderModifier
       payload:
         remove:
           - x-version
         set:
-          - name: x-hb-conf
-            value: "env-${or(env(MY_APP_NAME), 'default')}"
           - name: x-request-id
             value: "${uuid(v7)}"
-          - name: x-timestamp
-            value: "${timestamp()}"
           - name: x-forwarded-for
-            value: "${request(client_ip)}-${eq(request(client_ip), '127.0.0.1', 'local')}"
+            value: "${request(client_ip)}"
           - name: x-host
             value: "${header(host)}"
-
+          - name: x-timestamp
+            value: "${timestamp()}"
     - plugin: ResponseHeaderModifier
       payload:
         set:
-          - name: x-request-id-false
-            value: "${or(header(x-request-id-false), concat('foo', '-', uuid(v4)))}"
-          - name: x-request-id
-            value: "${header(x-request-id)}"
+          - name: cache-control
+            value: "no-store"
+          - name: referrer-policy
+            value: "no-referrer"
+          - name: x-content-type-options
+            value: "nosniff"
+          - name: x-frame-options
+            value: "DENY"
+          - name: content-security-policy
+            value: "default-src 'self'"
           - name: x-server
-            value: ${or(env(SERVER_NAME), 'my-server')}
+            value: ${or(env(SERVER_NAME), 'nylon-demo')}
+
+  # Authorization example using FFI plugin
+  auth:
+    - plugin: plugin_sdk
+      entry: "authz"
+      payload:
+        client_ip: "${request(client_ip)}"
+        user_id: "${header(x-user-id)}"

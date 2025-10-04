@@ -10,27 +10,15 @@ pingora:
   # https://github.com/cloudflare/pingora/blob/main/docs/user_guide/daemon.md
   daemon: false
   # https://github.com/cloudflare/pingora/blob/main/docs/user_guide/conf.md
-  # threads: 10
-  # upstream_keepalive_pool_size: 20
-  # work_stealing: true
-  # error_log: /var/log/pingora/error.log
-  # pid_file: /run/pingora.pid
-  # upgrade_sock: /tmp/pingora_upgrade.sock
-  # user: nobody
-  # group: webusers
-  # ca_file: /etc/ssl/certs/ca-certificates.crt
   grace_period_seconds: 1
   graceful_shutdown_timeout_seconds: 1
 
-# WebSocket adapter configuration
-# If not specified, defaults to memory adapter
+# WebSocket adapter configuration (optional)
 # websocket:
-#   # Adapter type: memory, redis, or cluster
-#   adapter_type: redis
-#   # Redis configuration (required for redis and cluster adapters)
+#   adapter_type: redis  # memory | redis | cluster
 #   redis:
 #     host: "localhost"
 #     port: 6379
-#     password: null  # Optional Redis password
-#     db: 0          # Redis database number (optional, default: 0)
-#     key_prefix: "nylon:ws"  # Key prefix for Redis keys (optional)
+#     password: null
+#     db: 0
+#     key_prefix: "nylon:ws"
