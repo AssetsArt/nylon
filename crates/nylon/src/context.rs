@@ -6,12 +6,12 @@ use std::sync::atomic::Ordering;
 
 #[async_trait]
 pub trait NylonContextExt {
-    async fn parse_request(&mut self, session: &mut Session) -> Result<(), NylonError>;
+    async fn parse_request(&self, session: &mut Session) -> Result<(), NylonError>;
 }
 
 #[async_trait]
 impl NylonContextExt for NylonContext {
-    async fn parse_request(&mut self, session: &mut Session) -> Result<(), NylonError> {
+    async fn parse_request(&self, session: &mut Session) -> Result<(), NylonError> {
         {
             let mut client_ip = self
                 .client_ip

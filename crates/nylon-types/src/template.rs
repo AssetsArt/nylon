@@ -61,7 +61,8 @@ fn get_or_build_query_cache(
             let k = it.next().unwrap_or("");
             let v = it.next().unwrap_or("");
             let key = percent_decode_plus(k, true);
-            map.entry(key).or_insert_with(|| percent_decode_plus(v, true));
+            map.entry(key)
+                .or_insert_with(|| percent_decode_plus(v, true));
         }
     }
     if let Ok(mut w) = ctx.cached_query.write() {
@@ -95,7 +96,8 @@ fn get_or_build_cookie_cache(
             let k = it.next().unwrap_or("");
             let v = it.next().unwrap_or("");
             let key = k.trim().to_string();
-            map.entry(key).or_insert_with(|| percent_decode_plus(v.trim(), false));
+            map.entry(key)
+                .or_insert_with(|| percent_decode_plus(v.trim(), false));
         }
     }
     if let Ok(mut w) = ctx.cached_cookies.write() {
