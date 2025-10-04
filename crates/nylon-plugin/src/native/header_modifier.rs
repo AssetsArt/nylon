@@ -81,13 +81,15 @@ pub fn response(
         },
     };
     if let Some(set) = payload.set {
+        let mut map = ctx.add_response_header.write().expect("lock");
         for header in set {
-            let _ = ctx.add_response_header.insert(header.name, header.value);
+            let _ = map.insert(header.name, header.value);
         }
     }
     if let Some(remove) = payload.remove {
+        let mut vec = ctx.remove_response_header.write().expect("lock");
         for header in remove {
-            ctx.remove_response_header.push(header);
+            vec.push(header);
         }
     }
     Ok(())

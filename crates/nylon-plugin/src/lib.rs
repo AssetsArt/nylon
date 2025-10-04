@@ -40,20 +40,40 @@ where
 {
     let plugin = PluginManager::get_plugin(plugin_name)?;
     let key = format!("{}-{}", plugin_name, entry);
-    let mut session_id = *ctx.session_ids.get(&key).unwrap_or(&0);
+    let mut session_id = {
+        let map = ctx
+            .session_ids
+            .read()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
+        *map.get(&key).unwrap_or(&0)
+    };
     let session_stream;
-    if let Some(ss) = ctx.session_stream.get(&key) {
-        session_stream = ss.clone();
-    } else {
-        let ss = SessionStream::new(plugin, session_id);
-        ctx.session_stream.insert(key.clone(), ss.clone());
-        session_stream = ss;
+    {
+        let map = ctx
+            .session_stream
+            .read()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
+        if let Some(ss) = map.get(&key) {
+            session_stream = ss.clone();
+        } else {
+            drop(map);
+            let ss = SessionStream::new(plugin, session_id);
+            let mut w = ctx
+                .session_stream
+                .write()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
+            w.insert(key.clone(), ss.clone());
+            session_stream = ss;
+        }
     }
     if session_id == 0 {
         // open session
         let new_session_id = session_stream.open(entry).await?;
         session_id = new_session_id;
-        ctx.session_ids.insert(key.clone(), new_session_id);
+        ctx.session_ids
+            .write()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+            .insert(key.clone(), new_session_id);
     }
     let rx_arc = match get_rx(session_id) {
         Ok(rx) => rx,

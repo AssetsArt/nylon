@@ -165,7 +165,10 @@ pub fn eval_expr(expr: &Expr, headers: &RequestHeader, ctx: &NylonContext) -> St
     match expr {
         Expr::Literal(s) => s.clone(),
         Expr::Request(name) => match name.as_str() {
-            "client_ip" => ctx.client_ip.clone(),
+            "client_ip" => match ctx.client_ip.read() {
+                Ok(ip) => ip.clone(),
+                Err(_) => String::new(),
+            },
             _ => String::new(), // fallback
         },
         Expr::Func { name, args } => match name.as_str() {
@@ -182,7 +185,10 @@ pub fn eval_expr(expr: &Expr, headers: &RequestHeader, ctx: &NylonContext) -> St
             "request" => {
                 if let Some(Expr::Request(v)) = args.first() {
                     match v.as_str() {
-                        "client_ip" => ctx.client_ip.clone(),
+                        "client_ip" => match ctx.client_ip.read() {
+                            Ok(ip) => ip.clone(),
+                            Err(_) => String::new(),
+                        },
                         _ => String::new(),
                     }
                 } else {

@@ -26,26 +26,26 @@ impl<'a> Response<'a> {
 
     pub fn redirect(&mut self, redirect: String) -> &mut Self {
         self.status(301);
-        self.ctx
-            .add_response_header
-            .insert("Location".to_string(), redirect);
-        self.ctx
-            .add_response_header
-            .insert("Content-Length".to_string(), "0".to_string());
+        {
+            let mut headers = self.ctx.add_response_header.write().expect("lock");
+            headers.insert("Location".to_string(), redirect);
+            headers.insert("Content-Length".to_string(), "0".to_string());
+        }
         self
     }
 
     pub fn status(&mut self, status: u16) -> &mut Self {
-        self.ctx.set_response_status = status;
+        self.ctx.set_response_status.store(status, std::sync::atomic::Ordering::Relaxed);
         self
     }
 
     pub fn body(&mut self, body: Bytes) -> &mut Self {
         let body_len = body.len();
         self.body = Some(body);
-        self.ctx
-            .add_response_header
-            .insert("Content-Length".to_string(), body_len.to_string());
+        {
+            let mut headers = self.ctx.add_response_header.write().expect("lock");
+            headers.insert("Content-Length".to_string(), body_len.to_string());
+        }
         self
     }
 
@@ -66,7 +66,8 @@ impl<'a> Response<'a> {
     }
 
     pub async fn send(&mut self, session: &mut Session) -> pingora::Result<bool> {
-        let mut headers = ResponseHeader::build(self.ctx.set_response_status, None)?;
+        let status = self.ctx.set_response_status.load(std::sync::atomic::Ordering::Relaxed);
+        let mut headers = ResponseHeader::build(status, None)?;
         self.proxy
             .response_filter(session, &mut headers, self.ctx)
             .await?;

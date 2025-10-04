@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_types::context::NylonContext;
+use std::sync::atomic::Ordering;
 use pingora::proxy::Session;
 
 #[async_trait]
@@ -11,7 +12,9 @@ pub trait NylonContextExt {
 #[async_trait]
 impl NylonContextExt for NylonContext {
     async fn parse_request(&mut self, session: &mut Session) -> Result<(), NylonError> {
-        self.client_ip = match session.client_addr() {
+        {
+        let mut client_ip = self.client_ip.write().map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
+        *client_ip = match session.client_addr() {
             Some(ip) => match ip.as_inet() {
                 Some(ip) => ip.ip().to_string(),
                 None => {
@@ -30,21 +33,31 @@ impl NylonContextExt for NylonContext {
                 ));
             }
         };
-        self.tls = match session.digest() {
+        }
+        let is_tls = match session.digest() {
             Some(d) => d.ssl_digest.is_some(),
             None => false,
         };
+        self.tls.store(is_tls, Ordering::Relaxed);
         match session.as_http2() {
             Some(session) => {
                 let host = session.req_header().uri.host().unwrap_or("");
-                self.host = host.to_string();
+                let mut h = self
+                    .host
+                    .write()
+                    .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
+                *h = host.to_string();
             }
             None => {
                 let host = match session.req_header().headers.get("Host") {
                     Some(h) => h.to_str().unwrap_or("").split(':').next().unwrap_or(""),
                     None => "",
                 };
-                self.host = host.to_string();
+                let mut h = self
+                    .host
+                    .write()
+                    .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
+                *h = host.to_string();
             }
         }
         Ok(())

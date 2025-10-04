@@ -12,6 +12,7 @@ use pingora::{
 };
 use std::time::Duration;
 use tracing::{error, info};
+use std::sync::atomic::Ordering;
 
 async fn handle_error_response<'a>(
     res: &'a mut Response<'a>,
@@ -57,7 +58,12 @@ where
     <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
 {
     // Collect all middleware items from route and path levels
-    let Some(route) = &ctx.route else {
+    let route_opt = ctx.route.read().map_err(|_| pingora::Error::because(
+        ErrorType::InternalError,
+        "[middleware]",
+        NylonError::InternalServerError("lock poisoned".into()),
+    ))?.clone();
+    let Some(route) = &route_opt else {
         return Ok(false);
     };
     let path_middleware = &route.path_middleware;
@@ -137,15 +143,28 @@ impl ProxyHttp for NylonRuntime {
         // TODO: handle acme request
 
         // Check for TLS redirect
-        if let Some(redirect_url) = process_tls_redirect(&res.ctx.host, res.ctx.tls) {
+        let host_owned = res
+            .ctx
+            .host
+            .read()
+            .map_err(|_| pingora::Error::because(ErrorType::InternalError, "[proxy]", "host lock".to_string()))?
+            .clone();
+        let tls = res.ctx.tls.load(Ordering::Relaxed);
+        if let Some(redirect_url) = process_tls_redirect(&host_owned, tls) {
             info!("Redirecting to TLS: {}", redirect_url);
             res.redirect(redirect_url);
             return res.send(session).await;
         }
 
         // Store route and params in context
-        res.ctx.route = Some(route.clone());
-        res.ctx.params = Some(params.clone());
+        {
+            let mut r = res.ctx.route.write().map_err(|_| pingora::Error::because(ErrorType::InternalError, "[proxy]", "route lock".to_string()))?;
+            *r = Some(route.clone());
+        }
+        {
+            let mut p = res.ctx.params.write().map_err(|_| pingora::Error::because(ErrorType::InternalError, "[proxy]", "params lock".to_string()))?;
+            *p = Some(params.clone());
+        }
 
         // Process middleware
         match process_middleware(self, 1, res.ctx, session).await {
@@ -200,7 +219,10 @@ impl ProxyHttp for NylonRuntime {
                 Err(e) => return handle_error_response(&mut res, session, e).await,
             };
 
-            res.ctx.backend = selected_backend;
+            {
+                let mut b = res.ctx.backend.write().map_err(|_| pingora::Error::because(ErrorType::InternalError, "[proxy]", "backend lock".to_string()))?;
+                *b = selected_backend;
+            }
         }
 
         Ok(false)
@@ -211,13 +233,20 @@ impl ProxyHttp for NylonRuntime {
         _session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
-        let peer = ctx.backend.ext.get::<HttpPeer>().ok_or_else(|| {
-            pingora::Error::because(
-                ErrorType::InternalError,
-                "[upstream_peer]",
-                NylonError::ConfigError(format!("[backend:{}] no peer found", ctx.backend.addr)),
-            )
-        })?;
+        let backend_guard = ctx
+            .backend
+            .read()
+            .map_err(|_| pingora::Error::because(ErrorType::InternalError, "[upstream_peer]", "backend lock".to_string()))?;
+        let peer = backend_guard
+            .ext
+            .get::<HttpPeer>()
+            .ok_or_else(|| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[upstream_peer]",
+                    NylonError::ConfigError(format!("[backend] no peer found")),
+                )
+            })?;
         Ok(Box::new(peer.clone()))
     }
 
@@ -234,18 +263,28 @@ impl ProxyHttp for NylonRuntime {
         let _ = process_middleware(self, 2, ctx, session).await;
 
         // Add response headers
-        for (key, value) in ctx.add_response_header.iter() {
+        for (key, value) in ctx
+            .add_response_header
+            .read()
+            .map_err(|_| pingora::Error::because(ErrorType::InternalError, "[response_filter]", "add_header lock".to_string()))?
+            .iter()
+        {
             let _ = upstream_response.append_header(key.to_ascii_lowercase(), value);
         }
 
         // Remove response headers
-        for key in ctx.remove_response_header.iter() {
+        for key in ctx
+            .remove_response_header
+            .read()
+            .map_err(|_| pingora::Error::because(ErrorType::InternalError, "[response_filter]", "remove_header lock".to_string()))?
+            .iter()
+        {
             let key = key.to_ascii_lowercase();
             let _ = upstream_response.remove_header(&key);
         }
 
         // Set response status if modified
-        upstream_response.set_status(ctx.set_response_status)?;
+        upstream_response.set_status(ctx.set_response_status.load(Ordering::Relaxed))?;
 
         Ok(())
     }
@@ -260,16 +299,22 @@ impl ProxyHttp for NylonRuntime {
     where
         Self::CTX: Send + Sync,
     {
-        if !ctx.set_response_body.is_empty() {
-            if let Some(old_body) = body {
-                let mut rs_body = old_body.to_vec();
-                rs_body.extend_from_slice(&ctx.set_response_body);
-                ctx.set_response_body.clear();
-                *body = Some(Bytes::from(rs_body));
-            } else {
-                let rs_body = Bytes::from(ctx.set_response_body.to_vec());
-                ctx.set_response_body.clear();
-                *body = Some(rs_body);
+        {
+            let mut buf = ctx
+                .set_response_body
+                .write()
+                .map_err(|_| pingora::Error::because(ErrorType::InternalError, "[body_filter]", "set_response_body lock".to_string()))?;
+            if !buf.is_empty() {
+                if let Some(old_body) = body {
+                    let mut rs_body = old_body.to_vec();
+                    rs_body.extend_from_slice(&buf);
+                    buf.clear();
+                    *body = Some(Bytes::from(rs_body));
+                } else {
+                    let rs_body = Bytes::from(buf.clone());
+                    buf.clear();
+                    *body = Some(rs_body);
+                }
             }
         }
         Ok(None)
@@ -283,7 +328,12 @@ impl ProxyHttp for NylonRuntime {
     ) where
         Self::CTX: Send + Sync,
     {
-        for (_, stream) in ctx.session_stream.iter() {
+        let streams = ctx
+            .session_stream
+            .read()
+            .map(|m| m.values().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
+        for stream in streams {
             let _ = stream.close().await;
         }
     }

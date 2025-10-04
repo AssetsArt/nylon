@@ -300,6 +300,8 @@ impl SessionHandler {
         let headers = flatbuffers::root::<HeaderKeyValue>(data)
             .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
         ctx.add_response_header
+            .write()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
             .insert(headers.key().to_string(), headers.value().to_string());
         Ok(())
     }
@@ -309,7 +311,10 @@ impl SessionHandler {
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
         let header_key = String::from_utf8_lossy(data).to_string();
-        ctx.remove_response_header.push(header_key);
+        ctx.remove_response_header
+            .write()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+            .push(header_key);
         Ok(())
     }
 
@@ -319,7 +324,8 @@ impl SessionHandler {
     ) -> Result<(), NylonError> {
         if data.len() >= 2 {
             let status = u16::from_be_bytes([data[0], data[1]]);
-            ctx.set_response_status = status;
+            ctx.set_response_status
+                .store(status, std::sync::atomic::Ordering::Relaxed);
         }
         Ok(())
     }
@@ -328,7 +334,9 @@ impl SessionHandler {
         data: Vec<u8>,
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
-        ctx.set_response_body = data;
+        *ctx.set_response_body
+            .write()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))? = data;
         Ok(())
     }
 
@@ -341,8 +349,12 @@ impl SessionHandler {
         T: ProxyHttp + Send + Sync,
         <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
     {
-        let mut headers = ResponseHeader::build(ctx.set_response_status, None)
-            .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
+        let mut headers = ResponseHeader::build(
+            ctx.set_response_status
+                .load(std::sync::atomic::Ordering::Relaxed),
+            None,
+        )
+        .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
 
         let mut proxy_ctx: <T as ProxyHttp>::CTX = ctx.clone().into();
         proxy
@@ -383,8 +395,14 @@ impl SessionHandler {
         session_stream: &SessionStream,
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
+        let body = {
+            ctx.set_response_body
+                .read()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+                .clone()
+        };
         session_stream
-            .event_stream(0, methods::READ_RESPONSE_FULL_BODY, &ctx.set_response_body)
+            .event_stream(0, methods::READ_RESPONSE_FULL_BODY, &body)
             .await
     }
 
@@ -393,15 +411,25 @@ impl SessionHandler {
         ctx: &mut NylonContext,
         session: &mut Session,
     ) -> Result<(), NylonError> {
-        if !session.is_body_empty() && !ctx.read_body {
-            ctx.read_body = true;
+        if !session.is_body_empty() && !ctx.read_body.load(std::sync::atomic::Ordering::Relaxed) {
+            ctx.read_body
+                .store(true, std::sync::atomic::Ordering::Relaxed);
             session.enable_retry_buffering();
             while let Ok(Some(data)) = session.read_request_body().await {
-                ctx.request_body.extend_from_slice(&data);
+                ctx.request_body
+                    .write()
+                    .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+                    .extend_from_slice(&data);
             }
         }
+        let req_body = {
+            ctx.request_body
+                .read()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+                .clone()
+        };
         session_stream
-            .event_stream(0, methods::READ_REQUEST_FULL_BODY, &ctx.request_body)
+            .event_stream(0, methods::READ_REQUEST_FULL_BODY, &req_body)
             .await
     }
 
