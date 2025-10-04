@@ -76,8 +76,12 @@ impl Clone for NylonContext {
             tls: AtomicBool::new(self.tls.load(Ordering::Relaxed)),
             session_ids: RwLock::new(self.session_ids.read().expect("lock").clone()),
             session_stream: RwLock::new(self.session_stream.read().expect("lock").clone()),
-            add_response_header: RwLock::new(self.add_response_header.read().expect("lock").clone()),
-            remove_response_header: RwLock::new(self.remove_response_header.read().expect("lock").clone()),
+            add_response_header: RwLock::new(
+                self.add_response_header.read().expect("lock").clone(),
+            ),
+            remove_response_header: RwLock::new(
+                self.remove_response_header.read().expect("lock").clone(),
+            ),
             set_response_status: AtomicU16::new(self.set_response_status.load(Ordering::Relaxed)),
             set_response_body: RwLock::new(self.set_response_body.read().expect("lock").clone()),
             read_body: AtomicBool::new(self.read_body.load(Ordering::Relaxed)),

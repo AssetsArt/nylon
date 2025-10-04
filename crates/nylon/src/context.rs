@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_types::context::NylonContext;
-use std::sync::atomic::Ordering;
 use pingora::proxy::Session;
+use std::sync::atomic::Ordering;
 
 #[async_trait]
 pub trait NylonContextExt {
@@ -13,10 +13,21 @@ pub trait NylonContextExt {
 impl NylonContextExt for NylonContext {
     async fn parse_request(&mut self, session: &mut Session) -> Result<(), NylonError> {
         {
-        let mut client_ip = self.client_ip.write().map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
-        *client_ip = match session.client_addr() {
-            Some(ip) => match ip.as_inet() {
-                Some(ip) => ip.ip().to_string(),
+            let mut client_ip = self
+                .client_ip
+                .write()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
+            *client_ip = match session.client_addr() {
+                Some(ip) => match ip.as_inet() {
+                    Some(ip) => ip.ip().to_string(),
+                    None => {
+                        return Err(NylonError::HttpException(
+                            400,
+                            "BAD_REQUEST",
+                            "Unable to get client IP",
+                        ));
+                    }
+                },
                 None => {
                     return Err(NylonError::HttpException(
                         400,
@@ -24,15 +35,7 @@ impl NylonContextExt for NylonContext {
                         "Unable to get client IP",
                     ));
                 }
-            },
-            None => {
-                return Err(NylonError::HttpException(
-                    400,
-                    "BAD_REQUEST",
-                    "Unable to get client IP",
-                ));
-            }
-        };
+            };
         }
         let is_tls = match session.digest() {
             Some(d) => d.ssl_digest.is_some(),

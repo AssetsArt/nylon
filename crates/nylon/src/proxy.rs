@@ -10,9 +10,9 @@ use pingora::{
     prelude::HttpPeer,
     proxy::{ProxyHttp, Session},
 };
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tracing::{error, info};
-use std::sync::atomic::Ordering;
 
 async fn handle_error_response<'a>(
     res: &'a mut Response<'a>,
@@ -58,11 +58,17 @@ where
     <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
 {
     // Collect all middleware items from route and path levels
-    let route_opt = ctx.route.read().map_err(|_| pingora::Error::because(
-        ErrorType::InternalError,
-        "[middleware]",
-        NylonError::InternalServerError("lock poisoned".into()),
-    ))?.clone();
+    let route_opt = ctx
+        .route
+        .read()
+        .map_err(|_| {
+            pingora::Error::because(
+                ErrorType::InternalError,
+                "[middleware]",
+                NylonError::InternalServerError("lock poisoned".into()),
+            )
+        })?
+        .clone();
     let Some(route) = &route_opt else {
         return Ok(false);
     };
@@ -147,7 +153,13 @@ impl ProxyHttp for NylonRuntime {
             .ctx
             .host
             .read()
-            .map_err(|_| pingora::Error::because(ErrorType::InternalError, "[proxy]", "host lock".to_string()))?
+            .map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[proxy]",
+                    "host lock".to_string(),
+                )
+            })?
             .clone();
         let tls = res.ctx.tls.load(Ordering::Relaxed);
         if let Some(redirect_url) = process_tls_redirect(&host_owned, tls) {
@@ -158,11 +170,23 @@ impl ProxyHttp for NylonRuntime {
 
         // Store route and params in context
         {
-            let mut r = res.ctx.route.write().map_err(|_| pingora::Error::because(ErrorType::InternalError, "[proxy]", "route lock".to_string()))?;
+            let mut r = res.ctx.route.write().map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[proxy]",
+                    "route lock".to_string(),
+                )
+            })?;
             *r = Some(route.clone());
         }
         {
-            let mut p = res.ctx.params.write().map_err(|_| pingora::Error::because(ErrorType::InternalError, "[proxy]", "params lock".to_string()))?;
+            let mut p = res.ctx.params.write().map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[proxy]",
+                    "params lock".to_string(),
+                )
+            })?;
             *p = Some(params.clone());
         }
 
@@ -220,7 +244,13 @@ impl ProxyHttp for NylonRuntime {
             };
 
             {
-                let mut b = res.ctx.backend.write().map_err(|_| pingora::Error::because(ErrorType::InternalError, "[proxy]", "backend lock".to_string()))?;
+                let mut b = res.ctx.backend.write().map_err(|_| {
+                    pingora::Error::because(
+                        ErrorType::InternalError,
+                        "[proxy]",
+                        "backend lock".to_string(),
+                    )
+                })?;
                 *b = selected_backend;
             }
         }
@@ -233,20 +263,20 @@ impl ProxyHttp for NylonRuntime {
         _session: &mut Session,
         ctx: &mut Self::CTX,
     ) -> pingora::Result<Box<HttpPeer>> {
-        let backend_guard = ctx
-            .backend
-            .read()
-            .map_err(|_| pingora::Error::because(ErrorType::InternalError, "[upstream_peer]", "backend lock".to_string()))?;
-        let peer = backend_guard
-            .ext
-            .get::<HttpPeer>()
-            .ok_or_else(|| {
-                pingora::Error::because(
-                    ErrorType::InternalError,
-                    "[upstream_peer]",
-                    NylonError::ConfigError(format!("[backend] no peer found")),
-                )
-            })?;
+        let backend_guard = ctx.backend.read().map_err(|_| {
+            pingora::Error::because(
+                ErrorType::InternalError,
+                "[upstream_peer]",
+                "backend lock".to_string(),
+            )
+        })?;
+        let peer = backend_guard.ext.get::<HttpPeer>().ok_or_else(|| {
+            pingora::Error::because(
+                ErrorType::InternalError,
+                "[upstream_peer]",
+                NylonError::ConfigError("[backend] no peer found".to_string()),
+            )
+        })?;
         Ok(Box::new(peer.clone()))
     }
 
@@ -266,7 +296,13 @@ impl ProxyHttp for NylonRuntime {
         for (key, value) in ctx
             .add_response_header
             .read()
-            .map_err(|_| pingora::Error::because(ErrorType::InternalError, "[response_filter]", "add_header lock".to_string()))?
+            .map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[response_filter]",
+                    "add_header lock".to_string(),
+                )
+            })?
             .iter()
         {
             let _ = upstream_response.append_header(key.to_ascii_lowercase(), value);
@@ -276,7 +312,13 @@ impl ProxyHttp for NylonRuntime {
         for key in ctx
             .remove_response_header
             .read()
-            .map_err(|_| pingora::Error::because(ErrorType::InternalError, "[response_filter]", "remove_header lock".to_string()))?
+            .map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[response_filter]",
+                    "remove_header lock".to_string(),
+                )
+            })?
             .iter()
         {
             let key = key.to_ascii_lowercase();
@@ -300,10 +342,13 @@ impl ProxyHttp for NylonRuntime {
         Self::CTX: Send + Sync,
     {
         {
-            let mut buf = ctx
-                .set_response_body
-                .write()
-                .map_err(|_| pingora::Error::because(ErrorType::InternalError, "[body_filter]", "set_response_body lock".to_string()))?;
+            let mut buf = ctx.set_response_body.write().map_err(|_| {
+                pingora::Error::because(
+                    ErrorType::InternalError,
+                    "[body_filter]",
+                    "set_response_body lock".to_string(),
+                )
+            })?;
             if !buf.is_empty() {
                 if let Some(old_body) = body {
                     let mut rs_body = old_body.to_vec();

@@ -35,7 +35,9 @@ impl<'a> Response<'a> {
     }
 
     pub fn status(&mut self, status: u16) -> &mut Self {
-        self.ctx.set_response_status.store(status, std::sync::atomic::Ordering::Relaxed);
+        self.ctx
+            .set_response_status
+            .store(status, std::sync::atomic::Ordering::Relaxed);
         self
     }
 
@@ -66,7 +68,10 @@ impl<'a> Response<'a> {
     }
 
     pub async fn send(&mut self, session: &mut Session) -> pingora::Result<bool> {
-        let status = self.ctx.set_response_status.load(std::sync::atomic::Ordering::Relaxed);
+        let status = self
+            .ctx
+            .set_response_status
+            .load(std::sync::atomic::Ordering::Relaxed);
         let mut headers = ResponseHeader::build(status, None)?;
         self.proxy
             .response_filter(session, &mut headers, self.ctx)
