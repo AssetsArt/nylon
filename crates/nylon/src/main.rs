@@ -126,11 +126,11 @@ async fn initialize_acme_certificates() -> Result<(), NylonError> {
     for (domain, acme_config) in acme_configs.iter() {
         let acme_dir = acme_config.acme_dir.as_deref().unwrap_or(".acme");
 
-        // ตรวจสอบว่ามี certificate อยู่แล้วหรือไม่
-        match nylon_tls::AcmeClient::load_certificate(acme_dir, domain) {
-            Ok((cert, key)) => {
+        // ตรวจสอบว่ามี certificate อยู่แล้วหรือไม่ (พร้อม chain ถ้ามี)
+        match nylon_tls::AcmeClient::load_certificate_with_chain(acme_dir, domain) {
+            Ok((cert, key, chain)) => {
                 // มี certificate อยู่แล้ว ตรวจสอบว่ายังใช้งานได้หรือไม่
-                match nylon_tls::CertificateInfo::new(domain.clone(), cert, key, vec![]) {
+                match nylon_tls::CertificateInfo::new(domain.clone(), cert, key, chain) {
                     Ok(cert_info) => {
                         if cert_info.is_expired() {
                             info!(

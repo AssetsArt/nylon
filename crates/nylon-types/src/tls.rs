@@ -26,4 +26,12 @@ pub struct AcmeConfig {
     /// Path to ACME directory (will use runtime config if not specified)
     #[serde(skip)]
     pub acme_dir: Option<String>,
+    /// Use staging endpoint if provider supports it (e.g. Let's Encrypt)
+    pub staging: Option<bool>,
+    /// Custom ACME directory URL (overrides provider/staging)
+    pub directory_url: Option<String>,
+    /// External Account Binding key identifier (for providers like ZeroSSL)
+    pub eab_kid: Option<String>,
+    /// External Account Binding HMAC key (base64/urlsafe as required by provider)
+    pub eab_hmac_key: Option<String>,
 }

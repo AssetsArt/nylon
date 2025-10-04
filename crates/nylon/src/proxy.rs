@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tracing::{debug, error, info};
+use std::collections::HashMap;
 
 async fn handle_error_response<'a>(
     res: &'a mut Response<'a>,
@@ -47,6 +48,27 @@ async fn handle_acme_challenge<'a>(
         .and_then(|h| h.to_str().ok())
         .unwrap_or("localhost");
 
+    // ตัดพอร์ตออกถ้ามีใน Host header
+    let host_name = host.split(':').next().unwrap_or(host);
+
+    // ตรวจสอบว่า host ถูกกำหนดไว้ใน ACME config
+    let allowed = nylon_store::get::<HashMap<String, nylon_types::tls::AcmeConfig>>(nylon_store::KEY_ACME_CONFIG)
+        .map(|m| m.contains_key(host_name))
+        .unwrap_or(false);
+    if !allowed {
+        error!(
+            "ACME challenge host not configured: {}",
+            host_name
+        );
+        return res
+            .status(404)
+            .body_json(serde_json::json!({
+                "error": "Host not configured for ACME"
+            }))?
+            .send(session)
+            .await;
+    }
+
     // ดึง acme_dir จาก runtime config
     let acme_dir = match nylon_config::runtime::RuntimeConfig::get() {
         Ok(config) => config.acme.to_string_lossy().to_string(),
@@ -54,9 +76,9 @@ async fn handle_acme_challenge<'a>(
     };
 
     // ดึง challenge response
-    match nylon_tls::AcmeClient::load_challenge_token(&acme_dir, host, token) {
+    match nylon_tls::AcmeClient::load_challenge_token(&acme_dir, host_name, token) {
         Ok(key_auth) => {
-            info!("ACME challenge response for {}: {}", host, token);
+            debug!("ACME challenge response for {}: {}", host_name, token);
             res.status(200);
             {
                 let mut headers = res.ctx.add_response_header.write().expect("lock");
@@ -68,7 +90,7 @@ async fn handle_acme_challenge<'a>(
         Err(e) => {
             error!(
                 "ACME challenge token not found for {} / {}: {}",
-                host, token, e
+                host_name, token, e
             );
             res.status(404)
                 .body_json(serde_json::json!({
@@ -191,18 +213,18 @@ impl ProxyHttp for NylonRuntime {
             return handle_error_response(&mut res, session, e).await;
         }
 
-        // Find matching route
-        let (route, params) = match nylon_store::routes::find_route(session) {
-            Ok(route) => route,
-            Err(e) => return handle_error_response(&mut res, session, e).await,
-        };
-
-        // Handle ACME HTTP-01 challenge requests
+        // Handle ACME HTTP-01 challenge requests BEFORE route matching
         let req_path = session.req_header().uri.path().to_string();
         if req_path.starts_with("/.well-known/acme-challenge/") {
             debug!("ACME challenge request: {}", req_path);
             return handle_acme_challenge(&mut res, session, &req_path).await;
         }
+
+        // Find matching route
+        let (route, params) = match nylon_store::routes::find_route(session) {
+            Ok(route) => route,
+            Err(e) => return handle_error_response(&mut res, session, e).await,
+        };
 
         // Check for TLS redirect
         let host_owned = res

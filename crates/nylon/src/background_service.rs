@@ -3,7 +3,7 @@ use dashmap::DashMap;
 use nylon_types::{plugins::FfiPlugin, tls::AcmeConfig};
 use pingora::{server::ShutdownWatch, services::background::BackgroundService};
 use std::{collections::HashMap, sync::Arc, time::Duration};
-use tokio::time::interval;
+use tokio::time::{interval, sleep};
 use tracing::{error, info, warn};
 
 pub struct NylonBackgroundService;
@@ -80,7 +80,34 @@ async fn check_and_renew_certificates() -> Result<(), nylon_error::NylonError> {
                 cert_info.domain,
                 cert_info.days_until_expiry()
             );
-            renew_certificate(&cert_info.domain).await?;
+            // Add small jitter to avoid burst renewals
+            let jitter_ms = fastrand::u64(..2000);
+            sleep(Duration::from_millis(jitter_ms)).await;
+            // Try renew with simple backoff on transient errors
+            let mut attempts = 0u8;
+            let max_attempts = 3u8;
+            let mut backoff_ms = 1000u64;
+            loop {
+                attempts += 1;
+                match renew_certificate(&cert_info.domain).await {
+                    Ok(_) => break,
+                    Err(e) if attempts < max_attempts => {
+                        warn!(
+                            "Renew failed for {} (attempt {}/{}): {}. Retrying in {}ms",
+                            cert_info.domain,
+                            attempts,
+                            max_attempts,
+                            e,
+                            backoff_ms
+                        );
+                        sleep(Duration::from_millis(backoff_ms)).await;
+                        backoff_ms *= 2;
+                    }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
+            }
         }
     }
 

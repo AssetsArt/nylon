@@ -4,7 +4,10 @@ use instant_acme::{
 };
 use nylon_error::NylonError;
 use nylon_types::tls::AcmeConfig;
-use tracing::info;
+use tracing::{info, warn};
+use std::fs::OpenOptions;
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 /// ACME Client สำหรับจัดการ certificate ด้วย Let's Encrypt
 pub struct AcmeClient {
@@ -21,6 +24,15 @@ impl AcmeClient {
             .acme_dir
             .clone()
             .unwrap_or_else(|| ".acme".to_string());
+
+        // Ensure directory exists and canonicalize when possible
+        if let Err(e) = std::fs::create_dir_all(&acme_dir) {
+            return Err(NylonError::ConfigError(format!("Failed to create ACME dir: {}", e)));
+        }
+        let acme_dir = match std::fs::canonicalize(&acme_dir) {
+            Ok(p) => p.to_string_lossy().to_string(),
+            Err(_) => acme_dir,
+        };
 
         info!("Using ACME directory: {}", acme_dir);
 
@@ -40,7 +52,7 @@ impl AcmeClient {
             }
             Err(_) => {
                 info!("Creating new ACME account");
-                let (account, credentials) = Self::create_new_account(&config.email).await?;
+                let (account, credentials) = Self::create_new_account(&config).await?;
                 Self::save_account_credentials(&credentials, &acme_dir)?;
                 account
             }
@@ -50,16 +62,38 @@ impl AcmeClient {
     }
 
     /// สร้าง account ใหม่
-    async fn create_new_account(email: &str) -> Result<(Account, AccountCredentials), NylonError> {
+    async fn create_new_account(config: &AcmeConfig) -> Result<(Account, AccountCredentials), NylonError> {
         let new_account = NewAccount {
-            contact: &[&format!("mailto:{}", email)],
+            contact: &[&format!("mailto:{}", config.email)],
             terms_of_service_agreed: true,
             only_return_existing: false,
         };
 
+        // Resolve directory URL
+        let directory_url = if let Some(url) = &config.directory_url {
+            url.clone()
+        } else {
+            let provider = config.provider.to_lowercase();
+            if provider == "letsencrypt" {
+                if config.staging.unwrap_or(false) {
+                    LetsEncrypt::Staging.url().to_owned()
+                } else {
+                    LetsEncrypt::Production.url().to_owned()
+                }
+            } else {
+                warn!("Unknown ACME provider '{}', defaulting to Let's Encrypt Production", provider);
+                LetsEncrypt::Production.url().to_owned()
+            }
+        };
+
+        // NOTE: EAB is provider-specific; if provided but unsupported here, we ignore with warning
+        if config.eab_kid.is_some() || config.eab_hmac_key.is_some() {
+            warn!("EAB credentials provided but not applied: provider-specific binding not implemented");
+        }
+
         let (account, credentials) = Account::builder()
             .map_err(|e| NylonError::ConfigError(format!("Failed to build account: {}", e)))?
-            .create(&new_account, LetsEncrypt::Production.url().to_owned(), None)
+            .create(&new_account, directory_url, None)
             .await
             .map_err(|e| {
                 NylonError::ConfigError(format!("Failed to create ACME account: {}", e))
@@ -122,6 +156,16 @@ impl AcmeClient {
         std::path::PathBuf::from(format!("{}/certs/{}/key.pem", acme_dir, domain))
     }
 
+    /// ได้ path สำหรับเก็บ full chain
+    fn fullchain_path(acme_dir: &str, domain: &str) -> std::path::PathBuf {
+        std::path::PathBuf::from(format!("{}/certs/{}/fullchain.pem", acme_dir, domain))
+    }
+
+    /// ได้ path สำหรับเก็บ intermediates chain (ไม่รวม leaf)
+    fn chain_path(acme_dir: &str, domain: &str) -> std::path::PathBuf {
+        std::path::PathBuf::from(format!("{}/certs/{}/chain.pem", acme_dir, domain))
+    }
+
     /// ได้ path สำหรับเก็บ challenge token
     fn challenge_path(acme_dir: &str, domain: &str, token: &str) -> std::path::PathBuf {
         std::path::PathBuf::from(format!("{}/challenges/{}/{}", acme_dir, domain, token))
@@ -176,7 +220,6 @@ impl AcmeClient {
                 "HTTP-01 Challenge for {}: token={}, path=/.well-known/acme-challenge/{}",
                 domain, token, token
             );
-            info!("Key authorization: {}", key_auth);
 
             // บันทึก challenge token เพื่อให้ web server ให้บริการ
             Self::save_challenge_token(&self.acme_dir, domain, &token, &key_auth)?;
@@ -227,8 +270,8 @@ impl AcmeClient {
         let (cert_pem, chain_pems) = Self::split_certificate_chain(&cert_chain)?;
         let private_key = private_key_pem.as_bytes().to_vec();
 
-        // บันทึก certificate และ key
-        Self::save_certificate(&self.acme_dir, domain, &cert_pem, &private_key)?;
+        // บันทึก certificate, chain และ key
+        Self::save_certificate_bundle(&self.acme_dir, domain, &cert_pem, &chain_pems, &private_key)?;
 
         Ok((cert_pem, private_key, chain_pems))
     }
@@ -260,15 +303,18 @@ impl AcmeClient {
         Ok((cert, chain))
     }
 
-    /// บันทึก certificate และ key ลง file
-    fn save_certificate(
+    /// บันทึก certificate bundle (leaf + chain + fullchain) และ key ลง file
+    fn save_certificate_bundle(
         acme_dir: &str,
         domain: &str,
         cert: &[u8],
+        chain: &Vec<Vec<u8>>,
         key: &[u8],
     ) -> Result<(), NylonError> {
         let cert_path = Self::cert_path(acme_dir, domain);
         let key_path = Self::key_path(acme_dir, domain);
+        let fullchain_path = Self::fullchain_path(acme_dir, domain);
+        let chain_path = Self::chain_path(acme_dir, domain);
 
         // สร้างโฟลเดอร์
         if let Some(parent) = cert_path.parent() {
@@ -277,15 +323,52 @@ impl AcmeClient {
             })?;
         }
 
-        // บันทึก cert
-        std::fs::write(&cert_path, cert)
-            .map_err(|e| NylonError::ConfigError(format!("Failed to write certificate: {}", e)))?;
+        // Prepare fullchain bytes
+        let mut fullchain: Vec<u8> = Vec::new();
+        fullchain.extend_from_slice(cert);
+        for c in chain.iter() {
+            fullchain.extend_from_slice(c);
+        }
 
-        // บันทึก key
-        std::fs::write(&key_path, key)
+        // Write files with restrictive permissions
+        #[cfg(unix)]
+        let mut cert_file = OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&cert_path)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write certificate: {}", e)))?;
+        #[cfg(not(unix))]
+        let mut cert_file = OpenOptions::new().create(true).write(true).truncate(true).open(&cert_path)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write certificate: {}", e)))?;
+        use std::io::Write as _;
+        cert_file.write_all(cert).map_err(|e| NylonError::ConfigError(format!("Failed to write certificate: {}", e)))?;
+
+        #[cfg(unix)]
+        let mut key_file = OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&key_path)
             .map_err(|e| NylonError::ConfigError(format!("Failed to write private key: {}", e)))?;
+        #[cfg(not(unix))]
+        let mut key_file = OpenOptions::new().create(true).write(true).truncate(true).open(&key_path)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write private key: {}", e)))?;
+        key_file.write_all(key).map_err(|e| NylonError::ConfigError(format!("Failed to write private key: {}", e)))?;
+
+        #[cfg(unix)]
+        let mut fullchain_file = OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&fullchain_path)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write fullchain: {}", e)))?;
+        #[cfg(not(unix))]
+        let mut fullchain_file = OpenOptions::new().create(true).write(true).truncate(true).open(&fullchain_path)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write fullchain: {}", e)))?;
+        fullchain_file.write_all(&fullchain).map_err(|e| NylonError::ConfigError(format!("Failed to write fullchain: {}", e)))?;
+
+        // Write chain (intermediates only)
+        #[cfg(unix)]
+        let mut chain_file = OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&chain_path)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write chain: {}", e)))?;
+        #[cfg(not(unix))]
+        let mut chain_file = OpenOptions::new().create(true).write(true).truncate(true).open(&chain_path)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write chain: {}", e)))?;
+        for c in chain.iter() {
+            chain_file.write_all(c).map_err(|e| NylonError::ConfigError(format!("Failed to write chain: {}", e)))?;
+        }
 
         info!("Certificate saved to: {}", cert_path.display());
+        info!("Full chain saved to: {}", fullchain_path.display());
         info!("Private key saved to: {}", key_path.display());
 
         Ok(())
@@ -308,6 +391,28 @@ impl AcmeClient {
         Ok((cert, key))
     }
 
+    /// โหลด certificate, key และ chain จาก file (ถ้ามี)
+    pub fn load_certificate_with_chain(
+        acme_dir: &str,
+        domain: &str,
+    ) -> Result<(Vec<u8>, Vec<u8>, Vec<Vec<u8>>), NylonError> {
+        let (cert, key) = Self::load_certificate(acme_dir, domain)?;
+        let chain_path = Self::chain_path(acme_dir, domain);
+        let chain = if chain_path.exists() {
+            let data = std::fs::read(&chain_path).map_err(|e| NylonError::ConfigError(format!("Failed to read chain: {}", e)))?;
+            // Split concatenated PEMs by END marker
+            let parts: Vec<Vec<u8>> = String::from_utf8_lossy(&data)
+                .split("-----END CERTIFICATE-----")
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| format!("{}-----END CERTIFICATE-----\n", s.trim()).into_bytes())
+                .collect();
+            parts
+        } else {
+            Vec::new()
+        };
+        Ok((cert, key, chain))
+    }
+
     /// บันทึก challenge token
     fn save_challenge_token(
         acme_dir: &str,
@@ -323,9 +428,15 @@ impl AcmeClient {
             })?;
         }
 
-        std::fs::write(&path, key_auth).map_err(|e| {
-            NylonError::ConfigError(format!("Failed to write challenge token: {}", e))
-        })?;
+        // Write token with restrictive permissions
+        #[cfg(unix)]
+        let mut f = OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&path)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write challenge token: {}", e)))?;
+        #[cfg(not(unix))]
+        let mut f = OpenOptions::new().create(true).write(true).truncate(true).open(&path)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write challenge token: {}", e)))?;
+        use std::io::Write as _;
+        f.write_all(key_auth.as_bytes()).map_err(|e| NylonError::ConfigError(format!("Failed to write challenge token: {}", e)))?;
 
         info!("Challenge token saved to: {}", path.display());
         Ok(())
