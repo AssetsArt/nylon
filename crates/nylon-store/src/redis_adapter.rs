@@ -19,7 +19,6 @@ pub struct RedisAdapter {
     config: RedisAdapterConfig,
     node_id: String,
     event_sender: AdapterEventSender,
-    #[allow(dead_code)]
     event_receiver: std::sync::Mutex<Option<AdapterEventReceiver>>,
     local_connections: Arc<RwLock<HashMap<String, WebSocketConnection>>>,
 }
@@ -129,13 +128,7 @@ impl RedisAdapter {
         format!("{}:node_connections:{}", self.get_key_prefix(), node_id)
     }
 
-    #[allow(dead_code)]
-    async fn get_connection(&self) -> Result<redis::aio::Connection, NylonError> {
-        self.client
-            .get_async_connection()
-            .await
-            .map_err(|e| NylonError::ConfigError(format!("Redis connection error: {}", e)))
-    }
+    
 
     async fn publish_event(&self, event: WebSocketEvent) -> Result<(), NylonError> {
         let mut conn = self
