@@ -17,11 +17,6 @@ pub enum Commands {
     #[command(subcommand)]
     Service(ServiceCommands),
 
-    // #[command(name = "proxy", short_flag = 'p')]
-    // #[command(about = "Configure the proxy server")]
-    // #[command(subcommand)]
-    // Proxy(ProxyCommands),
-
     // run with no command
     #[command(name = "run")]
     #[command(about = "Run the proxy server with a config file")]
