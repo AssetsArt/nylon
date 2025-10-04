@@ -310,11 +310,13 @@ fn find_matching_route(
         .get(route_name)
         .ok_or_else(|| NylonError::RouteNotFound("Route map missing for given name".into()))?;
 
-    let path_with_method = format!("/{method}{path}");
+    // Normalize method and prefer method-specific match first to avoid catch-all overshadowing
+    let normalized_method = method.to_uppercase();
+    let path_with_method = format!("/{normalized_method}{path}");
 
     let result = router
-        .at(path)
-        .or_else(|_| router.at(&path_with_method))
+        .at(&path_with_method)
+        .or_else(|_| router.at(path))
         .map_err(|_| {
             NylonError::RouteNotFound(format!(
                 "No route matched for method: {method}, path: {path}"
