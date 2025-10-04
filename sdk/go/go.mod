@@ -1,4 +1,4 @@
-module github.com/AssetsArt/easy-proxy/sdk/go
+module github.com/AssetsArt/nylon/sdk/go
 
 go 1.24.3
 

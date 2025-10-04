@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 
-	"github.com/AssetsArt/easy-proxy/sdk/go/fbs/nylon_plugin"
+	"github.com/AssetsArt/nylon/sdk/go/fbs/nylon_plugin"
 	flatbuffers "github.com/google/flatbuffers/go"
 )
 

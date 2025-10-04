@@ -4,7 +4,7 @@ import "C"
 import (
 	"fmt"
 
-	"github.com/AssetsArt/easy-proxy/sdk/go/sdk"
+	"github.com/AssetsArt/nylon/sdk/go/sdk"
 )
 
 type PluginConfig struct {
