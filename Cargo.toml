@@ -33,6 +33,7 @@ libloading = "0.8"
 instant-acme = "0.8"
 sha1 = "0.10"
 base64 = { version = "0.22", default-features = false, features = ["alloc"] }
+redis = { version = "0.32", features = ["aio", "tokio-comp"] }
 
 [profile.release]
 overflow-checks = true

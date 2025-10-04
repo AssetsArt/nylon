@@ -2,6 +2,8 @@ use crate as store;
 use fnv::FnvHasher;
 use nylon_error::NylonError;
 use nylon_types::services::{Algorithm, HealthCheck, ServiceItem, ServiceType};
+use pingora::http::RequestHeader;
+use pingora::lb::health_check::HttpHealthCheck;
 use pingora::{
     lb::{
         Backend, Backends, Extensions, LoadBalancer, discovery,
@@ -14,8 +16,6 @@ use pingora::{
     prelude::HttpPeer,
     protocols::l4::socket::SocketAddr,
 };
-use pingora::http::RequestHeader;
-use pingora::lb::health_check::HttpHealthCheck;
 use std::time::Duration;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -104,22 +104,26 @@ pub async fn store(services: &Vec<&ServiceItem>) -> Result<(), NylonError> {
                 let mut upstreams =
                     LoadBalancer::<Weighted<RoundRobin>>::from_backends(Backends::new(disco));
                 // Configure health check if provided
-                if let Some(hc) = &service.health_check {
-                    if hc.enabled {
-                        let timeout_secs = parse_seconds(&hc.timeout).unwrap_or(1);
-                        let mut check = HttpHealthCheck::new(&host_for_hc, false);
-                        check.consecutive_success = hc.healthy_threshold as usize;
-                        check.consecutive_failure = hc.unhealthy_threshold as usize;
-                        check.peer_template.options.connection_timeout = Some(Duration::from_secs(timeout_secs));
-                        check.peer_template.options.read_timeout = Some(Duration::from_secs(timeout_secs));
-                        // override request path and host header
-                        let mut req = RequestHeader::build("GET", hc.path.as_bytes(), None).unwrap();
-                        let _ = req.append_header("Host", &host_for_hc);
-                        check.req = req;
-                        upstreams.set_health_check(Box::new(check));
-                        upstreams.parallel_health_check = true;
-                        upstreams.health_check_frequency = Some(Duration::from_secs(parse_seconds(&hc.interval).unwrap_or(5)));
-                    }
+                if let Some(hc) = &service.health_check
+                    && hc.enabled
+                {
+                    let timeout_secs = parse_seconds(&hc.timeout).unwrap_or(1);
+                    let mut check = HttpHealthCheck::new(&host_for_hc, false);
+                    check.consecutive_success = hc.healthy_threshold as usize;
+                    check.consecutive_failure = hc.unhealthy_threshold as usize;
+                    check.peer_template.options.connection_timeout =
+                        Some(Duration::from_secs(timeout_secs));
+                    check.peer_template.options.read_timeout =
+                        Some(Duration::from_secs(timeout_secs));
+                    // override request path and host header
+                    let mut req = RequestHeader::build("GET", hc.path.as_bytes(), None).unwrap();
+                    let _ = req.append_header("Host", &host_for_hc);
+                    check.req = req;
+                    upstreams.set_health_check(Box::new(check));
+                    upstreams.parallel_health_check = true;
+                    upstreams.health_check_frequency = Some(Duration::from_secs(
+                        parse_seconds(&hc.interval).unwrap_or(5),
+                    ));
                 }
                 match upstreams.update().await {
                     Ok(_) => {}
@@ -132,21 +136,25 @@ pub async fn store(services: &Vec<&ServiceItem>) -> Result<(), NylonError> {
             Some(Algorithm::Weighted) => {
                 let mut backend =
                     LoadBalancer::<Weighted<fnv::FnvHasher>>::from_backends(Backends::new(disco));
-                if let Some(hc) = &service.health_check {
-                    if hc.enabled {
-                        let timeout_secs = parse_seconds(&hc.timeout).unwrap_or(1);
-                        let mut check = HttpHealthCheck::new(&host_for_hc, false);
-                        check.consecutive_success = hc.healthy_threshold as usize;
-                        check.consecutive_failure = hc.unhealthy_threshold as usize;
-                        check.peer_template.options.connection_timeout = Some(Duration::from_secs(timeout_secs));
-                        check.peer_template.options.read_timeout = Some(Duration::from_secs(timeout_secs));
-                        let mut req = RequestHeader::build("GET", hc.path.as_bytes(), None).unwrap();
-                        let _ = req.append_header("Host", &host_for_hc);
-                        check.req = req;
-                        backend.set_health_check(Box::new(check));
-                        backend.parallel_health_check = true;
-                        backend.health_check_frequency = Some(Duration::from_secs(parse_seconds(&hc.interval).unwrap_or(5)));
-                    }
+                if let Some(hc) = &service.health_check
+                    && hc.enabled
+                {
+                    let timeout_secs = parse_seconds(&hc.timeout).unwrap_or(1);
+                    let mut check = HttpHealthCheck::new(&host_for_hc, false);
+                    check.consecutive_success = hc.healthy_threshold as usize;
+                    check.consecutive_failure = hc.unhealthy_threshold as usize;
+                    check.peer_template.options.connection_timeout =
+                        Some(Duration::from_secs(timeout_secs));
+                    check.peer_template.options.read_timeout =
+                        Some(Duration::from_secs(timeout_secs));
+                    let mut req = RequestHeader::build("GET", hc.path.as_bytes(), None).unwrap();
+                    let _ = req.append_header("Host", &host_for_hc);
+                    check.req = req;
+                    backend.set_health_check(Box::new(check));
+                    backend.parallel_health_check = true;
+                    backend.health_check_frequency = Some(Duration::from_secs(
+                        parse_seconds(&hc.interval).unwrap_or(5),
+                    ));
                 }
                 match backend.update().await {
                     Ok(_) => {}
@@ -157,22 +165,27 @@ pub async fn store(services: &Vec<&ServiceItem>) -> Result<(), NylonError> {
                 BackendType::Weighted(Arc::new(backend))
             }
             Some(Algorithm::Consistent) => {
-                let mut backend = LoadBalancer::<KetamaHashing>::from_backends(Backends::new(disco));
-                if let Some(hc) = &service.health_check {
-                    if hc.enabled {
-                        let timeout_secs = parse_seconds(&hc.timeout).unwrap_or(1);
-                        let mut check = HttpHealthCheck::new(&host_for_hc, false);
-                        check.consecutive_success = hc.healthy_threshold as usize;
-                        check.consecutive_failure = hc.unhealthy_threshold as usize;
-                        check.peer_template.options.connection_timeout = Some(Duration::from_secs(timeout_secs));
-                        check.peer_template.options.read_timeout = Some(Duration::from_secs(timeout_secs));
-                        let mut req = RequestHeader::build("GET", hc.path.as_bytes(), None).unwrap();
-                        let _ = req.append_header("Host", &host_for_hc);
-                        check.req = req;
-                        backend.set_health_check(Box::new(check));
-                        backend.parallel_health_check = true;
-                        backend.health_check_frequency = Some(Duration::from_secs(parse_seconds(&hc.interval).unwrap_or(5)));
-                    }
+                let mut backend =
+                    LoadBalancer::<KetamaHashing>::from_backends(Backends::new(disco));
+                if let Some(hc) = &service.health_check
+                    && hc.enabled
+                {
+                    let timeout_secs = parse_seconds(&hc.timeout).unwrap_or(1);
+                    let mut check = HttpHealthCheck::new(&host_for_hc, false);
+                    check.consecutive_success = hc.healthy_threshold as usize;
+                    check.consecutive_failure = hc.unhealthy_threshold as usize;
+                    check.peer_template.options.connection_timeout =
+                        Some(Duration::from_secs(timeout_secs));
+                    check.peer_template.options.read_timeout =
+                        Some(Duration::from_secs(timeout_secs));
+                    let mut req = RequestHeader::build("GET", hc.path.as_bytes(), None).unwrap();
+                    let _ = req.append_header("Host", &host_for_hc);
+                    check.req = req;
+                    backend.set_health_check(Box::new(check));
+                    backend.parallel_health_check = true;
+                    backend.health_check_frequency = Some(Duration::from_secs(
+                        parse_seconds(&hc.interval).unwrap_or(5),
+                    ));
                 }
                 match backend.update().await {
                     Ok(_) => {}
@@ -185,21 +198,25 @@ pub async fn store(services: &Vec<&ServiceItem>) -> Result<(), NylonError> {
             Some(Algorithm::Random) => {
                 let mut upstreams =
                     LoadBalancer::<Weighted<Random>>::from_backends(Backends::new(disco));
-                if let Some(hc) = &service.health_check {
-                    if hc.enabled {
-                        let timeout_secs = parse_seconds(&hc.timeout).unwrap_or(1);
-                        let mut check = HttpHealthCheck::new(&host_for_hc, false);
-                        check.consecutive_success = hc.healthy_threshold as usize;
-                        check.consecutive_failure = hc.unhealthy_threshold as usize;
-                        check.peer_template.options.connection_timeout = Some(Duration::from_secs(timeout_secs));
-                        check.peer_template.options.read_timeout = Some(Duration::from_secs(timeout_secs));
-                        let mut req = RequestHeader::build("GET", hc.path.as_bytes(), None).unwrap();
-                        let _ = req.append_header("Host", &host_for_hc);
-                        check.req = req;
-                        upstreams.set_health_check(Box::new(check));
-                        upstreams.parallel_health_check = true;
-                        upstreams.health_check_frequency = Some(Duration::from_secs(parse_seconds(&hc.interval).unwrap_or(5)));
-                    }
+                if let Some(hc) = &service.health_check
+                    && hc.enabled
+                {
+                    let timeout_secs = parse_seconds(&hc.timeout).unwrap_or(1);
+                    let mut check = HttpHealthCheck::new(&host_for_hc, false);
+                    check.consecutive_success = hc.healthy_threshold as usize;
+                    check.consecutive_failure = hc.unhealthy_threshold as usize;
+                    check.peer_template.options.connection_timeout =
+                        Some(Duration::from_secs(timeout_secs));
+                    check.peer_template.options.read_timeout =
+                        Some(Duration::from_secs(timeout_secs));
+                    let mut req = RequestHeader::build("GET", hc.path.as_bytes(), None).unwrap();
+                    let _ = req.append_header("Host", &host_for_hc);
+                    check.req = req;
+                    upstreams.set_health_check(Box::new(check));
+                    upstreams.parallel_health_check = true;
+                    upstreams.health_check_frequency = Some(Duration::from_secs(
+                        parse_seconds(&hc.interval).unwrap_or(5),
+                    ));
                 }
                 match upstreams.update().await {
                     Ok(_) => {}

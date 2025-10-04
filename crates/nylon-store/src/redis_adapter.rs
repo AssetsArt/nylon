@@ -45,9 +45,9 @@ impl RedisAdapter {
         let client = Client::open(redis_url)
             .map_err(|e| NylonError::ConfigError(format!("Redis connection error: {}", e)))?;
 
-        // Test connection
+        // Test connection (async multiplexed)
         let mut conn = client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| NylonError::ConfigError(format!("Redis connection test failed: {}", e)))?;
 
@@ -84,9 +84,8 @@ impl RedisAdapter {
 
         tokio::spawn(async move {
             loop {
-                match client.get_async_connection().await {
-                    Ok(conn) => {
-                        let mut pubsub = conn.into_pubsub();
+                match client.get_async_pubsub().await {
+                    Ok(mut pubsub) => {
                         if let Err(e) = pubsub.subscribe(&channel_name).await {
                             eprintln!("Redis subscribe error: {}", e);
                             tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -128,12 +127,10 @@ impl RedisAdapter {
         format!("{}:node_connections:{}", self.get_key_prefix(), node_id)
     }
 
-    
-
     async fn publish_event(&self, event: WebSocketEvent) -> Result<(), NylonError> {
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| NylonError::ConfigError(format!("Redis connection error: {}", e)))?;
 
@@ -154,7 +151,7 @@ impl RedisAdapter {
         let node_key = self.node_key(&self.node_id);
         tokio::spawn(async move {
             loop {
-                match client.get_async_connection().await {
+                match client.get_multiplexed_async_connection().await {
                     Ok(mut conn) => {
                         let _: redis::RedisResult<()> = cmd("SET")
                             .arg(&node_key)
@@ -180,7 +177,7 @@ impl RedisAdapter {
         tokio::spawn(async move {
             let scan_pattern = format!("{}:node_connections:*", prefix);
             loop {
-                if let Ok(mut conn) = client.get_async_connection().await {
+                if let Ok(mut conn) = client.get_multiplexed_async_connection().await {
                     let mut cursor: u64 = 0;
                     loop {
                         let res: redis::RedisResult<(u64, Vec<String>)> = cmd("SCAN")
@@ -203,9 +200,9 @@ impl RedisAdapter {
                                 cmd("EXISTS").arg(&node_key).query_async(&mut conn).await;
                             if let Ok(0) = exists {
                                 // stale node, clean its connections
-                                if let Ok(connections) = redis::cmd("SMEMBERS")
+                                if let Ok::<Vec<String>, _>(connections) = redis::cmd("SMEMBERS")
                                     .arg(&key)
-                                    .query_async::<_, Vec<String>>(&mut conn)
+                                    .query_async(&mut conn)
                                     .await
                                 {
                                     for connection_id in connections {
@@ -214,22 +211,22 @@ impl RedisAdapter {
                                             "{}:connection_rooms:{}",
                                             prefix, connection_id
                                         );
-                                        if let Ok(rooms) = redis::cmd("SMEMBERS")
+                                        if let Ok::<Vec<String>, _>(rooms) = redis::cmd("SMEMBERS")
                                             .arg(&conn_rooms_key)
-                                            .query_async::<_, Vec<String>>(&mut conn)
+                                            .query_async(&mut conn)
                                             .await
                                         {
                                             for room in rooms {
                                                 let room_key = format!("{}:rooms:{}", prefix, room);
                                                 let _: redis::RedisResult<()> = cmd("SREM")
                                                     .arg(&room_key)
-                                                    .arg(&connection_id)
+                                                    .arg::<&str>(&connection_id)
                                                     .query_async(&mut conn)
                                                     .await;
                                                 // delete room key if empty
-                                                if let Ok(0) = cmd("SCARD")
+                                                if let Ok::<i32, _>(0) = cmd("SCARD")
                                                     .arg(&room_key)
-                                                    .query_async::<_, i32>(&mut conn)
+                                                    .query_async::<i32>(&mut conn)
                                                     .await
                                                 {
                                                     let _: redis::RedisResult<()> = cmd("DEL")
@@ -242,8 +239,10 @@ impl RedisAdapter {
                                         // delete connection keys
                                         let key_conn =
                                             format!("{}:connections:{}", prefix, connection_id);
-                                        let _: redis::RedisResult<()> =
-                                            cmd("DEL").arg(&key_conn).query_async(&mut conn).await;
+                                        let _: redis::RedisResult<()> = cmd("DEL")
+                                            .arg::<&str>(&key_conn)
+                                            .query_async::<()>(&mut conn)
+                                            .await;
                                         let _: redis::RedisResult<()> = cmd("DEL")
                                             .arg(&conn_rooms_key)
                                             .query_async(&mut conn)
@@ -252,17 +251,19 @@ impl RedisAdapter {
                                         let node_conns_key =
                                             format!("{}:node_connections:{}", prefix, node_id);
                                         let _: redis::RedisResult<()> = cmd("SREM")
-                                            .arg(&node_conns_key)
-                                            .arg(&connection_id)
-                                            .query_async(&mut conn)
+                                            .arg::<&str>(&node_conns_key)
+                                            .arg::<&str>(&connection_id)
+                                            .query_async::<()>(&mut conn)
                                             .await;
                                     }
                                 }
                                 // delete empty node set
                                 let node_conns_key =
                                     format!("{}:node_connections:{}", prefix, node_id);
-                                let _: redis::RedisResult<()> =
-                                    cmd("DEL").arg(&node_conns_key).query_async(&mut conn).await;
+                                let _: redis::RedisResult<()> = cmd("DEL")
+                                    .arg::<&str>(&node_conns_key)
+                                    .query_async::<()>(&mut conn)
+                                    .await;
                             }
                         }
                         cursor = next;
@@ -283,7 +284,7 @@ impl WebSocketAdapter for RedisAdapter {
     async fn add_connection(&self, connection: WebSocketConnection) -> Result<(), NylonError> {
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| NylonError::ConfigError(format!("Redis connection error: {}", e)))?;
 
@@ -316,7 +317,7 @@ impl WebSocketAdapter for RedisAdapter {
     async fn remove_connection(&self, connection_id: &str) -> Result<(), NylonError> {
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| NylonError::ConfigError(format!("Redis connection error: {}", e)))?;
 
@@ -369,7 +370,7 @@ impl WebSocketAdapter for RedisAdapter {
     async fn join_room(&self, connection_id: &str, room: &str) -> Result<(), NylonError> {
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| NylonError::ConfigError(format!("Redis connection error: {}", e)))?;
 
@@ -405,7 +406,7 @@ impl WebSocketAdapter for RedisAdapter {
     async fn leave_room(&self, connection_id: &str, room: &str) -> Result<(), NylonError> {
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| NylonError::ConfigError(format!("Redis connection error: {}", e)))?;
 
@@ -453,7 +454,7 @@ impl WebSocketAdapter for RedisAdapter {
     async fn get_room_connections(&self, room: &str) -> Result<Vec<String>, NylonError> {
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| NylonError::ConfigError(format!("Redis connection error: {}", e)))?;
 
@@ -469,7 +470,7 @@ impl WebSocketAdapter for RedisAdapter {
     async fn get_connection_rooms(&self, connection_id: &str) -> Result<Vec<String>, NylonError> {
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| NylonError::ConfigError(format!("Redis connection error: {}", e)))?;
 
@@ -529,7 +530,7 @@ impl WebSocketAdapter for RedisAdapter {
         // Fallback to Redis
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| NylonError::ConfigError(format!("Redis connection error: {}", e)))?;
 
