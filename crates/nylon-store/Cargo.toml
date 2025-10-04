@@ -1,0 +1,22 @@
+[package]
+name = "nylon-store"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nylon-types = { path = "../nylon-types" }
+nylon-error = { path = "../nylon-error" }
+nylon-tls = { path = "../nylon-tls" }
+dashmap = { workspace = true }
+once_cell = { workspace = true }
+pingora = { workspace = true }
+fnv = { workspace = true }
+matchit = { workspace = true }
+tracing = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tokio-stream = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+redis = { workspace = true }

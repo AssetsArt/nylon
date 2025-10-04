@@ -1,0 +1,10 @@
+namespace nylon_plugin;
+
+table HeaderKeyValue {
+  key: string (required);
+  value: string (required);
+}
+
+table NylonHttpHeaders {
+  headers: [HeaderKeyValue] (required);
+}

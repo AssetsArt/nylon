@@ -1,234 +1,271 @@
-# Easy Proxy Documentation
+# 🧬 Nylon — The Extensible Proxy Server
 
-**Easy Proxy** is a simple proxy server designed to provide essential features for network traffic management and proxying. It is based on [Pingora](https://github.com/cloudflare/pingora).
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Docs](https://img.shields.io/badge/docs-online-blue)](https://nylon.sh/)
 
-## Installation or Upgrade
+Nylon is a lightweight, high‑performance, and extensible proxy built on top of the battle‑tested [Cloudflare Pingora](https://github.com/cloudflare/pingora) framework.
 
-To install or upgrade Easy Proxy, run the following command:
+---
 
-```bash
-curl -H 'Cache-Control: no-cache' -fsSL https://raw.githubusercontent.com/AssetsArt/easy-proxy/main/scripts/install.sh | bash
+## What you get
+
+- Extensible: write plugins in Go, Rust, Zig, C via FFI
+- Simple YAML config: one place to manage routes, services, middleware
+- Smart routing & load balancing: host/header/path matching, round‑robin/random/consistent hashing
+- TLS built‑in: custom certs or ACME (Let’s Encrypt, Buypass)
+- Cloud‑native: observability and scalability friendly
+
+---
+
+## Quick start
+
+```sh
+# Build (choose one)
+make build
+# or
+cargo build --release
+
+# Run with bundled examples
+./target/release/nylon run -c ./examples/config.yaml
+
+# Ports
+# HTTP   : 0.0.0.0:8088
+# HTTPS  : 0.0.0.0:8443 (enable with certs)
+# Metrics: 127.0.0.1:6192
 ```
 
-## Uninstall
+Test quickly:
 
-To uninstall Easy Proxy, execute:
-
-```bash
-curl -H 'Cache-Control: no-cache' -fsSL https://raw.githubusercontent.com/AssetsArt/easy-proxy/main/scripts/uninstall.sh | bash
+```sh
+curl -H "Host: localhost" http://127.0.0.1:8088/
+curl -H "Host: localhost" http://127.0.0.1:8088/static/
+# if TLS enabled
+curl -k -H "Host: localhost" https://127.0.0.1:8443/
 ```
 
-## Features
+---
 
-Easy Proxy supports the following features:
+## Minimal config
 
-### Protocol Support
-- [x] **HTTP**
-- [x] **HTTPS**
-
-### Certificate Management
-- [x] **Custom Certificates**
-- [x] **ACME (Automated Certificate Management Environment)**
-
-### Service Endpoint
-- [x] **HTTP**
-- [ ] **HTTPS**
-- [ ] **WASM (WebAssembly)**
-- [ ] **FFI (Foreign Function Interface)**
-
-### Route Matching
-- [x] **Header-based Matching**
-- [x] **Host-based Matching**
-
-### Service Matching (Path)
-- [x] **Exact Match**
-- [x] **Prefix Match**
-
-### Modify Request
-- [x] **Add Headers**
-- [x] **Remove Headers**
-- [x] **Rewrite Path**
-
-### Load Balancing
-- [x] **Round Robin**
-- [x] **Random**
-- [x] **Consistent Hashing**
-  - **Weighted Ketama Consistent Hashing** | [Pingora - Consistent](https://github.com/cloudflare/pingora/blob/main/pingora-load-balancing/src/selection/consistent.rs)
-- [x] **Weighted**
-
-### Middleware / Plugins Support
-- [ ] **FFI (Foreign Function Interface)**
-- [ ] **WASM (WebAssembly)**
-
-### Additional Features
-- [ ] **Health Checking**
-- [ ] **Logging and Monitoring**
-
-## Example Configuration
-
-### Global Configuration
+Top‑level `examples/config.yaml`:
 
 ```yaml
-proxy:
-  http: "0.0.0.0:80"
-  https: "0.0.0.0:443"
-config_dir: "/etc/easy-proxy/proxy"
-# Optional
-acme_store: "/etc/easy-proxy/acme.json" # Automatically generated
-
+http:
+  - 0.0.0.0:8088
+https:
+  - 0.0.0.0:8443
+metrics:
+  - 127.0.0.1:6192
+config_dir: "./examples/proxy"
+acme: "./examples/acme"
 pingora:
-  # Refer to Pingora's daemon documentation: https://github.com/cloudflare/pingora/blob/main/docs/user_guide/daemon.md
-  daemon: true
-  # Refer to Pingora's configuration documentation: https://github.com/cloudflare/pingora/blob/main/docs/user_guide/conf.md
-  threads: 6
-  # Optional settings (uncomment to use)
-  # upstream_keepalive_pool_size: 20
-  # work_stealing: true
-  # error_log: /var/log/pingora/error.log
-  # pid_file: /run/pingora.pid
-  # upgrade_sock: /tmp/pingora_upgrade.sock
-  # user: nobody
-  # group: webusers
-  grace_period_seconds: 60
-  graceful_shutdown_timeout_seconds: 10
-  # ca_file: /etc/ssl/certs/ca-certificates.crt
+  daemon: false
+  grace_period_seconds: 1
+  graceful_shutdown_timeout_seconds: 1
 ```
 
-### Service and Route Configuration
+- http/https: listening addresses
+- metrics: Prometheus‑compatible metrics endpoint
+- config_dir: folder containing proxy configs
+- acme: ACME storage path (optional)
+
+---
+
+## Examples
+
+Proxy `base.yaml` (real‑world services & middleware):
 
 ```yaml
-# my-config.yaml
+header_selector: x-nylon-proxy
 
-# Select the service to be proxied based on the specified header
-header_selector: x-easy-proxy-svc
+plugins:
+  - name: plugin_sdk
+    type: ffi
+    file: ./target/examples/go/plugin_sdk.so
+    config:
+      debug: true
 
-# Services to be proxied
 services:
-  - name: my-service
-    type: http
-    algorithm: round_robin # Options: round_robin, random, consistent, weighted
+  - name: app-service
+    service_type: http
+    algorithm: round_robin
     endpoints:
       - ip: 127.0.0.1
         port: 3000
-        weight: 10 # Optional
       - ip: 127.0.0.1
         port: 3001
-        weight: 1 # Optional
+    health_check:
+      enabled: true
+      path: /health
+      interval: 3s
+      timeout: 1s
+      healthy_threshold: 2
+      unhealthy_threshold: 2
 
-# TLS Configuration
-tls:
-  - name: my-tls
-    type: custom # Options: acme, custom
-    # If type is 'acme', the following fields are required:
-    # acme:
-    #   provider: letsencrypt # Options: letsencrypt, buypass (default: letsencrypt)
-    #   email: admin@domain.com
-    key: /etc/easy-proxy/ssl/localhost.key
-    cert: /etc/easy-proxy/ssl/localhost.crt
-    # Optional chain certificates
-    # chain:
-    #   - /etc/easy-proxy/ssl/chain.pem
+  - name: ws-service
+    service_type: plugin
+    plugin:
+      name: plugin_sdk
+      entry: ws
 
-# Routes to be proxied
+  - name: stream-service
+    service_type: plugin
+    plugin:
+      name: plugin_sdk
+      entry: stream
+
+  - name: static
+    service_type: static
+    static:
+      root: ./examples/static
+      index: index.html
+      spa: true
+
+middleware_groups:
+  security:
+    - plugin: RequestHeaderModifier
+      payload:
+        remove:
+          - x-version
+        set:
+          - name: x-request-id
+            value: "${uuid(v7)}"
+          - name: x-forwarded-for
+            value: "${request(client_ip)}"
+          - name: x-host
+            value: "${header(host)}"
+          - name: x-timestamp
+            value: "${timestamp()}"
+    - plugin: ResponseHeaderModifier
+      payload:
+        set:
+          - name: cache-control
+            value: "no-store"
+          - name: referrer-policy
+            value: "no-referrer"
+          - name: x-content-type-options
+            value: "nosniff"
+          - name: x-frame-options
+            value: "DENY"
+          - name: content-security-policy
+            value: "default-src 'self'"
+          - name: x-server
+            value: ${or(env(SERVER_NAME), 'nylon-demo')}
+
+  auth:
+    - plugin: plugin_sdk
+      entry: "authz"
+      payload:
+        client_ip: "${request(client_ip)}"
+        user_id: "${header(x-user-id)}"
+```
+
+Proxy `host_route.yaml` (single host with realistic paths):
+
+```yaml
+# https://github.com/ibraheemdev/matchit
 routes:
-  - route:
-      type: header
-      value: service-1
-    name: my-route-header-1
-    paths:
-      - pathType: Exact
-        path: /
-        service:
-          rewrite: /rewrite
-          name: my-service
-          
+  # App
   - route:
       type: host
-      value: localhost
-    name: my-route-1
-    tls: # Optional TLS settings for this route
-      name: my-tls
-      redirect: true # Redirect to HTTPS (default: false)
-    remove_headers:
-      - cookie
-    add_headers:
-      - name: x-custom-header
-        value: "123"
-      - name: x-real-ip
-        value: "$CLIENT_IP"
+      value: localhost # localhost|api.localhost
+    name: app-route
     paths:
-      - pathType: Exact
-        path: /
+      - path:
+          - /
+          - /{*path}
+        middleware:
+          - group: security
         service:
-          name: my-service
-      - pathType: Exact
-        path: /api/v1
+          name: app-service
+      - path:
+          - /static
+          - /static/{*path}
         service:
-          rewrite: /rewrite
-          name: my-service
-      - pathType: Prefix
-        path: /api/prefix
+          name: static
+          rewrite: /static
+      - path:
+          - /ws
+        methods: [GET, POST, OPTIONS]
         service:
-          rewrite: /prefix
-          name: my-service
+          name: ws-service
+      - path:
+          - /stream
+        methods: [GET, POST, OPTIONS]
+        service:
+          name: stream-service
 ```
 
-## Testing and Reloading the Service
+Proxy `tls.yaml` (custom certs or ACME):
 
-You can test and reload the service using the following commands:
+```yaml
+tls:
+  - type: custom
+    cert: ./examples/cert/localhost.crt
+    key: ./examples/cert/localhost.key
+    # chain:
+    #   - ./examples/cert/chain.pem
+    domains:
+      - localhost
 
-```bash
-$ easy-proxy -t    # Test the configuration file
-$ easy-proxy -r    # Reload the configuration file
+  # - type: acme
+  #   email: test@example.com
+  #   provider: letsencrypt # letsencrypt, buypass
+  #   domains:
+  #     - localhost
 ```
 
-### systemd Service Commands
-
-Manage the Easy Proxy service with the following `service` commands:
-
-```bash
-$ service easy-proxy start
-$ service easy-proxy stop
-$ service easy-proxy restart
-# Restart includes the global configuration and ensures zero downtime
-# Note: `grace_period_seconds` and `graceful_shutdown_timeout_seconds` are used to wait for existing connections to close
-$ service easy-proxy reload    # Reload the configuration file without including the global configuration
-$ service easy-proxy status
-```
-
-**Details:**
-- **Restart:** Applies the global configuration and ensures zero downtime by gracefully handling existing connections.
-- **Reload:** Reloads the configuration file without affecting the global configuration, allowing for quick updates without restarting the entire service.
-
-## Use from Source
-
-If you prefer to build Easy Proxy from source, follow these steps:
-
-1. **Clone the Repository:**
-
-    ```bash
-    git clone https://github.com/AssetsArt/easy-proxy.git
-    ```
-
-2. **Change the Working Directory:**
-
-    ```bash
-    cd easy-proxy
-    ```
-
-3. **Build the Application:**
-
-    ```bash
-    cargo build --release
-    ```
-
-4. **Run the Application:**
-
-    ```bash
-    # EASY_PROXY_CONF is the environment variable to set the configuration file path
-    EASY_PROXY_CONF=.config/easy-proxy.yaml ./target/release/easy-proxy
-    ```
-
-**Note:** Ensure that you have [Rust](https://www.rust-lang.org/tools/install) installed on your system to build Easy Proxy from source.
+Static page `examples/static/index.html` is served at `/static`.
 
 ---
+
+## TLS quick start
+
+Generate local certs (choose one):
+
+```sh
+# mkcert (recommended for local)
+mkcert -install
+mkcert -key-file ./examples/cert/localhost.key -cert-file ./examples/cert/localhost.crt localhost
+
+# openssl (alternative)
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout ./examples/cert/localhost.key \
+  -out ./examples/cert/localhost.crt \
+  -subj "/CN=localhost"
+```
+
+---
+
+## Plugins
+
+- Nylon supports FFI plugins. A Go example lives in `examples/go/main.go`.
+- Build a shared object and reference it in `base.yaml`:
+
+```sh
+mkdir -p ./target/examples/go
+go build -buildmode=c-shared -o ./target/examples/go/plugin_sdk.so ./examples/go
+```
+
+See the docs for more: `Plugin System` and language‑specific guides.
+
+---
+
+## Links
+
+- Docs: https://nylon.sh/
+- Getting started: https://nylon.sh/getting-started/installation
+- Config reference: https://nylon.sh/config-reference
+- Plugin system: https://nylon.sh/plugin-system
+
+---
+
+## Build from source
+
+```sh
+git clone https://github.com/AssetsArt/nylon.git
+cd nylon
+make build
+```
+
+MIT Licensed. © AssetsArt.

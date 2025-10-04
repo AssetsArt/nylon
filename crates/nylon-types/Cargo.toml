@@ -1,0 +1,17 @@
+[package]
+name = "nylon-types"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nylon-error = { path = "../nylon-error" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+pingora = { workspace = true }
+regex = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+bytes = { workspace = true }
+libloading = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }

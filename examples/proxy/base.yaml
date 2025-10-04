@@ -1,0 +1,87 @@
+header_selector: x-nylon-proxy
+
+plugins:
+  - name: plugin_sdk
+    type: ffi
+    file: ./target/examples/go/plugin_sdk.so
+    config:
+      debug: true
+
+services:
+  # Http service
+  - name: app-service
+    service_type: http
+    algorithm: round_robin # Options: round_robin, random, consistent, weighted
+    endpoints:
+      - ip: 127.0.0.1
+        port: 3000
+      - ip: 127.0.0.1
+        port: 3001
+    health_check:
+      enabled: true
+      path: /health
+      interval: 3s
+      timeout: 1s
+      healthy_threshold: 2
+      unhealthy_threshold: 2
+
+  # WebSocket and streaming via plugin
+  - name: ws-service
+    service_type: plugin
+    plugin:
+      name: plugin_sdk
+      entry: ws
+
+  - name: stream-service
+    service_type: plugin
+    plugin:
+      name: plugin_sdk
+      entry: stream
+
+  # Static assets / SPA
+  - name: static
+    service_type: static
+    static:
+      root: ./examples/static
+      index: index.html
+      spa: true
+
+middleware_groups:
+  # Security & request metadata headers applied to most routes
+  security:
+    - plugin: RequestHeaderModifier
+      payload:
+        remove:
+          - x-version
+        set:
+          - name: x-request-id
+            value: "${uuid(v7)}"
+          - name: x-forwarded-for
+            value: "${request(client_ip)}"
+          - name: x-host
+            value: "${header(host)}"
+          - name: x-timestamp
+            value: "${timestamp()}"
+    - plugin: ResponseHeaderModifier
+      payload:
+        set:
+          - name: cache-control
+            value: "no-store"
+          - name: referrer-policy
+            value: "no-referrer"
+          - name: x-content-type-options
+            value: "nosniff"
+          - name: x-frame-options
+            value: "DENY"
+          - name: content-security-policy
+            value: "default-src 'self'"
+          - name: x-server
+            value: ${or(env(SERVER_NAME), 'nylon-demo')}
+
+  # Authorization example using FFI plugin
+  auth:
+    - plugin: plugin_sdk
+      entry: "authz"
+      payload:
+        client_ip: "${request(client_ip)}"
+        user_id: "${header(x-user-id)}"

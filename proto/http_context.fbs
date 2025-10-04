@@ -1,0 +1,28 @@
+namespace nylon_http_context;
+
+table KeyValue {
+  key: string (required);
+  value: string (required);
+}
+
+table NylonHttpRequest {
+  method: string (required);
+  path: string (required);
+  query: string;
+  params: [KeyValue];
+  headers: [KeyValue];
+  body: [ubyte];
+}
+
+table NylonHttpResponse {
+  status: int;
+  headers: [KeyValue];
+  body: [ubyte];
+}
+
+table NylonHttpContext {
+  request: NylonHttpRequest (required);
+  response: NylonHttpResponse (required);
+}
+
+root_type NylonHttpContext;
