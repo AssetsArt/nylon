@@ -90,6 +90,11 @@ fn handle_run_command(config_path: String) -> Result<(), NylonError> {
         let runtime_config = RuntimeConfig::get()?;
         nylon_store::websockets::initialize_adapter(runtime_config.websocket).await?;
 
+        // Initialize ACME certificates
+        if let Err(e) = initialize_acme_certificates().await {
+            error!("Failed to initialize ACME certificates: {}", e);
+        }
+
         Ok::<(), NylonError>(())
     })?;
 
@@ -97,4 +102,88 @@ fn handle_run_command(config_path: String) -> Result<(), NylonError> {
     NylonRuntime::new_server()
         .map_err(|e| NylonError::RuntimeError(format!("Failed to create server: {}", e)))?
         .run_forever();
+}
+
+/// Initialize ACME certificates สำหรับ domains ที่ใช้ ACME
+async fn initialize_acme_certificates() -> Result<(), NylonError> {
+    use nylon_types::tls::AcmeConfig;
+    use std::collections::HashMap;
+
+    info!("Initializing ACME certificates...");
+
+    // ดึง ACME configs
+    let acme_configs =
+        match nylon_store::get::<HashMap<String, AcmeConfig>>(nylon_store::KEY_ACME_CONFIG) {
+            Some(configs) if !configs.is_empty() => configs,
+            _ => {
+                info!("No ACME domains configured");
+                return Ok(());
+            }
+        };
+
+    info!("Found {} domains configured for ACME", acme_configs.len());
+
+    for (domain, acme_config) in acme_configs.iter() {
+        let acme_dir = acme_config.acme_dir.as_deref().unwrap_or(".acme");
+
+        // ตรวจสอบว่ามี certificate อยู่แล้วหรือไม่
+        match nylon_tls::AcmeClient::load_certificate(acme_dir, domain) {
+            Ok((cert, key)) => {
+                // มี certificate อยู่แล้ว ตรวจสอบว่ายังใช้งานได้หรือไม่
+                match nylon_tls::CertificateInfo::new(domain.clone(), cert, key, vec![]) {
+                    Ok(cert_info) => {
+                        if cert_info.is_expired() {
+                            info!(
+                                "Certificate for {} is expired, issuing new certificate...",
+                                domain
+                            );
+                            issue_new_certificate(domain, acme_config).await?;
+                        } else {
+                            info!(
+                                "Using existing certificate for {}, expires in {} days",
+                                domain,
+                                cert_info.days_until_expiry()
+                            );
+                            // เก็บ certificate info ใน store
+                            nylon_store::tls::store_acme_cert(cert_info)?;
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to parse existing certificate for {}: {}", domain, e);
+                        issue_new_certificate(domain, acme_config).await?;
+                    }
+                }
+            }
+            Err(_) => {
+                // ไม่มี certificate ต้องออกใหม่
+                info!(
+                    "No existing certificate for {}, issuing new certificate...",
+                    domain
+                );
+                issue_new_certificate(domain, acme_config).await?;
+            }
+        }
+    }
+
+    info!("ACME certificates initialization completed");
+    Ok(())
+}
+
+/// ออก certificate ใหม่สำหรับ domain
+async fn issue_new_certificate(
+    domain: &str,
+    acme_config: &nylon_types::tls::AcmeConfig,
+) -> Result<(), NylonError> {
+    let mut client = nylon_tls::AcmeClient::new(acme_config).await?;
+    let (cert, key, chain) = client.issue_certificate(domain).await?;
+
+    let cert_info = nylon_tls::CertificateInfo::new(domain.to_string(), cert, key, chain)?;
+
+    info!(
+        "Certificate issued successfully for {}, expires at: {}",
+        domain, cert_info.expires_at
+    );
+
+    nylon_store::tls::store_acme_cert(cert_info)?;
+    Ok(())
 }

@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 nylon-types = { path = "../nylon-types" }
 nylon-error = { path = "../nylon-error" }
+nylon-tls = { path = "../nylon-tls" }
 dashmap = { workspace = true }
 once_cell = { workspace = true }
 pingora = { workspace = true }

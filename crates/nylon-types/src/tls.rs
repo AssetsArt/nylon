@@ -23,4 +23,7 @@ pub struct TlsConfig {
 pub struct AcmeConfig {
     pub provider: String,
     pub email: String,
+    /// Path to ACME directory (will use runtime config if not specified)
+    #[serde(skip)]
+    pub acme_dir: Option<String>,
 }

@@ -23,6 +23,8 @@ pub const KEY_HEADER_SELECTOR: &str = "header_selector";
 pub const KEY_LIBRARY_FILE: &str = "library_file";
 pub const KEY_PLUGINS: &str = "plugins";
 pub const KEY_TLS: &str = "tls";
+pub const KEY_ACME_CERTS: &str = "acme_certs";
+pub const KEY_ACME_CONFIG: &str = "acme_config";
 
 // storage for global variables
 static GLOBAL_STORE: Lazy<DashMap<String, Box<dyn Any + Send + Sync>>> = Lazy::new(DashMap::new);

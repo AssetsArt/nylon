@@ -10,6 +10,7 @@ nylon-error = { path = "../nylon-error" }
 nylon-types = { path = "../nylon-types" }
 nylon-store = { path = "../nylon-store" }
 nylon-plugin = { path = "../nylon-plugin" }
+nylon-tls = { path = "../nylon-tls" }
 nylon-sdk = { path = "../../sdk/rust" }
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }

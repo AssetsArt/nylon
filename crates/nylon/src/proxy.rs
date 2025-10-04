@@ -30,6 +30,56 @@ async fn handle_error_response<'a>(
         .await
 }
 
+/// Handle ACME HTTP-01 challenge requests
+async fn handle_acme_challenge<'a>(
+    res: &'a mut Response<'a>,
+    session: &'a mut Session,
+    path: &str,
+) -> pingora::Result<bool> {
+    // แยก token จาก path: /.well-known/acme-challenge/{token}
+    let token = path.trim_start_matches("/.well-known/acme-challenge/");
+
+    // ดึง host จาก request
+    let host = session
+        .req_header()
+        .headers
+        .get("host")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("localhost");
+
+    // ดึง acme_dir จาก runtime config
+    let acme_dir = match nylon_config::runtime::RuntimeConfig::get() {
+        Ok(config) => config.acme.to_string_lossy().to_string(),
+        Err(_) => ".acme".to_string(),
+    };
+
+    // ดึง challenge response
+    match nylon_tls::AcmeClient::load_challenge_token(&acme_dir, host, token) {
+        Ok(key_auth) => {
+            info!("ACME challenge response for {}: {}", host, token);
+            res.status(200);
+            {
+                let mut headers = res.ctx.add_response_header.write().expect("lock");
+                headers.insert("Content-Type".to_string(), "text/plain".to_string());
+            }
+            res.body(Bytes::from(key_auth.as_bytes().to_vec()));
+            res.send(session).await
+        }
+        Err(e) => {
+            error!(
+                "ACME challenge token not found for {} / {}: {}",
+                host, token, e
+            );
+            res.status(404)
+                .body_json(serde_json::json!({
+                    "error": "Challenge token not found"
+                }))?
+                .send(session)
+                .await
+        }
+    }
+}
+
 fn process_tls_redirect(host: &str, tls: bool) -> Option<String> {
     if tls {
         return None;
@@ -147,8 +197,12 @@ impl ProxyHttp for NylonRuntime {
             Err(e) => return handle_error_response(&mut res, session, e).await,
         };
 
-        // Handle ACME requests (TODO: implement ACME challenge handling)
-        // TODO: handle acme request
+        // Handle ACME HTTP-01 challenge requests
+        let req_path = session.req_header().uri.path().to_string();
+        if req_path.starts_with("/.well-known/acme-challenge/") {
+            debug!("ACME challenge request: {}", req_path);
+            return handle_acme_challenge(&mut res, session, &req_path).await;
+        }
 
         // Check for TLS redirect
         let host_owned = res
