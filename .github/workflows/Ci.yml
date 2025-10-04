@@ -27,32 +27,32 @@ jobs:
       - name: Extract version from Cargo.toml
         id: extract_version
         run: |
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "nylon") | .version')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Build Linux binary x86_64-gnu
         run: |
           cross build --target x86_64-unknown-linux-gnu --release
           mkdir -p build/linux/
-          cp target/x86_64-unknown-linux-gnu/release/easy-proxy build/linux/easy-proxy-x86_64-linux-gnu
+          cp target/x86_64-unknown-linux-gnu/release/nylon build/linux/nylon-x86_64-linux-gnu
 
       - name: Build Linux binary x86_64-musl
         run: |
           cross build --target x86_64-unknown-linux-musl --release
           mkdir -p build/linux/
-          cp target/x86_64-unknown-linux-musl/release/easy-proxy build/linux/easy-proxy-x86_64-linux-musl
+          cp target/x86_64-unknown-linux-musl/release/nylon build/linux/nylon-x86_64-linux-musl
 
       - name: Build Linux binary aarch64-gnu
         run: |
           cross build --target aarch64-unknown-linux-gnu --release
           mkdir -p build/linux/
-          cp target/aarch64-unknown-linux-gnu/release/easy-proxy build/linux/easy-proxy-aarch64-linux-gnu
+          cp target/aarch64-unknown-linux-gnu/release/nylon build/linux/nylon-aarch64-linux-gnu
 
       - name: Build Linux binary aarch64-musl
         run: |
           cross build --target aarch64-unknown-linux-musl --release
           mkdir -p build/linux/
-          cp target/aarch64-unknown-linux-musl/release/easy-proxy build/linux/easy-proxy-aarch64-linux-musl
+          cp target/aarch64-unknown-linux-musl/release/nylon build/linux/nylon-aarch64-linux-musl
 
       - name: Generate Checksums
         run: |
@@ -64,10 +64,10 @@ jobs:
         with:
           repository: ${{ github.repository }}
           files: |
-            build/linux/easy-proxy-x86_64-linux-gnu
-            build/linux/easy-proxy-x86_64-linux-musl
-            build/linux/easy-proxy-aarch64-linux-gnu
-            build/linux/easy-proxy-aarch64-linux-musl
+            build/linux/nylon-x86_64-linux-gnu
+            build/linux/nylon-x86_64-linux-musl
+            build/linux/nylon-aarch64-linux-gnu
+            build/linux/nylon-aarch64-linux-musl
             build/linux/linux-checksums.txt
           tag_name: v${{ steps.extract_version.outputs.version }}
           name: v${{ steps.extract_version.outputs.version }}

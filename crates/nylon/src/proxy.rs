@@ -10,12 +10,12 @@ use pingora::{
     prelude::HttpPeer,
     proxy::{ProxyHttp, Session},
 };
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tracing::{debug, error, info};
-use std::collections::HashMap;
 
 async fn handle_error_response<'a>(
     res: &'a mut Response<'a>,
@@ -52,14 +52,13 @@ async fn handle_acme_challenge<'a>(
     let host_name = host.split(':').next().unwrap_or(host);
 
     // ตรวจสอบว่า host ถูกกำหนดไว้ใน ACME config
-    let allowed = nylon_store::get::<HashMap<String, nylon_types::tls::AcmeConfig>>(nylon_store::KEY_ACME_CONFIG)
-        .map(|m| m.contains_key(host_name))
-        .unwrap_or(false);
+    let allowed = nylon_store::get::<HashMap<String, nylon_types::tls::AcmeConfig>>(
+        nylon_store::KEY_ACME_CONFIG,
+    )
+    .map(|m| m.contains_key(host_name))
+    .unwrap_or(false);
     if !allowed {
-        error!(
-            "ACME challenge host not configured: {}",
-            host_name
-        );
+        error!("ACME challenge host not configured: {}", host_name);
         return res
             .status(404)
             .body_json(serde_json::json!({

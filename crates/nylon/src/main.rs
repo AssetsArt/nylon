@@ -48,7 +48,8 @@ fn handle_commands(args: Commands) -> Result<(), NylonError> {
     match args {
         Commands::Service(service) => {
             info!("Service command received: {:?}", service);
-            // TODO: Implement service command handling
+            nylon_command::handle_service_command(service)
+                .map_err(|e| NylonError::RuntimeError(format!("Service command failed: {}", e)))?;
             Ok(())
         }
         Commands::Run { config } => handle_run_command(config),
@@ -190,19 +191,24 @@ async fn issue_new_certificate(
         );
 
         nylon_store::tls::store_acme_cert(cert_info.clone())?;
-        
+
         // Update metrics
-        if let Some(metrics) = nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS) {
+        if let Some(metrics) =
+            nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS)
+        {
             metrics.record_issuance_success(domain);
             metrics.update_days_until_expiry(domain, cert_info.days_until_expiry());
         }
 
         Ok::<(), NylonError>(())
-    }.await;
+    }
+    .await;
 
     if let Err(e) = &result {
         // Record failure in metrics
-        if let Some(metrics) = nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS) {
+        if let Some(metrics) =
+            nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS)
+        {
             metrics.record_issuance_failure(domain);
         }
         return Err(e.clone());

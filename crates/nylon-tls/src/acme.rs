@@ -4,11 +4,11 @@ use instant_acme::{
 };
 use nylon_error::NylonError;
 use nylon_types::tls::AcmeConfig;
-use tracing::{info, warn, error};
 use std::fs::OpenOptions;
-use std::time::{Duration, Instant};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+use std::time::{Duration, Instant};
+use tracing::{error, info, warn};
 
 /// Rate limiting state สำหรับป้องกันการทำงานเร็วเกินไป
 struct RateLimiter {
@@ -31,7 +31,7 @@ impl RateLimiter {
         if let Some(last) = self.last_request {
             let elapsed = last.elapsed();
             let required_wait = self.backoff_duration.max(self.min_interval);
-            
+
             if elapsed < required_wait {
                 let wait_time = required_wait - elapsed;
                 info!("Rate limiting: waiting {:?}", wait_time);
@@ -72,7 +72,10 @@ impl AcmeClient {
 
         // Ensure directory exists and canonicalize when possible
         if let Err(e) = std::fs::create_dir_all(&acme_dir) {
-            return Err(NylonError::ConfigError(format!("Failed to create ACME dir: {}", e)));
+            return Err(NylonError::ConfigError(format!(
+                "Failed to create ACME dir: {}",
+                e
+            )));
         }
         let acme_dir = match std::fs::canonicalize(&acme_dir) {
             Ok(p) => p.to_string_lossy().to_string(),
@@ -97,21 +100,23 @@ impl AcmeClient {
             }
             Err(_) => {
                 info!("Creating new ACME account");
-                let (account, credentials) = Self::create_new_account(&config).await?;
+                let (account, credentials) = Self::create_new_account(config).await?;
                 Self::save_account_credentials(&credentials, &acme_dir)?;
                 account
             }
         };
 
-        Ok(Self { 
-            account, 
+        Ok(Self {
+            account,
             acme_dir,
             rate_limiter: RateLimiter::new(),
         })
     }
 
     /// สร้าง account ใหม่
-    async fn create_new_account(config: &AcmeConfig) -> Result<(Account, AccountCredentials), NylonError> {
+    async fn create_new_account(
+        config: &AcmeConfig,
+    ) -> Result<(Account, AccountCredentials), NylonError> {
         let new_account = NewAccount {
             contact: &[&format!("mailto:{}", config.email)],
             terms_of_service_agreed: true,
@@ -130,7 +135,10 @@ impl AcmeClient {
                     LetsEncrypt::Production.url().to_owned()
                 }
             } else {
-                warn!("Unknown ACME provider '{}', defaulting to Let's Encrypt Production", provider);
+                warn!(
+                    "Unknown ACME provider '{}', defaulting to Let's Encrypt Production",
+                    provider
+                );
                 LetsEncrypt::Production.url().to_owned()
             }
         };
@@ -142,7 +150,9 @@ impl AcmeClient {
         let eab = match (&config.eab_kid, &config.eab_hmac_key) {
             (Some(_), Some(_)) => {
                 info!("EAB credentials provided (kid and hmac_key)");
-                warn!("Full EAB support is not yet implemented. Please use Let's Encrypt or configure manually.");
+                warn!(
+                    "Full EAB support is not yet implemented. Please use Let's Encrypt or configure manually."
+                );
                 None
             }
             (Some(_), None) | (None, Some(_)) => {
@@ -309,7 +319,9 @@ impl AcmeClient {
             let status = order
                 .poll_ready(&RetryPolicy::default())
                 .await
-                .map_err(|e| NylonError::ConfigError(format!("Failed to poll order ready: {}", e)))?;
+                .map_err(|e| {
+                    NylonError::ConfigError(format!("Failed to poll order ready: {}", e))
+                })?;
 
             if status != OrderStatus::Ready {
                 return Err(NylonError::ConfigError(format!(
@@ -341,10 +353,17 @@ impl AcmeClient {
             let private_key = private_key_pem.as_bytes().to_vec();
 
             // บันทึก certificate, chain และ key
-            Self::save_certificate_bundle(&self.acme_dir, domain, &cert_pem, &chain_pems, &private_key)?;
+            Self::save_certificate_bundle(
+                &self.acme_dir,
+                domain,
+                &cert_pem,
+                &chain_pems,
+                &private_key,
+            )?;
 
             Ok((cert_pem, private_key, chain_pems))
-        }.await;
+        }
+        .await;
 
         // Cleanup challenge tokens regardless of success or failure
         if !challenge_tokens.is_empty() {
@@ -355,7 +374,10 @@ impl AcmeClient {
         match &result {
             Ok(_) => {
                 self.rate_limiter.reset_backoff();
-                info!("Certificate issuance completed successfully for: {}", domain);
+                info!(
+                    "Certificate issuance completed successfully for: {}",
+                    domain
+                );
             }
             Err(e) => {
                 self.rate_limiter.increase_backoff();
@@ -398,7 +420,7 @@ impl AcmeClient {
         acme_dir: &str,
         domain: &str,
         cert: &[u8],
-        chain: &Vec<Vec<u8>>,
+        chain: &[Vec<u8>],
         key: &[u8],
     ) -> Result<(), NylonError> {
         let cert_path = Self::cert_path(acme_dir, domain);
@@ -422,39 +444,83 @@ impl AcmeClient {
 
         // Write files with restrictive permissions
         #[cfg(unix)]
-        let mut cert_file = OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&cert_path)
+        let mut cert_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&cert_path)
             .map_err(|e| NylonError::ConfigError(format!("Failed to write certificate: {}", e)))?;
         #[cfg(not(unix))]
-        let mut cert_file = OpenOptions::new().create(true).write(true).truncate(true).open(&cert_path)
+        let mut cert_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&cert_path)
             .map_err(|e| NylonError::ConfigError(format!("Failed to write certificate: {}", e)))?;
         use std::io::Write as _;
-        cert_file.write_all(cert).map_err(|e| NylonError::ConfigError(format!("Failed to write certificate: {}", e)))?;
+        cert_file
+            .write_all(cert)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write certificate: {}", e)))?;
 
         #[cfg(unix)]
-        let mut key_file = OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&key_path)
+        let mut key_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&key_path)
             .map_err(|e| NylonError::ConfigError(format!("Failed to write private key: {}", e)))?;
         #[cfg(not(unix))]
-        let mut key_file = OpenOptions::new().create(true).write(true).truncate(true).open(&key_path)
+        let mut key_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&key_path)
             .map_err(|e| NylonError::ConfigError(format!("Failed to write private key: {}", e)))?;
-        key_file.write_all(key).map_err(|e| NylonError::ConfigError(format!("Failed to write private key: {}", e)))?;
+        key_file
+            .write_all(key)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write private key: {}", e)))?;
 
         #[cfg(unix)]
-        let mut fullchain_file = OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&fullchain_path)
+        let mut fullchain_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&fullchain_path)
             .map_err(|e| NylonError::ConfigError(format!("Failed to write fullchain: {}", e)))?;
         #[cfg(not(unix))]
-        let mut fullchain_file = OpenOptions::new().create(true).write(true).truncate(true).open(&fullchain_path)
+        let mut fullchain_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&fullchain_path)
             .map_err(|e| NylonError::ConfigError(format!("Failed to write fullchain: {}", e)))?;
-        fullchain_file.write_all(&fullchain).map_err(|e| NylonError::ConfigError(format!("Failed to write fullchain: {}", e)))?;
+        fullchain_file
+            .write_all(&fullchain)
+            .map_err(|e| NylonError::ConfigError(format!("Failed to write fullchain: {}", e)))?;
 
         // Write chain (intermediates only)
         #[cfg(unix)]
-        let mut chain_file = OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&chain_path)
+        let mut chain_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&chain_path)
             .map_err(|e| NylonError::ConfigError(format!("Failed to write chain: {}", e)))?;
         #[cfg(not(unix))]
-        let mut chain_file = OpenOptions::new().create(true).write(true).truncate(true).open(&chain_path)
+        let mut chain_file = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&chain_path)
             .map_err(|e| NylonError::ConfigError(format!("Failed to write chain: {}", e)))?;
         for c in chain.iter() {
-            chain_file.write_all(c).map_err(|e| NylonError::ConfigError(format!("Failed to write chain: {}", e)))?;
+            chain_file
+                .write_all(c)
+                .map_err(|e| NylonError::ConfigError(format!("Failed to write chain: {}", e)))?;
         }
 
         info!("Certificate saved to: {}", cert_path.display());
@@ -489,7 +555,8 @@ impl AcmeClient {
         let (cert, key) = Self::load_certificate(acme_dir, domain)?;
         let chain_path = Self::chain_path(acme_dir, domain);
         let chain = if chain_path.exists() {
-            let data = std::fs::read(&chain_path).map_err(|e| NylonError::ConfigError(format!("Failed to read chain: {}", e)))?;
+            let data = std::fs::read(&chain_path)
+                .map_err(|e| NylonError::ConfigError(format!("Failed to read chain: {}", e)))?;
             // Split concatenated PEMs by END marker
             let parts: Vec<Vec<u8>> = String::from_utf8_lossy(&data)
                 .split("-----END CERTIFICATE-----")
@@ -520,13 +587,28 @@ impl AcmeClient {
 
         // Write token with restrictive permissions
         #[cfg(unix)]
-        let mut f = OpenOptions::new().create(true).write(true).truncate(true).mode(0o600).open(&path)
-            .map_err(|e| NylonError::ConfigError(format!("Failed to write challenge token: {}", e)))?;
+        let mut f = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+            .map_err(|e| {
+                NylonError::ConfigError(format!("Failed to write challenge token: {}", e))
+            })?;
         #[cfg(not(unix))]
-        let mut f = OpenOptions::new().create(true).write(true).truncate(true).open(&path)
-            .map_err(|e| NylonError::ConfigError(format!("Failed to write challenge token: {}", e)))?;
+        let mut f = OpenOptions::new()
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&path)
+            .map_err(|e| {
+                NylonError::ConfigError(format!("Failed to write challenge token: {}", e))
+            })?;
         use std::io::Write as _;
-        f.write_all(key_auth.as_bytes()).map_err(|e| NylonError::ConfigError(format!("Failed to write challenge token: {}", e)))?;
+        f.write_all(key_auth.as_bytes()).map_err(|e| {
+            NylonError::ConfigError(format!("Failed to write challenge token: {}", e))
+        })?;
 
         info!("Challenge token saved to: {}", path.display());
         Ok(())
@@ -550,7 +632,7 @@ impl AcmeClient {
     /// ลบ challenge tokens ทั้งหมดของ domain
     fn cleanup_domain_challenges(acme_dir: &str, domain: &str) {
         let challenge_dir = std::path::PathBuf::from(format!("{}/challenges/{}", acme_dir, domain));
-        
+
         if challenge_dir.exists() {
             match std::fs::remove_dir_all(&challenge_dir) {
                 Ok(_) => info!("Cleaned up challenge tokens for domain: {}", domain),

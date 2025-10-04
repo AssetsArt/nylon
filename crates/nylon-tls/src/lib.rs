@@ -1,3 +1,4 @@
+#![allow(clippy::type_complexity)]
 pub mod acme;
 pub mod certificate;
 pub mod metrics;

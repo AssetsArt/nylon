@@ -37,6 +37,7 @@ redis = { version = "0.32", features = ["aio", "tokio-comp"] }
 mime_guess = "2.0"
 rcgen = "0.14"
 fastrand = "2.1"
+service-manager = "0.8"
 
 [profile.release]
 overflow-checks = true

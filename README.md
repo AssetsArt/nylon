@@ -19,6 +19,8 @@ Nylon is a lightweight, high‑performance, and extensible proxy built on top of
 
 ## Quick start
 
+### Option 1: Run directly
+
 ```sh
 # Build (choose one)
 make build
@@ -42,6 +44,33 @@ curl -H "Host: localhost" http://127.0.0.1:8088/static/
 # if TLS enabled
 curl -k -H "Host: localhost" https://127.0.0.1:8443/
 ```
+
+### Option 2: Install as System Service
+
+```sh
+# Build
+cargo build --release
+
+# Install service (creates default config at /etc/nylon/config.yaml)
+sudo ./target/release/nylon service install
+
+# Start service
+sudo ./target/release/nylon service start
+
+# Check status
+sudo ./target/release/nylon service status
+```
+
+**Service commands:**
+- `service install` - Install service and create default configs
+- `service start` - Start the service
+- `service stop` - Stop the service
+- `service restart` - Restart the service
+- `service status` - Show service status
+- `service reload` - Reload configuration
+- `service uninstall` - Uninstall service
+
+📖 **See [INSTALL_GUIDE.md](INSTALL_GUIDE.md) for detailed installation guide**
 
 ---
 
