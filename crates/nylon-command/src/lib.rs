@@ -1,7 +1,10 @@
+pub mod handler;
 mod service;
 
 use clap::{Parser, Subcommand};
-use service::ServiceCommands;
+
+pub use handler::{ServiceError, handle_service_command};
+pub use service::ServiceCommands;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]

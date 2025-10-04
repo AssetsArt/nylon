@@ -63,15 +63,16 @@ async fn check_and_renew_certificates() -> Result<(), nylon_error::NylonError> {
 
     for cert_info in certificates {
         let days_until_expiry = cert_info.days_until_expiry();
-        
+
         info!(
             "Certificate for {}: expires in {} days",
-            cert_info.domain,
-            days_until_expiry
+            cert_info.domain, days_until_expiry
         );
 
         // Update metrics with current expiry info
-        if let Some(metrics) = nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS) {
+        if let Some(metrics) =
+            nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS)
+        {
             metrics.update_days_until_expiry(&cert_info.domain, days_until_expiry);
         }
 
@@ -101,11 +102,7 @@ async fn check_and_renew_certificates() -> Result<(), nylon_error::NylonError> {
                     Err(e) if attempts < max_attempts => {
                         warn!(
                             "Renew failed for {} (attempt {}/{}): {}. Retrying in {}ms",
-                            cert_info.domain,
-                            attempts,
-                            max_attempts,
-                            e,
-                            backoff_ms
+                            cert_info.domain, attempts, max_attempts, e, backoff_ms
                         );
                         sleep(Duration::from_millis(backoff_ms)).await;
                         backoff_ms *= 2;
@@ -127,10 +124,11 @@ async fn renew_certificate(domain: &str) -> Result<(), nylon_error::NylonError> 
 
     let result = async {
         // ดึง ACME config สำหรับ domain นี้
-        let acme_configs = nylon_store::get::<HashMap<String, AcmeConfig>>(
-            nylon_store::KEY_ACME_CONFIG,
-        )
-        .ok_or_else(|| nylon_error::NylonError::ConfigError("ACME config not found".to_string()))?;
+        let acme_configs =
+            nylon_store::get::<HashMap<String, AcmeConfig>>(nylon_store::KEY_ACME_CONFIG)
+                .ok_or_else(|| {
+                    nylon_error::NylonError::ConfigError("ACME config not found".to_string())
+                })?;
 
         let acme_config = acme_configs.get(domain).ok_or_else(|| {
             nylon_error::NylonError::ConfigError(format!(
@@ -157,17 +155,22 @@ async fn renew_certificate(domain: &str) -> Result<(), nylon_error::NylonError> 
         nylon_store::tls::store_acme_cert(cert_info.clone())?;
 
         // Update metrics
-        if let Some(metrics) = nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS) {
+        if let Some(metrics) =
+            nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS)
+        {
             metrics.record_renewal_success(domain);
             metrics.update_days_until_expiry(domain, cert_info.days_until_expiry());
         }
 
         Ok::<(), nylon_error::NylonError>(())
-    }.await;
+    }
+    .await;
 
     if let Err(e) = &result {
         // Record failure in metrics
-        if let Some(metrics) = nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS) {
+        if let Some(metrics) =
+            nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS)
+        {
             metrics.record_renewal_failure(domain);
         }
         return Err(e.clone());

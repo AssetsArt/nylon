@@ -1,7 +1,7 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use dashmap::DashMap;
 use chrono::{DateTime, Utc};
+use dashmap::DashMap;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// ACME metrics สำหรับ monitoring
 #[derive(Debug, Clone)]
@@ -55,8 +55,9 @@ impl AcmeMetrics {
     /// บันทึก issuance success
     pub fn record_issuance_success(&self, domain: &str) {
         self.issuance_success.fetch_add(1, Ordering::Relaxed);
-        
-        let mut metrics = self.domain_metrics
+
+        let mut metrics = self
+            .domain_metrics
             .entry(domain.to_string())
             .or_insert_with(|| DomainMetrics {
                 domain: domain.to_string(),
@@ -66,7 +67,7 @@ impl AcmeMetrics {
                 failure_count: 0,
                 days_until_expiry: 0,
             });
-        
+
         metrics.last_issuance = Some(Utc::now());
         metrics.failure_count = 0; // Reset failure count on success
     }
@@ -74,8 +75,9 @@ impl AcmeMetrics {
     /// บันทึก issuance failure
     pub fn record_issuance_failure(&self, domain: &str) {
         self.issuance_failure.fetch_add(1, Ordering::Relaxed);
-        
-        let mut metrics = self.domain_metrics
+
+        let mut metrics = self
+            .domain_metrics
             .entry(domain.to_string())
             .or_insert_with(|| DomainMetrics {
                 domain: domain.to_string(),
@@ -85,7 +87,7 @@ impl AcmeMetrics {
                 failure_count: 0,
                 days_until_expiry: 0,
             });
-        
+
         metrics.last_failure = Some(Utc::now());
         metrics.failure_count += 1;
     }
@@ -93,8 +95,9 @@ impl AcmeMetrics {
     /// บันทึก renewal success
     pub fn record_renewal_success(&self, domain: &str) {
         self.renewal_success.fetch_add(1, Ordering::Relaxed);
-        
-        let mut metrics = self.domain_metrics
+
+        let mut metrics = self
+            .domain_metrics
             .entry(domain.to_string())
             .or_insert_with(|| DomainMetrics {
                 domain: domain.to_string(),
@@ -104,7 +107,7 @@ impl AcmeMetrics {
                 failure_count: 0,
                 days_until_expiry: 0,
             });
-        
+
         metrics.last_renewal = Some(Utc::now());
         metrics.failure_count = 0; // Reset failure count on success
     }
@@ -112,8 +115,9 @@ impl AcmeMetrics {
     /// บันทึก renewal failure
     pub fn record_renewal_failure(&self, domain: &str) {
         self.renewal_failure.fetch_add(1, Ordering::Relaxed);
-        
-        let mut metrics = self.domain_metrics
+
+        let mut metrics = self
+            .domain_metrics
             .entry(domain.to_string())
             .or_insert_with(|| DomainMetrics {
                 domain: domain.to_string(),
@@ -123,14 +127,15 @@ impl AcmeMetrics {
                 failure_count: 0,
                 days_until_expiry: 0,
             });
-        
+
         metrics.last_failure = Some(Utc::now());
         metrics.failure_count += 1;
     }
 
     /// อัพเดท days until expiry
     pub fn update_days_until_expiry(&self, domain: &str, days: i64) {
-        let mut metrics = self.domain_metrics
+        let mut metrics = self
+            .domain_metrics
             .entry(domain.to_string())
             .or_insert_with(|| DomainMetrics {
                 domain: domain.to_string(),
@@ -140,7 +145,7 @@ impl AcmeMetrics {
                 failure_count: 0,
                 days_until_expiry: days,
             });
-        
+
         metrics.days_until_expiry = days;
     }
 
@@ -169,4 +174,3 @@ pub struct MetricsSummary {
     pub challenge_failure: u64,
     pub domain_count: usize,
 }
-

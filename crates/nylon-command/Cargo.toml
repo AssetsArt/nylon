@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 clap = { workspace = true }
+service-manager = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
