@@ -35,6 +35,9 @@ pub struct NylonContext {
     pub set_response_body: RwLock<Vec<u8>>,
     pub read_body: AtomicBool,
     pub request_body: RwLock<Vec<u8>>,
+    // Caches per request to avoid repeated parsing
+    pub cached_query: RwLock<Option<HashMap<String, String>>>,
+    pub cached_cookies: RwLock<Option<HashMap<String, String>>>,
 }
 
 impl Default for NylonContext {
@@ -61,6 +64,10 @@ impl Default for NylonContext {
             // Request modifications
             read_body: AtomicBool::new(false),
             request_body: RwLock::new(Vec::new()),
+
+            // Request caches
+            cached_query: RwLock::new(None),
+            cached_cookies: RwLock::new(None),
         }
     }
 }
@@ -86,6 +93,8 @@ impl Clone for NylonContext {
             set_response_body: RwLock::new(self.set_response_body.read().expect("lock").clone()),
             read_body: AtomicBool::new(self.read_body.load(Ordering::Relaxed)),
             request_body: RwLock::new(self.request_body.read().expect("lock").clone()),
+            cached_query: RwLock::new(self.cached_query.read().expect("lock").clone()),
+            cached_cookies: RwLock::new(self.cached_cookies.read().expect("lock").clone()),
         }
     }
 }

@@ -7,6 +7,102 @@ use serde_json::Value;
 use std::collections::HashMap;
 use uuid::Uuid;
 
+fn percent_decode_plus(input: &str, plus_as_space: bool) -> String {
+    let mut result = String::with_capacity(input.len());
+    let mut bytes = input.as_bytes().iter().copied();
+    while let Some(b) = bytes.next() {
+        match b as char {
+            '+' if plus_as_space => result.push(' '),
+            '%' => {
+                let hi = bytes.next();
+                let lo = bytes.next();
+                if let (Some(hi), Some(lo)) = (hi, lo) {
+                    let hh = (hi as char).to_digit(16);
+                    let ll = (lo as char).to_digit(16);
+                    if let (Some(hh), Some(ll)) = (hh, ll) {
+                        result.push(((hh * 16 + ll) as u8) as char);
+                    } else {
+                        result.push('%');
+                        result.push(hi as char);
+                        result.push(lo as char);
+                    }
+                } else {
+                    result.push('%');
+                    if let Some(hi) = hi {
+                        result.push(hi as char);
+                    }
+                    if let Some(lo) = lo {
+                        result.push(lo as char);
+                    }
+                }
+            }
+            c => result.push(c),
+        }
+    }
+    result
+}
+
+fn get_or_build_query_cache(
+    headers: &RequestHeader,
+    ctx: &NylonContext,
+) -> HashMap<String, String> {
+    if let Ok(cache) = ctx.cached_query.read()
+        && let Some(map) = &*cache
+    {
+        return map.clone();
+    }
+    let mut map: HashMap<String, String> = HashMap::new();
+    if let Some(q) = headers.uri.query() {
+        for pair in q.split('&') {
+            if pair.is_empty() {
+                continue;
+            }
+            let mut it = pair.splitn(2, '=');
+            let k = it.next().unwrap_or("");
+            let v = it.next().unwrap_or("");
+            let key = percent_decode_plus(k, true);
+            map.entry(key).or_insert_with(|| percent_decode_plus(v, true));
+        }
+    }
+    if let Ok(mut w) = ctx.cached_query.write() {
+        *w = Some(map.clone());
+    }
+    map
+}
+
+fn get_or_build_cookie_cache(
+    headers: &RequestHeader,
+    ctx: &NylonContext,
+) -> HashMap<String, String> {
+    if let Ok(cache) = ctx.cached_cookies.read()
+        && let Some(map) = &*cache
+    {
+        return map.clone();
+    }
+    let mut map: HashMap<String, String> = HashMap::new();
+    let cookie_val_opt = headers
+        .headers
+        .get("cookie")
+        .or_else(|| headers.headers.get("Cookie"));
+    if let Some(cookie_hdr) = cookie_val_opt {
+        let raw = cookie_hdr.to_str().unwrap_or_default();
+        for part in raw.split(';') {
+            let trimmed = part.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let mut it = trimmed.splitn(2, '=');
+            let k = it.next().unwrap_or("");
+            let v = it.next().unwrap_or("");
+            let key = k.trim().to_string();
+            map.entry(key).or_insert_with(|| percent_decode_plus(v.trim(), false));
+        }
+    }
+    if let Ok(mut w) = ctx.cached_cookies.write() {
+        *w = Some(map.clone());
+    }
+    map
+}
 /// Represents a part of a JSON path
 #[derive(Debug)]
 enum PathPart {
@@ -169,6 +265,17 @@ pub fn eval_expr(expr: &Expr, headers: &RequestHeader, ctx: &NylonContext) -> St
                 Ok(ip) => ip.clone(),
                 Err(_) => String::new(),
             },
+            "host" => match ctx.host.read() {
+                Ok(h) => h.clone(),
+                Err(_) => String::new(),
+            },
+            "tls" => {
+                if ctx.tls.load(std::sync::atomic::Ordering::Relaxed) {
+                    "true".to_string()
+                } else {
+                    "false".to_string()
+                }
+            }
             _ => String::new(), // fallback
         },
         Expr::Func { name, args } => match name.as_str() {
@@ -182,6 +289,54 @@ pub fn eval_expr(expr: &Expr, headers: &RequestHeader, ctx: &NylonContext) -> St
                     String::new()
                 }
             }
+            "query" => {
+                if let Some(Expr::Request(key)) = args.first() {
+                    let val = get_or_build_query_cache(headers, ctx)
+                        .get(key)
+                        .cloned()
+                        .unwrap_or_default();
+                    if val.is_empty() && args.len() >= 2 {
+                        eval_expr(&args[1], headers, ctx)
+                    } else {
+                        val
+                    }
+                } else {
+                    String::new()
+                }
+            }
+            "cookie" => {
+                if let Some(Expr::Request(name)) = args.first() {
+                    let val = get_or_build_cookie_cache(headers, ctx)
+                        .get(name)
+                        .cloned()
+                        .unwrap_or_default();
+                    if val.is_empty() && args.len() >= 2 {
+                        eval_expr(&args[1], headers, ctx)
+                    } else {
+                        val
+                    }
+                } else {
+                    String::new()
+                }
+            }
+            "param" => {
+                if let Some(Expr::Request(name)) = args.first() {
+                    let got = match ctx.params.read() {
+                        Ok(map_opt) => match &*map_opt {
+                            Some(map) => map.get(name).cloned().unwrap_or_default(),
+                            None => String::new(),
+                        },
+                        Err(_) => String::new(),
+                    };
+                    if got.is_empty() && args.len() >= 2 {
+                        eval_expr(&args[1], headers, ctx)
+                    } else {
+                        got
+                    }
+                } else {
+                    String::new()
+                }
+            }
             "request" => {
                 if let Some(Expr::Request(v)) = args.first() {
                     match v.as_str() {
@@ -189,6 +344,26 @@ pub fn eval_expr(expr: &Expr, headers: &RequestHeader, ctx: &NylonContext) -> St
                             Ok(ip) => ip.clone(),
                             Err(_) => String::new(),
                         },
+                        "host" => match ctx.host.read() {
+                            Ok(h) => h.clone(),
+                            Err(_) => String::new(),
+                        },
+                        "tls" => {
+                            if ctx.tls.load(std::sync::atomic::Ordering::Relaxed) {
+                                "true".to_string()
+                            } else {
+                                "false".to_string()
+                            }
+                        }
+                        "method" => headers.method.as_str().to_string(),
+                        "path" => headers.uri.path().to_string(),
+                        "scheme" => {
+                            if ctx.tls.load(std::sync::atomic::Ordering::Relaxed) {
+                                "https".to_string()
+                            } else {
+                                "http".to_string()
+                            }
+                        }
                         _ => String::new(),
                     }
                 } else {

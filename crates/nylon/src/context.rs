@@ -42,6 +42,15 @@ impl NylonContextExt for NylonContext {
             None => false,
         };
         self.tls.store(is_tls, Ordering::Relaxed);
+        // reset per-request caches
+        {
+            if let Ok(mut q) = self.cached_query.write() {
+                *q = None;
+            }
+            if let Ok(mut c) = self.cached_cookies.write() {
+                *c = None;
+            }
+        }
         match session.as_http2() {
             Some(session) => {
                 let host = session.req_header().uri.host().unwrap_or("");
