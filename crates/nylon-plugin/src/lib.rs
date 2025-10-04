@@ -311,7 +311,9 @@ where
         &middleware_context.payload,
         &middleware_context.payload_ast,
     );
-    let (Some(plugin_name), Some(entry)) = (&middleware.plugin, &middleware.entry) else {
+    // Allow builtin plugins to run without requiring an entry
+    let (plugin_name_opt, entry_opt) = (&middleware.plugin, &middleware.entry);
+    let Some(plugin_name) = plugin_name_opt else {
         return Ok((false, false));
     };
     match PluginManager::try_builtin(plugin_name.as_str()) {
@@ -324,6 +326,10 @@ where
             Ok((false, false))
         }
         _ => {
+            // For non-builtin plugins, require entry
+            let Some(entry) = entry_opt else {
+                return Ok((false, false));
+            };
             let result = session_stream(
                 proxy,
                 plugin_name,

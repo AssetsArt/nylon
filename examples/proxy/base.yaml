@@ -68,12 +68,12 @@ middleware_groups:
           - name: x-host
             value: "${header(host)}"
 
-    # - plugin: ResponseHeaderModifier
-    #   payload:
-    #     set:
-    #       - name: x-request-id-false
-    #         value: "${or(header(x-request-id-false), concat('foo', '-', uuid(v4)))}"
-    #       - name: x-request-id
-    #         value: "${header(x-request-id)}"
-    #       - name: x-server
-    #         value: ${or(env(SERVER_NAME), 'my-server')}
+    - plugin: ResponseHeaderModifier
+      payload:
+        set:
+          - name: x-request-id-false
+            value: "${or(header(x-request-id-false), concat('foo', '-', uuid(v4)))}"
+          - name: x-request-id
+            value: "${header(x-request-id)}"
+          - name: x-server
+            value: ${or(env(SERVER_NAME), 'my-server')}
