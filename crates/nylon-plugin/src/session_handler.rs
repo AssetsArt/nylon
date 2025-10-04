@@ -43,7 +43,7 @@ impl SessionHandler {
         frame
     }
     /// Process a method from the plugin session stream
-    pub async fn process_method<'a, T>(
+    pub async fn process_method<T>(
         proxy: &T,
         method: u32,
         data: Vec<u8>,
@@ -287,7 +287,7 @@ impl SessionHandler {
             }
             None => None,
         };
-        let payload_slice = payload.as_ref().map(|p| p.as_slice()).unwrap_or_default();
+        let payload_slice = payload.as_deref().unwrap_or_default();
         session_stream
             .event_stream(0, methods::GET_PAYLOAD, payload_slice)
             .await
@@ -332,9 +332,9 @@ impl SessionHandler {
         Ok(())
     }
 
-    async fn handle_set_response_stream_header<'a, T>(
+    async fn handle_set_response_stream_header<T>(
         proxy: &T,
-        ctx: &'a mut NylonContext,
+        ctx: &mut NylonContext,
         session: &mut Session,
     ) -> Result<(), NylonError>
     where

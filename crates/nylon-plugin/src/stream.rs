@@ -58,10 +58,9 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
         }
 
         unsafe {
-            // Fast copy from raw pointer
-            let mut buf = Vec::with_capacity(len);
-            buf.set_len(len);
-            std::ptr::copy_nonoverlapping(ptr, buf.as_mut_ptr(), len);
+            // Fast copy from raw pointer without creating uninitialized values
+            let slice = std::slice::from_raw_parts(ptr, len);
+            let buf = slice.to_vec();
             if let Err(_e) = sender.send((method, buf)) {
                 debug!("send error: {:?}", session_id);
             }
@@ -171,11 +170,8 @@ pub fn get_rx(
         Ok(sessions) => sessions
             .get(&session_id)
             .cloned()
-            .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))
-            .map(|arc| arc.clone()),
-        Err(_) => Err(NylonError::ConfigError(format!(
-            "Failed to lock SESSION_RX"
-        ))),
+            .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id))),
+        Err(_) => Err(NylonError::ConfigError("Failed to lock SESSION_RX".to_string())),
     }
 }
 
@@ -196,8 +192,7 @@ pub fn get_ws_rx(
         Ok(sessions) => sessions
             .get(&session_id)
             .cloned()
-            .ok_or_else(|| NylonError::ConfigError(format!("WS Session {} not found", session_id)))
-            .map(|arc| arc.clone()),
+            .ok_or_else(|| NylonError::ConfigError(format!("WS Session {} not found", session_id))),
         Err(_) => Err(NylonError::ConfigError(
             "Failed to lock SESSION_WS_RX".to_string(),
         )),

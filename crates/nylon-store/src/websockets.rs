@@ -20,7 +20,7 @@ static WEBSOCKET_ADAPTER: Lazy<RwLock<Option<Arc<dyn WebSocketAdapter>>>> =
 
 // Local connection senders to push messages to active sessions
 static LOCAL_SENDERS: Lazy<DashMap<String, UnboundedSender<WebSocketMessage>>> =
-    Lazy::new(|| DashMap::new());
+    Lazy::new(DashMap::new);
 
 /// Initialize WebSocket adapter with configuration
 pub async fn initialize_adapter(config: Option<WebSocketAdapterConfig>) -> Result<(), NylonError> {
@@ -75,10 +75,10 @@ pub async fn initialize_adapter(config: Option<WebSocketAdapterConfig>) -> Resul
                     } => {
                         if let Ok(connections) = get_room_connections(&room).await {
                             for cid in connections {
-                                if let Some(exclude) = &exclude_connection {
-                                    if &cid == exclude {
-                                        continue;
-                                    }
+                                if let Some(exclude) = &exclude_connection
+                                    && &cid == exclude
+                                {
+                                    continue;
                                 }
                                 if let Some(sender) = LOCAL_SENDERS.get(&cid) {
                                     let _ = sender.send(message.clone());
@@ -102,7 +102,7 @@ pub async fn get_adapter() -> Result<Arc<dyn WebSocketAdapter>, NylonError> {
     adapter_guard
         .as_ref()
         .ok_or_else(|| NylonError::ConfigError("WebSocket adapter not initialized".to_string()))
-        .map(|adapter| adapter.clone())
+        .cloned()
 }
 
 /// Add a WebSocket connection

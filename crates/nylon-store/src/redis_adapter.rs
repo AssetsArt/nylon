@@ -96,11 +96,10 @@ impl RedisAdapter {
 
                         let mut stream = pubsub.on_message();
                         while let Some(msg) = stream.next().await {
-                            if let Ok(payload) = msg.get_payload::<String>() {
-                                if let Ok(event) = serde_json::from_str::<WebSocketEvent>(&payload)
-                                {
-                                    let _ = event_sender.send(event);
-                                }
+                            if let Ok(payload) = msg.get_payload::<String>()
+                                && let Ok(event) = serde_json::from_str::<WebSocketEvent>(&payload)
+                            {
+                                let _ = event_sender.send(event);
                             }
                         }
                     }
@@ -205,7 +204,7 @@ impl RedisAdapter {
                         };
                         for key in keys {
                             // extract node_id
-                            let node_id = key.split(':').last().unwrap_or("").to_string();
+                            let node_id = key.split(':').next_back().unwrap_or("").to_string();
                             let node_key = format!("{}:nodes:{}", prefix, node_id);
                             let exists: redis::RedisResult<i32> =
                                 cmd("EXISTS").arg(&node_key).query_async(&mut conn).await;

@@ -88,6 +88,12 @@ impl MemoryAdapter {
     }
 }
 
+impl Default for MemoryAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl WebSocketAdapter for MemoryAdapter {
     async fn add_connection(&self, connection: WebSocketConnection) -> Result<(), NylonError> {
@@ -183,10 +189,10 @@ impl WebSocketAdapter for MemoryAdapter {
         let connections = self.get_room_connections(room).await?;
 
         for connection_id in connections {
-            if let Some(exclude) = exclude_connection {
-                if connection_id == exclude {
-                    continue;
-                }
+            if let Some(exclude) = exclude_connection
+                && connection_id == exclude
+            {
+                continue;
             }
 
             // In memory adapter, we just emit event

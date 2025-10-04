@@ -37,7 +37,7 @@ where
 {
     let plugin = PluginManager::get_plugin(plugin_name)?;
     let key = format!("{}-{}", plugin_name, entry);
-    let mut session_id = ctx.session_ids.get(&key).unwrap_or(&0).clone();
+    let mut session_id = *ctx.session_ids.get(&key).unwrap_or(&0);
     let session_stream;
     if let Some(ss) = ctx.session_stream.get(&key) {
         session_stream = ss.clone();
@@ -52,7 +52,7 @@ where
         session_id = new_session_id;
         ctx.session_ids.insert(key.clone(), new_session_id);
     }
-    let rx_arc = match get_rx(session_id.clone()) {
+    let rx_arc = match get_rx(session_id) {
         Ok(rx) => rx,
         Err(_) => {
             let session_stream_clone = session_stream.clone();
@@ -308,8 +308,8 @@ where
                 entry,
                 ctx,
                 session,
-                &payload,
-                &payload_ast,
+                payload,
+                payload_ast,
             )
             .await?;
             Ok((result.http_end, result.stream_end))

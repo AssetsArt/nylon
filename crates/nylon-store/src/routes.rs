@@ -41,11 +41,11 @@ pub fn store(
     let mut globa_routes_matchit = HashMap::new();
     let mut tls_routes = HashMap::new();
     for route in routes {
-        if let Some(tls) = &route.tls {
-            if tls.enabled {
-                for host in route.route.value.split('|') {
-                    tls_routes.insert(host.to_string(), tls.redirect.clone());
-                }
+        if let Some(tls) = &route.tls
+            && tls.enabled
+        {
+            for host in route.route.value.split('|') {
+                tls_routes.insert(host.to_string(), tls.redirect.clone());
             }
         }
         process_route_matcher(route, &mut store_route)?;
@@ -185,17 +185,17 @@ fn create_route_service(
         })?;
 
     let mut payload_ast = HashMap::<String, Vec<Expr>>::new();
-    if let Some(plugin) = &service.plugin {
-        if let Some(payload) = &plugin.payload {
-            walk_json(payload, "".to_string(), &mut |path, val| {
-                if let Some(s) = val.as_str() {
-                    let ast = extract_and_parse_templates(s).unwrap_or_default();
-                    if !ast.is_empty() {
-                        payload_ast.insert(path, ast);
-                    }
+    if let Some(plugin) = &service.plugin
+        && let Some(payload) = &plugin.payload
+    {
+        walk_json(payload, "".to_string(), &mut |path, val| {
+            if let Some(s) = val.as_str() {
+                let ast = extract_and_parse_templates(s).unwrap_or_default();
+                if !ast.is_empty() {
+                    payload_ast.insert(path, ast);
                 }
-            });
-        }
+            }
+        });
     }
     let mut route = Route {
         service: service.to_owned().clone(),
