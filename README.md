@@ -73,7 +73,7 @@ pingora:
 
 ## Examples
 
-Proxy `base.yaml` (services, middleware, static):
+Proxy `base.yaml` (real‑world services & middleware):
 
 ```yaml
 header_selector: x-nylon-proxy
@@ -86,7 +86,7 @@ plugins:
       debug: true
 
 services:
-  - name: http-service
+  - name: app-service
     service_type: http
     algorithm: round_robin
     endpoints:
@@ -122,49 +122,62 @@ services:
       spa: true
 
 middleware_groups:
-  example:
-    - plugin: plugin_sdk
-      entry: "authz"
-      payload:
-        client_ip: "${request(client_ip)}"
-
+  security:
     - plugin: RequestHeaderModifier
       payload:
         remove:
           - x-version
         set:
-          - name: x-hb-conf
-            value: "env-${or(env(MY_APP_NAME), 'default')}"
           - name: x-request-id
             value: "${uuid(v7)}"
-          - name: x-timestamp
-            value: "${timestamp()}"
           - name: x-forwarded-for
-            value: "${request(client_ip)}-${eq(request(client_ip), '127.0.0.1', 'local')}"
+            value: "${request(client_ip)}"
           - name: x-host
             value: "${header(host)}"
-
+          - name: x-timestamp
+            value: "${timestamp()}"
     - plugin: ResponseHeaderModifier
       payload:
         set:
-          - name: x-request-id-false
-            value: "${or(header(x-request-id-false), concat('foo', '-', uuid(v4)))}"
-          - name: x-request-id
-            value: "${header(x-request-id)}"
+          - name: cache-control
+            value: "no-store"
+          - name: referrer-policy
+            value: "no-referrer"
+          - name: x-content-type-options
+            value: "nosniff"
+          - name: x-frame-options
+            value: "DENY"
+          - name: content-security-policy
+            value: "default-src 'self'"
           - name: x-server
-            value: ${or(env(SERVER_NAME), 'my-server')}
+            value: ${or(env(SERVER_NAME), 'nylon-demo')}
+
+  auth:
+    - plugin: plugin_sdk
+      entry: "authz"
+      payload:
+        client_ip: "${request(client_ip)}"
+        user_id: "${header(x-user-id)}"
 ```
 
-Proxy `host_route.yaml` (host/path routing):
+Proxy `host_route.yaml` (single host with realistic paths):
 
 ```yaml
 # https://github.com/ibraheemdev/matchit
 routes:
+  # App
   - route:
       type: host
-      value: localhost
-    name: http-route-1
+      value: localhost # localhost|api.localhost
+    name: app-route
     paths:
+      - path:
+          - /
+          - /{*path}
+        middleware:
+          - group: security
+        service:
+          name: app-service
       - path:
           - /static
           - /static/{*path}
@@ -181,14 +194,6 @@ routes:
         methods: [GET, POST, OPTIONS]
         service:
           name: stream-service
-      - path:
-          - /
-          - /{*path}
-        methods: [GET, POST, OPTIONS]
-        middleware:
-          - group: example
-        service:
-          name: http-service
 ```
 
 Proxy `tls.yaml` (custom certs or ACME):

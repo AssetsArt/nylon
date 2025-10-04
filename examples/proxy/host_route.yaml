@@ -10,13 +10,6 @@ routes:
     name: app-route
     paths:
       - path:
-          - /
-          - /{*path}
-        middleware:
-          - group: security
-        service:
-          name: app-service
-      - path:
           - /static
           - /static/{*path}
         service:
@@ -32,3 +25,10 @@ routes:
         methods: [GET, POST, OPTIONS]
         service:
           name: stream-service
+      - path:
+          - /
+          - /{*path}
+        middleware:
+          - group: security
+        service:
+          name: app-service
