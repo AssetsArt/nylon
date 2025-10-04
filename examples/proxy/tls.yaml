@@ -1,8 +1,9 @@
 tls:
+  # Custom TLS - Use your own certificate files
   - type: custom
     cert: ./examples/cert/localhost.crt
     key: ./examples/cert/localhost.key
-    # chain: # Optional
+    # chain: # Optional - Certificate chain for intermediate CAs
     #   - ./examples/cert/chain.pem
     domains:
       - localhost
@@ -10,10 +11,30 @@ tls:
       - api.localhost
       - admin.localhost
 
+  # ACME (Let's Encrypt) - Automatic certificate management
+  # Requires:
+  # - Port 80 accessible from internet for HTTP-01 challenge
+  # - Valid DNS records pointing to your server
+  # - Email for certificate expiration notifications
+  # 
+  # Features:
+  # - Automatic certificate issuance and renewal (30 days before expiry)
+  # - Rate limiting protection with exponential backoff
+  # - Challenge token auto-cleanup
+  # - Comprehensive metrics tracking
+  # - Retry logic with jitter for failed renewals
+  #
   # - type: acme
-  #   email: test@example.com
-  #   provider: letsencrypt # Options: letsencrypt, buypass
+  #   provider: letsencrypt  # Options: letsencrypt
+  #   email: admin@example.com  # Required for account registration
+  #   # staging: true  # Use Let's Encrypt staging for testing (optional)
+  #   # directory_url: https://acme.example.com/directory  # Custom ACME server (optional)
   #   domains:
   #     - example.com
   #     - api.example.com
   #     - admin.example.com
+  #
+  # Advanced options (for providers like ZeroSSL, BuyPass):
+  # Note: Full EAB support is planned but not yet fully implemented
+  #   # eab_kid: your-eab-key-id  # External Account Binding key ID
+  #   # eab_hmac_key: your-eab-hmac-key  # EAB HMAC key

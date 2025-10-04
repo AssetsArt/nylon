@@ -29,12 +29,14 @@ regex = "1.11"
 chrono = "0.4"
 uuid = { version = "1.13", features = ["v4", "v7"] }
 flatbuffers = { version = "25.9", features = ["serde"] }
-libloading = "0.8"
+libloading = "0.8.9"
 instant-acme = "0.8"
 sha1 = "0.10"
 base64 = { version = "0.22", default-features = false, features = ["alloc"] }
 redis = { version = "0.32", features = ["aio", "tokio-comp"] }
 mime_guess = "2.0"
+rcgen = "0.14"
+fastrand = "2.1"
 
 [profile.release]
 overflow-checks = true

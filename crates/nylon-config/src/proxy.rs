@@ -1,4 +1,5 @@
 use crate::{
+    runtime::RuntimeConfig,
     services::{EndpointExt, HealthCheckExt},
     utils::read_dir_recursive,
 };
@@ -199,8 +200,16 @@ impl ProxyConfigExt for ProxyConfig {
         // validate
         self.validate()?;
 
-        // store tls
-        store::tls::store(self.tls.iter().flatten().collect::<Vec<&TlsConfig>>())?;
+        // store tls (with acme_dir from runtime config)
+        let acme_dir = if let Ok(runtime_config) = RuntimeConfig::get() {
+            Some(runtime_config.acme.to_string_lossy().to_string())
+        } else {
+            None
+        };
+        store::tls::store(
+            self.tls.iter().flatten().collect::<Vec<&TlsConfig>>(),
+            acme_dir,
+        )?;
 
         // store lb backends
         let services = self
