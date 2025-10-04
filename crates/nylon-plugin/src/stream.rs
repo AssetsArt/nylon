@@ -3,6 +3,7 @@
 use async_trait::async_trait;
 use nylon_error::NylonError;
 use nylon_types::plugins::{FfiBuffer, FfiPlugin, SessionStream};
+use nylon_types::websocket::WebSocketMessage;
 use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
@@ -12,10 +13,9 @@ use std::{
     },
 };
 use tokio::sync::Mutex;
-use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio::sync::mpsc::UnboundedReceiver as UnboundedWsReceiver;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tracing::{debug, trace};
-use nylon_types::websocket::WebSocketMessage;
 
 // Active sessions
 type SessionSender = mpsc::UnboundedSender<(u32, Vec<u8>)>;
@@ -40,7 +40,10 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
     // let phase = ffi.phase;
     let len = ffi.len as usize;
     let ptr = ffi.ptr;
-    trace!("handle_ffi_event: session_id={}, method={}", session_id, method);
+    trace!(
+        "handle_ffi_event: session_id={}, method={}",
+        session_id, method
+    );
     // Clone sender first to minimize time under the read lock
     let sender_opt = ACTIVE_SESSIONS
         .read()

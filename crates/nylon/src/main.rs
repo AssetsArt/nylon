@@ -85,11 +85,11 @@ fn handle_run_command(config_path: String) -> Result<(), NylonError> {
 
     rt.block_on(async {
         proxy_config.store().await?;
-        
+
         // Initialize WebSocket adapter
         let runtime_config = RuntimeConfig::get()?;
         nylon_store::websockets::initialize_adapter(runtime_config.websocket).await?;
-        
+
         Ok::<(), NylonError>(())
     })?;
 

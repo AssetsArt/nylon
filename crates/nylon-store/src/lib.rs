@@ -1,9 +1,9 @@
 pub mod lb_backends;
+pub mod redis_adapter;
 pub mod routes;
 pub mod tls;
-pub mod websockets;
 pub mod websocket_adapter;
-pub mod redis_adapter;
+pub mod websockets;
 
 use dashmap::DashMap;
 use once_cell::sync::Lazy;

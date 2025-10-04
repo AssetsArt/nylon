@@ -163,7 +163,7 @@ impl FromStr for RuntimeConfig {
     ///
     /// # Returns
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        serde_yml::from_str(s).map_err(|e| NylonError::ConfigError(e.to_string()))
+        serde_yaml_ng::from_str(s).map_err(|e| NylonError::ConfigError(e.to_string()))
     }
 }
 

@@ -181,7 +181,8 @@ impl ProxyHttp for NylonRuntime {
                     }
                 }
             } else {
-                let err = NylonError::ConfigError("Plugin service missing 'plugin' config".to_string());
+                let err =
+                    NylonError::ConfigError("Plugin service missing 'plugin' config".to_string());
                 return handle_error_response(&mut res, session, err).await;
             }
         }

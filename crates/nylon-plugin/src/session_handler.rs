@@ -1,7 +1,6 @@
 use crate::{constants::methods, stream::PluginSessionStream, types::PluginResult};
-use bytes::Bytes;
-use sha1::{Digest, Sha1};
 use base64::Engine;
+use bytes::Bytes;
 use http::{HeaderMap, HeaderValue};
 use nylon_error::NylonError;
 use nylon_sdk::fbs::plugin_generated::nylon_plugin::{
@@ -17,6 +16,7 @@ use pingora::{
     protocols::http::HttpTask,
     proxy::{ProxyHttp, Session},
 };
+use sha1::{Digest, Sha1};
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
@@ -120,7 +120,11 @@ impl SessionHandler {
             methods::WEBSOCKET_UPGRADE => {
                 // Perform WebSocket handshake (101)
                 let headers = session.req_header();
-                let key = headers.headers.get("sec-websocket-key").and_then(|v| v.to_str().ok()).unwrap_or("");
+                let key = headers
+                    .headers
+                    .get("sec-websocket-key")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("");
                 if key.is_empty() {
                     // Fallback text response if no key
                     let mut headers = ResponseHeader::build(400u16, None)
@@ -128,13 +132,15 @@ impl SessionHandler {
                     let _ = headers.append_header("content-type", "text/plain");
                     let tasks = vec![
                         HttpTask::Header(Box::new(headers), false),
-                        HttpTask::Body(Some(Bytes::from_static(b"Missing Sec-WebSocket-Key")), false),
+                        HttpTask::Body(
+                            Some(Bytes::from_static(b"Missing Sec-WebSocket-Key")),
+                            false,
+                        ),
                         HttpTask::Done,
                     ];
-                    session
-                        .response_duplex_vec(tasks)
-                        .await
-                        .map_err(|e| NylonError::ConfigError(format!("Error sending response: {}", e)))?;
+                    session.response_duplex_vec(tasks).await.map_err(|e| {
+                        NylonError::ConfigError(format!("Error sending response: {}", e))
+                    })?;
                     return Ok(Some(PluginResult::new(true, false)));
                 }
 
@@ -142,7 +148,8 @@ impl SessionHandler {
                 let mut hasher = Sha1::new();
                 hasher.update(key.as_bytes());
                 hasher.update(nylon_store::websockets::WEBSOCKET_GUID.as_bytes());
-                let accept_key = base64::engine::general_purpose::STANDARD.encode(hasher.finalize());
+                let accept_key =
+                    base64::engine::general_purpose::STANDARD.encode(hasher.finalize());
 
                 let mut resp = ResponseHeader::build(101u16, None)
                     .map_err(|e| NylonError::ConfigError(format!("Invalid headers: {}", e)))?;
@@ -153,22 +160,35 @@ impl SessionHandler {
                 session
                     .response_duplex_vec(vec![HttpTask::Header(Box::new(resp), false)])
                     .await
-                    .map_err(|e| NylonError::ConfigError(format!("Error sending response: {}", e)))?;
+                    .map_err(|e| {
+                        NylonError::ConfigError(format!("Error sending response: {}", e))
+                    })?;
 
                 // Register connection in adapter and start local dispatcher
-                let connection_id = format!("{}:{}", nylon_store::websockets::get_node_id().await.unwrap_or_else(|_| "node".into()), session_stream.session_id);
+                let connection_id = format!(
+                    "{}:{}",
+                    nylon_store::websockets::get_node_id()
+                        .await
+                        .unwrap_or_else(|_| "node".into()),
+                    session_stream.session_id
+                );
                 let connection = nylon_types::websocket::WebSocketConnection {
                     id: connection_id.clone(),
                     session_id: session_stream.session_id,
                     rooms: vec![],
-                    node_id: nylon_store::websockets::get_node_id().await.unwrap_or_default(),
+                    node_id: nylon_store::websockets::get_node_id()
+                        .await
+                        .unwrap_or_default(),
                     connected_at: chrono::Utc::now().timestamp() as u64,
                     metadata: HashMap::new(),
                 };
                 let _ = nylon_store::websockets::add_connection(connection).await;
 
                 // local rx for cluster events
-                let (tx, rx): (mpsc::UnboundedSender<nylon_types::websocket::WebSocketMessage>, mpsc::UnboundedReceiver<nylon_types::websocket::WebSocketMessage>) = mpsc::unbounded_channel();
+                let (tx, rx): (
+                    mpsc::UnboundedSender<nylon_types::websocket::WebSocketMessage>,
+                    mpsc::UnboundedReceiver<nylon_types::websocket::WebSocketMessage>,
+                ) = mpsc::unbounded_channel();
                 nylon_store::websockets::register_local_sender(connection_id.clone(), tx);
                 // store ws rx per session for use in outer event loop if needed
                 let _ = crate::stream::set_ws_rx(session_stream.session_id, rx).await;
@@ -188,20 +208,18 @@ impl SessionHandler {
                 // Send a text frame to client
                 let frame = Self::build_ws_frame(0x1, &data);
                 let tasks = vec![HttpTask::Body(Some(Bytes::from(frame)), false)];
-                session
-                    .response_duplex_vec(tasks)
-                    .await
-                    .map_err(|e| NylonError::ConfigError(format!("Error sending WS text: {}", e)))?;
+                session.response_duplex_vec(tasks).await.map_err(|e| {
+                    NylonError::ConfigError(format!("Error sending WS text: {}", e))
+                })?;
                 Ok(None)
             }
             methods::WEBSOCKET_SEND_BINARY => {
                 // Send a binary frame to client
                 let frame = Self::build_ws_frame(0x2, &data);
                 let tasks = vec![HttpTask::Body(Some(Bytes::from(frame)), false)];
-                session
-                    .response_duplex_vec(tasks)
-                    .await
-                    .map_err(|e| NylonError::ConfigError(format!("Error sending WS binary: {}", e)))?;
+                session.response_duplex_vec(tasks).await.map_err(|e| {
+                    NylonError::ConfigError(format!("Error sending WS binary: {}", e))
+                })?;
                 Ok(None)
             }
             methods::WEBSOCKET_CLOSE => {
@@ -211,11 +229,10 @@ impl SessionHandler {
                     HttpTask::Body(Some(Bytes::from(frame)), false),
                     HttpTask::Done,
                 ];
-                session
-                    .response_duplex_vec(tasks)
-                    .await
-                    .map_err(|e| NylonError::ConfigError(format!("Error sending WS close: {}", e)))?;
-                
+                session.response_duplex_vec(tasks).await.map_err(|e| {
+                    NylonError::ConfigError(format!("Error sending WS close: {}", e))
+                })?;
+
                 // Notify plugin that connection is closing
                 // Spawn task to ensure event is sent before connection cleanup
                 tokio::spawn({
@@ -226,11 +243,13 @@ impl SessionHandler {
                             .await;
                     }
                 });
-                
+
                 // Cleanup adapter registration
                 let conn_id = format!(
                     "{}:{}",
-                    nylon_store::websockets::get_node_id().await.unwrap_or_default(),
+                    nylon_store::websockets::get_node_id()
+                        .await
+                        .unwrap_or_default(),
                     session_stream.session_id
                 );
                 nylon_store::websockets::unregister_local_sender(&conn_id);

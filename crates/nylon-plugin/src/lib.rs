@@ -6,13 +6,13 @@ pub mod session_handler;
 pub mod stream;
 pub mod types;
 
+use crate::constants::methods;
 use crate::{
     plugin_manager::PluginManager,
     session_handler::SessionHandler,
     stream::{PluginSessionStream, get_rx},
     types::{BuiltinPlugin, MiddlewareContext, PluginResult},
 };
-use crate::constants::methods;
 use bytes::Bytes;
 use nylon_error::NylonError;
 use nylon_types::{context::NylonContext, plugins::SessionStream, template::Expr};
@@ -125,7 +125,9 @@ where
                     &session_stream,
                     payload,
                     payload_ast,
-                ).await? {
+                )
+                .await?
+                {
                     return Ok(result);
                 }
             } else {
@@ -229,10 +231,10 @@ where
                                     // Send close frame response to client
                                     let frame = build_ws_frame(0x8, &payload);
                                     let _ = session.response_duplex_vec(vec![
-                                        pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false), 
+                                        pingora::protocols::http::HttpTask::Body(Some(Bytes::from(frame)), false),
                                         pingora::protocols::http::HttpTask::Done
                                     ]).await;
-                                    
+
                                     // Notify plugin that connection is closing (await to ensure delivery)
                                     session_stream.event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[]).await?;
                                     // unregister and remove from adapter
@@ -241,7 +243,7 @@ where
                                     tokio::spawn(async move {
                                         let _ = nylon_store::websockets::remove_connection(&conn_id).await;
                                     });
-                                    
+
                                     return Ok(PluginResult::new(false, true));
                                 }
                                 0x9 => { // ping -> pong
