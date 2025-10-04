@@ -23,6 +23,8 @@ pub enum ServiceType {
     Http,
     #[serde(rename = "plugin")]
     Plugin,
+    #[serde(rename = "static")]
+    Static,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -45,6 +47,16 @@ pub struct Plugin {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct StaticConfig {
+    /// Root directory to serve files from
+    pub root: String,
+    /// Default index file to serve for directories (default: index.html)
+    pub index: Option<String>,
+    /// Enable SPA fallback: on 404, serve index file instead
+    pub spa: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct ServiceItem {
     pub name: String,
     pub service_type: ServiceType,
@@ -52,4 +64,6 @@ pub struct ServiceItem {
     pub endpoints: Option<Vec<Endpoint>>,
     pub health_check: Option<HealthCheck>,
     pub plugin: Option<Plugin>,
+    #[serde(rename = "static")]
+    pub static_conf: Option<StaticConfig>,
 }

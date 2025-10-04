@@ -10,9 +10,11 @@ use pingora::{
     prelude::HttpPeer,
     proxy::{ProxyHttp, Session},
 };
+use std::fs;
+use std::path::PathBuf;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 async fn handle_error_response<'a>(
     res: &'a mut Response<'a>,
@@ -252,6 +254,95 @@ impl ProxyHttp for NylonRuntime {
                     )
                 })?;
                 *b = selected_backend;
+            }
+        }
+
+        // Handle static file service type (serve from disk, optional SPA fallback)
+        if route.service.service_type == ServiceType::Static {
+            let Some(conf) = &route.service.static_conf else {
+                let err =
+                    NylonError::ConfigError("Static service missing 'static' config".to_string());
+                return handle_error_response(&mut res, session, err).await;
+            };
+
+            // Build requested path
+            let uri_path = if session.is_http2() {
+                session
+                    .as_http2()
+                    .map(|s| s.req_header().uri.path().to_string())
+                    .unwrap_or_else(|| "/".to_string())
+            } else {
+                session.req_header().uri.path().to_string()
+            };
+
+            let rewrite_prefix = route.rewrite.clone().unwrap_or_default();
+            let rel_path = if !rewrite_prefix.is_empty() && uri_path.starts_with(&rewrite_prefix) {
+                uri_path[rewrite_prefix.len()..].to_string()
+            } else {
+                uri_path.clone()
+            };
+
+            // Security: Prevent directory traversal (e.g., /static/../secret)
+            if rel_path.split('/').any(|seg| seg == "..") {
+                let err = NylonError::HttpException(403, "FORBIDDEN", "Invalid path");
+                return handle_error_response(&mut res, session, err).await;
+            }
+
+            let root = PathBuf::from(&conf.root);
+            let mut file_path = root.join(rel_path.trim_start_matches('/'));
+
+            // If path is a directory or ends with slash, append index file
+            let index_name = conf
+                .index
+                .clone()
+                .unwrap_or_else(|| "index.html".to_string());
+            if uri_path.ends_with('/')
+                || fs::metadata(&file_path)
+                    .map(|m| m.is_dir())
+                    .unwrap_or(false)
+            {
+                file_path = file_path.join(&index_name);
+            }
+
+            // Try to read file
+            debug!("[static] file_path: {}", file_path.display());
+            match fs::read(&file_path) {
+                Ok(bytes) => {
+                    let mime = mime_guess::from_path(&file_path).first_or_octet_stream();
+                    {
+                        let mut headers = res.ctx.add_response_header.write().expect("lock");
+                        headers.insert("Content-Type".to_string(), mime.to_string());
+                    }
+                    res.status(200).body(Bytes::from(bytes));
+                    return res.send(session).await;
+                }
+                Err(_) => {
+                    // If SPA enabled, serve index.html from root
+                    if conf.spa.unwrap_or(false) {
+                        let spa_index = root.join(&index_name);
+                        match fs::read(&spa_index) {
+                            Ok(bytes) => {
+                                let mime =
+                                    mime_guess::from_path(&spa_index).first_or_octet_stream();
+                                {
+                                    let mut headers =
+                                        res.ctx.add_response_header.write().expect("lock");
+                                    headers.insert("Content-Type".to_string(), mime.to_string());
+                                }
+                                res.status(200).body(Bytes::from(bytes));
+                                return res.send(session).await;
+                            }
+                            Err(_) => {
+                                let err =
+                                    NylonError::HttpException(404, "NOT_FOUND", "File not found");
+                                return handle_error_response(&mut res, session, err).await;
+                            }
+                        }
+                    } else {
+                        let err = NylonError::HttpException(404, "NOT_FOUND", "File not found");
+                        return handle_error_response(&mut res, session, err).await;
+                    }
+                }
             }
         }
 

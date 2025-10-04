@@ -6,12 +6,12 @@ use nylon_error::NylonError;
 use nylon_sdk::fbs::plugin_generated::nylon_plugin::{
     HeaderKeyValue, HeaderKeyValueArgs, NylonHttpHeaders, NylonHttpHeadersArgs,
 };
+use nylon_types::websocket::WebSocketMessage;
 use nylon_types::{
     context::NylonContext,
     plugins::SessionStream,
     template::{Expr, apply_payload_ast},
 };
-use nylon_types::websocket::WebSocketMessage;
 use pingora::{
     http::ResponseHeader,
     protocols::http::HttpTask,
@@ -268,7 +268,9 @@ impl SessionHandler {
                 if !room.is_empty() {
                     let conn_id = format!(
                         "{}:{}",
-                        nylon_store::websockets::get_node_id().await.unwrap_or_default(),
+                        nylon_store::websockets::get_node_id()
+                            .await
+                            .unwrap_or_default(),
                         session_stream.session_id
                     );
                     let _ = nylon_store::websockets::join_room(&conn_id, &room).await;
@@ -280,7 +282,9 @@ impl SessionHandler {
                 if !room.is_empty() {
                     let conn_id = format!(
                         "{}:{}",
-                        nylon_store::websockets::get_node_id().await.unwrap_or_default(),
+                        nylon_store::websockets::get_node_id()
+                            .await
+                            .unwrap_or_default(),
                         session_stream.session_id
                     );
                     let _ = nylon_store::websockets::leave_room(&conn_id, &room).await;

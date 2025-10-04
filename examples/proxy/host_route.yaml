@@ -12,6 +12,12 @@ routes:
     #   redirect: ${host}:8443
     paths:
       - path:
+          - /static
+          - /static/{*path}
+        service:
+          name: static
+          rewrite: /static
+      - path:
           - /ws
         methods:
           - GET

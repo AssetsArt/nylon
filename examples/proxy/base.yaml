@@ -38,6 +38,13 @@ services:
       name: plugin_sdk
       entry: stream
 
+  - name: static
+    service_type: static
+    static:
+      root: ./examples/static
+      index: index.html
+      spa: true
+
 middleware_groups:
   example:
     - plugin: plugin_sdk
