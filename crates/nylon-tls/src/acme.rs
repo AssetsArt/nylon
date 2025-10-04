@@ -4,15 +4,60 @@ use instant_acme::{
 };
 use nylon_error::NylonError;
 use nylon_types::tls::AcmeConfig;
-use tracing::{info, warn};
+use tracing::{info, warn, error};
 use std::fs::OpenOptions;
+use std::time::{Duration, Instant};
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+
+/// Rate limiting state สำหรับป้องกันการทำงานเร็วเกินไป
+struct RateLimiter {
+    last_request: Option<Instant>,
+    backoff_duration: Duration,
+    min_interval: Duration,
+}
+
+impl RateLimiter {
+    fn new() -> Self {
+        Self {
+            last_request: None,
+            backoff_duration: Duration::from_millis(1000),
+            min_interval: Duration::from_secs(5),
+        }
+    }
+
+    /// รอ delay ตาม rate limit
+    async fn wait_if_needed(&mut self) {
+        if let Some(last) = self.last_request {
+            let elapsed = last.elapsed();
+            let required_wait = self.backoff_duration.max(self.min_interval);
+            
+            if elapsed < required_wait {
+                let wait_time = required_wait - elapsed;
+                info!("Rate limiting: waiting {:?}", wait_time);
+                tokio::time::sleep(wait_time).await;
+            }
+        }
+        self.last_request = Some(Instant::now());
+    }
+
+    /// เพิ่ม backoff หลังจากเกิด error
+    fn increase_backoff(&mut self) {
+        self.backoff_duration = (self.backoff_duration * 2).min(Duration::from_secs(300));
+        warn!("Increased backoff to {:?}", self.backoff_duration);
+    }
+
+    /// Reset backoff หลังจากสำเร็จ
+    fn reset_backoff(&mut self) {
+        self.backoff_duration = Duration::from_millis(1000);
+    }
+}
 
 /// ACME Client สำหรับจัดการ certificate ด้วย Let's Encrypt
 pub struct AcmeClient {
     account: Account,
     acme_dir: String,
+    rate_limiter: RateLimiter,
 }
 
 impl AcmeClient {
@@ -58,7 +103,11 @@ impl AcmeClient {
             }
         };
 
-        Ok(Self { account, acme_dir })
+        Ok(Self { 
+            account, 
+            acme_dir,
+            rate_limiter: RateLimiter::new(),
+        })
     }
 
     /// สร้าง account ใหม่
@@ -86,14 +135,26 @@ impl AcmeClient {
             }
         };
 
-        // NOTE: EAB is provider-specific; if provided but unsupported here, we ignore with warning
-        if config.eab_kid.is_some() || config.eab_hmac_key.is_some() {
-            warn!("EAB credentials provided but not applied: provider-specific binding not implemented");
-        }
+        // Prepare EAB (External Account Binding) if provided
+        // Note: EAB is provider-specific (e.g., ZeroSSL, BuyPass)
+        // For now, we pass None and let instant-acme handle it
+        // TODO: Full EAB implementation would need proper key parsing
+        let eab = match (&config.eab_kid, &config.eab_hmac_key) {
+            (Some(_), Some(_)) => {
+                info!("EAB credentials provided (kid and hmac_key)");
+                warn!("Full EAB support is not yet implemented. Please use Let's Encrypt or configure manually.");
+                None
+            }
+            (Some(_), None) | (None, Some(_)) => {
+                warn!("Incomplete EAB credentials (need both kid and hmac_key), ignoring");
+                None
+            }
+            (None, None) => None,
+        };
 
         let (account, credentials) = Account::builder()
             .map_err(|e| NylonError::ConfigError(format!("Failed to build account: {}", e)))?
-            .create(&new_account, directory_url, None)
+            .create(&new_account, directory_url, eab)
             .await
             .map_err(|e| {
                 NylonError::ConfigError(format!("Failed to create ACME account: {}", e))
@@ -178,102 +239,131 @@ impl AcmeClient {
     ) -> Result<(Vec<u8>, Vec<u8>, Vec<Vec<u8>>), NylonError> {
         info!("Issuing certificate for domain: {}", domain);
 
-        // สร้าง order ใหม่
-        let identifiers = vec![Identifier::Dns(domain.to_string())];
-        let mut order = self
-            .account
-            .new_order(&NewOrder::new(&identifiers))
-            .await
-            .map_err(|e| NylonError::ConfigError(format!("Failed to create order: {}", e)))?;
+        // Apply rate limiting
+        self.rate_limiter.wait_if_needed().await;
 
-        info!("Order created for domain: {}", domain);
+        // Track challenge tokens for cleanup
+        let mut challenge_tokens: Vec<String> = Vec::new();
 
-        // ดึง authorizations
-        let mut authorizations = order.authorizations();
+        // Main certificate issuance logic wrapped in error handling
+        let result: Result<(Vec<u8>, Vec<u8>, Vec<Vec<u8>>), NylonError> = async {
+            // สร้าง order ใหม่
+            let identifiers = vec![Identifier::Dns(domain.to_string())];
+            let mut order = self
+                .account
+                .new_order(&NewOrder::new(&identifiers))
+                .await
+                .map_err(|e| NylonError::ConfigError(format!("Failed to create order: {}", e)))?;
 
-        // ทำ HTTP-01 challenge
-        while let Some(authz_result) = authorizations.next().await {
-            let mut authz = authz_result.map_err(|e| {
-                NylonError::ConfigError(format!("Failed to get authorization: {}", e))
-            })?;
+            info!("Order created for domain: {}", domain);
 
-            match authz.status {
-                AuthorizationStatus::Pending => {}
-                AuthorizationStatus::Valid => continue,
-                _ => {
-                    return Err(NylonError::ConfigError(format!(
-                        "Authorization status is {:?}",
-                        authz.status
-                    )));
+            // ดึง authorizations
+            let mut authorizations = order.authorizations();
+
+            // ทำ HTTP-01 challenge
+            while let Some(authz_result) = authorizations.next().await {
+                let mut authz = authz_result.map_err(|e| {
+                    NylonError::ConfigError(format!("Failed to get authorization: {}", e))
+                })?;
+
+                match authz.status {
+                    AuthorizationStatus::Pending => {}
+                    AuthorizationStatus::Valid => continue,
+                    _ => {
+                        return Err(NylonError::ConfigError(format!(
+                            "Authorization status is {:?}",
+                            authz.status
+                        )));
+                    }
                 }
+
+                // หา HTTP-01 challenge
+                let mut challenge = authz.challenge(ChallengeType::Http01).ok_or_else(|| {
+                    NylonError::ConfigError("HTTP-01 challenge not found".to_string())
+                })?;
+
+                let token = challenge.token.clone();
+                let key_auth = challenge.key_authorization().as_str().to_string();
+
+                info!(
+                    "HTTP-01 Challenge for {}: token={}, path=/.well-known/acme-challenge/{}",
+                    domain, token, token
+                );
+
+                // บันทึก challenge token เพื่อให้ web server ให้บริการ
+                Self::save_challenge_token(&self.acme_dir, domain, &token, &key_auth)?;
+                challenge_tokens.push(token.clone());
+
+                // แจ้ง ACME server ว่าพร้อมสำหรับการตรวจสอบ
+                challenge.set_ready().await.map_err(|e| {
+                    NylonError::ConfigError(format!("Failed to set challenge ready: {}", e))
+                })?;
+
+                info!("Challenge set to ready, waiting for validation...");
+
+                // รอการตรวจสอบโดย poll authorizations ใหม่
+                // instant-acme จะ handle polling ให้เอง
             }
 
-            // หา HTTP-01 challenge
-            let mut challenge = authz.challenge(ChallengeType::Http01).ok_or_else(|| {
-                NylonError::ConfigError("HTTP-01 challenge not found".to_string())
-            })?;
+            // Poll order จนกว่า order จะ ready
+            let status = order
+                .poll_ready(&RetryPolicy::default())
+                .await
+                .map_err(|e| NylonError::ConfigError(format!("Failed to poll order ready: {}", e)))?;
 
-            let token = challenge.token.clone();
-            let key_auth = challenge.key_authorization().as_str().to_string();
+            if status != OrderStatus::Ready {
+                return Err(NylonError::ConfigError(format!(
+                    "Order status is not ready: {:?}",
+                    status
+                )));
+            }
 
-            info!(
-                "HTTP-01 Challenge for {}: token={}, path=/.well-known/acme-challenge/{}",
-                domain, token, token
-            );
+            info!("Order is ready, finalizing certificate...");
 
-            // บันทึก challenge token เพื่อให้ web server ให้บริการ
-            Self::save_challenge_token(&self.acme_dir, domain, &token, &key_auth)?;
+            // Finalize order - instant-acme จะสร้าง private key ให้เอง
+            let private_key_pem = order
+                .finalize()
+                .await
+                .map_err(|e| NylonError::ConfigError(format!("Failed to finalize order: {}", e)))?;
 
-            // แจ้ง ACME server ว่าพร้อมสำหรับการตรวจสอบ
-            challenge.set_ready().await.map_err(|e| {
-                NylonError::ConfigError(format!("Failed to set challenge ready: {}", e))
-            })?;
+            // Poll certificate
+            let cert_chain = order
+                .poll_certificate(&RetryPolicy::default())
+                .await
+                .map_err(|e| {
+                    NylonError::ConfigError(format!("Failed to download certificate: {}", e))
+                })?;
 
-            info!("Challenge set to ready, waiting for validation...");
+            info!("Certificate issued successfully for domain: {}", domain);
 
-            // รอการตรวจสอบโดย poll authorizations ใหม่
-            // instant-acme จะ handle polling ให้เอง
+            // แยก certificate และ chain
+            let (cert_pem, chain_pems) = Self::split_certificate_chain(&cert_chain)?;
+            let private_key = private_key_pem.as_bytes().to_vec();
+
+            // บันทึก certificate, chain และ key
+            Self::save_certificate_bundle(&self.acme_dir, domain, &cert_pem, &chain_pems, &private_key)?;
+
+            Ok((cert_pem, private_key, chain_pems))
+        }.await;
+
+        // Cleanup challenge tokens regardless of success or failure
+        if !challenge_tokens.is_empty() {
+            Self::cleanup_domain_challenges(&self.acme_dir, domain);
         }
 
-        // Poll order จนกว่า order จะ ready
-        let status = order
-            .poll_ready(&RetryPolicy::default())
-            .await
-            .map_err(|e| NylonError::ConfigError(format!("Failed to poll order ready: {}", e)))?;
-
-        if status != OrderStatus::Ready {
-            return Err(NylonError::ConfigError(format!(
-                "Order status is not ready: {:?}",
-                status
-            )));
+        // Update rate limiter based on result
+        match &result {
+            Ok(_) => {
+                self.rate_limiter.reset_backoff();
+                info!("Certificate issuance completed successfully for: {}", domain);
+            }
+            Err(e) => {
+                self.rate_limiter.increase_backoff();
+                error!("Failed to issue certificate for {}: {}", domain, e);
+            }
         }
 
-        info!("Order is ready, finalizing certificate...");
-
-        // Finalize order - instant-acme จะสร้าง private key ให้เอง
-        let private_key_pem = order
-            .finalize()
-            .await
-            .map_err(|e| NylonError::ConfigError(format!("Failed to finalize order: {}", e)))?;
-
-        // Poll certificate
-        let cert_chain = order
-            .poll_certificate(&RetryPolicy::default())
-            .await
-            .map_err(|e| {
-                NylonError::ConfigError(format!("Failed to download certificate: {}", e))
-            })?;
-
-        info!("Certificate issued successfully for domain: {}", domain);
-
-        // แยก certificate และ chain
-        let (cert_pem, chain_pems) = Self::split_certificate_chain(&cert_chain)?;
-        let private_key = private_key_pem.as_bytes().to_vec();
-
-        // บันทึก certificate, chain และ key
-        Self::save_certificate_bundle(&self.acme_dir, domain, &cert_pem, &chain_pems, &private_key)?;
-
-        Ok((cert_pem, private_key, chain_pems))
+        result
     }
 
     /// แยก certificate chain
@@ -455,5 +545,17 @@ impl AcmeClient {
         })?;
 
         Ok(key_auth)
+    }
+
+    /// ลบ challenge tokens ทั้งหมดของ domain
+    fn cleanup_domain_challenges(acme_dir: &str, domain: &str) {
+        let challenge_dir = std::path::PathBuf::from(format!("{}/challenges/{}", acme_dir, domain));
+        
+        if challenge_dir.exists() {
+            match std::fs::remove_dir_all(&challenge_dir) {
+                Ok(_) => info!("Cleaned up challenge tokens for domain: {}", domain),
+                Err(e) => warn!("Failed to cleanup challenge tokens for {}: {}", domain, e),
+            }
+        }
     }
 }

@@ -25,6 +25,7 @@ pub const KEY_PLUGINS: &str = "plugins";
 pub const KEY_TLS: &str = "tls";
 pub const KEY_ACME_CERTS: &str = "acme_certs";
 pub const KEY_ACME_CONFIG: &str = "acme_config";
+pub const KEY_ACME_METRICS: &str = "acme_metrics";
 
 // storage for global variables
 static GLOBAL_STORE: Lazy<DashMap<String, Box<dyn Any + Send + Sync>>> = Lazy::new(DashMap::new);

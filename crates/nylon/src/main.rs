@@ -90,6 +90,10 @@ fn handle_run_command(config_path: String) -> Result<(), NylonError> {
         let runtime_config = RuntimeConfig::get()?;
         nylon_store::websockets::initialize_adapter(runtime_config.websocket).await?;
 
+        // Initialize ACME metrics
+        let acme_metrics = nylon_tls::AcmeMetrics::new();
+        nylon_store::insert(nylon_store::KEY_ACME_METRICS, acme_metrics);
+
         // Initialize ACME certificates
         if let Err(e) = initialize_acme_certificates().await {
             error!("Failed to initialize ACME certificates: {}", e);
@@ -174,16 +178,35 @@ async fn issue_new_certificate(
     domain: &str,
     acme_config: &nylon_types::tls::AcmeConfig,
 ) -> Result<(), NylonError> {
-    let mut client = nylon_tls::AcmeClient::new(acme_config).await?;
-    let (cert, key, chain) = client.issue_certificate(domain).await?;
+    let result = async {
+        let mut client = nylon_tls::AcmeClient::new(acme_config).await?;
+        let (cert, key, chain) = client.issue_certificate(domain).await?;
 
-    let cert_info = nylon_tls::CertificateInfo::new(domain.to_string(), cert, key, chain)?;
+        let cert_info = nylon_tls::CertificateInfo::new(domain.to_string(), cert, key, chain)?;
 
-    info!(
-        "Certificate issued successfully for {}, expires at: {}",
-        domain, cert_info.expires_at
-    );
+        info!(
+            "Certificate issued successfully for {}, expires at: {}",
+            domain, cert_info.expires_at
+        );
 
-    nylon_store::tls::store_acme_cert(cert_info)?;
-    Ok(())
+        nylon_store::tls::store_acme_cert(cert_info.clone())?;
+        
+        // Update metrics
+        if let Some(metrics) = nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS) {
+            metrics.record_issuance_success(domain);
+            metrics.update_days_until_expiry(domain, cert_info.days_until_expiry());
+        }
+
+        Ok::<(), NylonError>(())
+    }.await;
+
+    if let Err(e) = &result {
+        // Record failure in metrics
+        if let Some(metrics) = nylon_store::get::<nylon_tls::AcmeMetrics>(nylon_store::KEY_ACME_METRICS) {
+            metrics.record_issuance_failure(domain);
+        }
+        return Err(e.clone());
+    }
+
+    result
 }
