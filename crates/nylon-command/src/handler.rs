@@ -78,107 +78,18 @@ routes:
 
 // Default static index.html
 const DEFAULT_INDEX_HTML: &str = r#"<!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nylon Proxy Server</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-    .container {
-      background: white;
-      border-radius: 20px;
-      padding: 60px 40px;
-      max-width: 600px;
-      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-      text-align: center;
-    }
-    h1 {
-      color: #667eea;
-      font-size: 3em;
-      margin-bottom: 20px;
-      font-weight: 700;
-    }
-    .subtitle {
-      color: #764ba2;
-      font-size: 1.5em;
-      margin-bottom: 30px;
-      font-weight: 500;
-    }
-    p {
-      color: #555;
-      font-size: 1.1em;
-      line-height: 1.8;
-      margin-bottom: 15px;
-    }
-    code {
-      background: #f5f5f5;
-      padding: 3px 8px;
-      border-radius: 4px;
-      font-family: 'Monaco', 'Courier New', monospace;
-      color: #667eea;
-      font-size: 0.95em;
-    }
-    .info {
-      background: #f0f4ff;
-      border-left: 4px solid #667eea;
-      padding: 20px;
-      margin: 30px 0;
-      text-align: left;
-      border-radius: 8px;
-    }
-    .info strong {
-      color: #667eea;
-      display: block;
-      margin-bottom: 10px;
-      font-size: 1.1em;
-    }
-    .footer {
-      margin-top: 30px;
-      color: #888;
-      font-size: 0.9em;
-    }
-    a {
-      color: #667eea;
-      text-decoration: none;
-      font-weight: 600;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
-  </style>
+<title>Welcome to nylon!</title>
 </head>
 <body>
-  <div class="container">
-    <h1>🧬 Nylon</h1>
-    <p class="subtitle">The Extensible Proxy Server</p>
-    <p>This page is served by Nylon's <code>static</code> service.</p>
-    
-    <div class="info">
-      <strong>✓ Service is running</strong>
-      <p>Your Nylon proxy server is up and running successfully!</p>
-    </div>
+<h1>Welcome to nylon!</h1>
+<p>If you see this page, the nylon proxy server is successfully installed and
+working.</p>
 
-    <p>Edit your proxy configuration at:</p>
-    <p><code>/etc/nylon/proxy/base.yaml</code></p>
-    
-    <p class="footer">
-      Learn more at <a href="https://github.com/cloudflare/pingora" target="_blank">Pingora Framework</a>
-    </p>
-  </div>
+<p>For online documentation and support please refer to the repository.<br/>
+
+<p><em>Thank you for using nylon.</em></p>
 </body>
 </html>
 "#;
