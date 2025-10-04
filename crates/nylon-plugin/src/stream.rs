@@ -171,7 +171,9 @@ pub fn get_rx(
             .get(&session_id)
             .cloned()
             .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id))),
-        Err(_) => Err(NylonError::ConfigError("Failed to lock SESSION_RX".to_string())),
+        Err(_) => Err(NylonError::ConfigError(
+            "Failed to lock SESSION_RX".to_string(),
+        )),
     }
 }
 
