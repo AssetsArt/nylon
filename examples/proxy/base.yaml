@@ -18,6 +18,13 @@ services:
       - ip: 127.0.0.1
         port: 3001
         # weight: 1 # Optional
+    health_check:
+      enabled: true
+      path: /health # Reserved for HTTP checks (อนาคต)
+      interval: 3s
+      timeout: 1s
+      healthy_threshold: 2
+      unhealthy_threshold: 2
 
   - name: ws-service
     service_type: plugin

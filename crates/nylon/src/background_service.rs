@@ -10,6 +10,7 @@ pub struct NylonBackgroundService;
 impl BackgroundService for NylonBackgroundService {
     async fn start(&self, mut shutdown: ShutdownWatch) {
         let mut period_1d = interval(Duration::from_secs(86400));
+        let mut hc_interval = interval(Duration::from_secs(5));
         loop {
             tokio::select! {
                 _ = shutdown.changed() => {
@@ -32,6 +33,10 @@ impl BackgroundService for NylonBackgroundService {
                         }
                     }
                     break;
+                },
+                _ = hc_interval.tick() => {
+                    // periodic health checks for all services
+                    nylon_store::lb_backends::run_health_checks_for_all().await;
                 },
                 _ = period_1d.tick() => {
                     tracing::info!("Check certificate expiration");
