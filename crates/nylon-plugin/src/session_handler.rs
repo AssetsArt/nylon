@@ -11,6 +11,7 @@ use nylon_types::{
     plugins::SessionStream,
     template::{Expr, apply_payload_ast},
 };
+use nylon_types::websocket::WebSocketMessage;
 use pingora::{
     http::ResponseHeader,
     protocols::http::HttpTask,
@@ -261,12 +262,73 @@ impl SessionHandler {
                 Ok(Some(PluginResult::new(false, true)))
             }
 
+            // WebSocket room operations
+            methods::WEBSOCKET_JOIN_ROOM => {
+                let room = String::from_utf8_lossy(&data).to_string();
+                if !room.is_empty() {
+                    let conn_id = format!(
+                        "{}:{}",
+                        nylon_store::websockets::get_node_id().await.unwrap_or_default(),
+                        session_stream.session_id
+                    );
+                    let _ = nylon_store::websockets::join_room(&conn_id, &room).await;
+                }
+                Ok(None)
+            }
+            methods::WEBSOCKET_LEAVE_ROOM => {
+                let room = String::from_utf8_lossy(&data).to_string();
+                if !room.is_empty() {
+                    let conn_id = format!(
+                        "{}:{}",
+                        nylon_store::websockets::get_node_id().await.unwrap_or_default(),
+                        session_stream.session_id
+                    );
+                    let _ = nylon_store::websockets::leave_room(&conn_id, &room).await;
+                }
+                Ok(None)
+            }
+            methods::WEBSOCKET_BROADCAST_ROOM_TEXT => {
+                if let Some((room, payload)) = Self::split_room_payload(&data) {
+                    let message = String::from_utf8_lossy(&payload).to_string();
+                    let _ = nylon_store::websockets::broadcast_to_room(
+                        &room,
+                        WebSocketMessage::Text(message),
+                        None,
+                    )
+                    .await;
+                }
+                Ok(None)
+            }
+            methods::WEBSOCKET_BROADCAST_ROOM_BINARY => {
+                if let Some((room, payload)) = Self::split_room_payload(&data) {
+                    let _ = nylon_store::websockets::broadcast_to_room(
+                        &room,
+                        WebSocketMessage::Binary(payload),
+                        None,
+                    )
+                    .await;
+                }
+                Ok(None)
+            }
+
             // Unknown method
             _ => Err(NylonError::ConfigError(format!(
                 "Invalid method: {}",
                 method
             ))),
         }
+    }
+
+    /// Split room and payload using a NUL (0x00) delimiter: [room_bytes, 0x00, payload_bytes]
+    fn split_room_payload(data: &[u8]) -> Option<(String, Vec<u8>)> {
+        if let Some(pos) = data.iter().position(|b| *b == 0) {
+            let room = String::from_utf8_lossy(&data[..pos]).to_string();
+            let payload = data[pos + 1..].to_vec();
+            if !room.is_empty() {
+                return Some((room, payload));
+            }
+        }
+        None
     }
 
     async fn handle_get_payload(

@@ -27,7 +27,6 @@ pingora:
 # websocket:
 #   # Adapter type: memory, redis, or cluster
 #   adapter_type: redis
-  
 #   # Redis configuration (required for redis and cluster adapters)
 #   redis:
 #     host: "localhost"

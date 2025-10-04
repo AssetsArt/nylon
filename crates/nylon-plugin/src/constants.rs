@@ -28,6 +28,12 @@ pub mod methods {
     pub const WEBSOCKET_SEND_BINARY: u32 = 302;
     pub const WEBSOCKET_CLOSE: u32 = 303;
 
+    // WebSocket room methods (Plugin -> Rust)
+    pub const WEBSOCKET_JOIN_ROOM: u32 = 310;
+    pub const WEBSOCKET_LEAVE_ROOM: u32 = 311;
+    pub const WEBSOCKET_BROADCAST_ROOM_TEXT: u32 = 312;
+    pub const WEBSOCKET_BROADCAST_ROOM_BINARY: u32 = 313;
+
     // WebSocket events (Rust -> Plugin)
     pub const WEBSOCKET_ON_OPEN: u32 = 350;
     pub const WEBSOCKET_ON_MESSAGE_TEXT: u32 = 351;
