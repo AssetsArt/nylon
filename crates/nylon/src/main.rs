@@ -16,7 +16,7 @@ use nylon_config::{proxy::ProxyConfigExt, runtime::RuntimeConfig};
 use nylon_error::NylonError;
 use nylon_types::proxy::ProxyConfig;
 use runtime::NylonRuntime;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 /// Main entry point for the Nylon proxy server
 fn main() {
@@ -67,6 +67,9 @@ fn handle_commands(args: Commands) -> Result<(), NylonError> {
 /// * `Result<(), NylonError>` - The result of the operation
 fn handle_run_command(config_path: String) -> Result<(), NylonError> {
     info!("Loading configuration from: {}", config_path);
+
+    // Store config path for reload functionality
+    nylon_store::insert(nylon_store::KEY_CONFIG_PATH, config_path.clone());
 
     // Load and validate runtime configuration
     let config = RuntimeConfig::from_file(&config_path)?;

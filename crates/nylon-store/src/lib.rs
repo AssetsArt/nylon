@@ -14,6 +14,7 @@ pub const DEFAULT_HEADER_SELECTOR: &str = "x-nylon-proxy";
 
 // constants
 pub const KEY_RUNTIME_CONFIG: &str = "runtime_config";
+pub const KEY_CONFIG_PATH: &str = "config_path";
 pub const KEY_COMMAND_SOCKET_PATH: &str = "/tmp/_nylon.sock";
 pub const KEY_LB_BACKENDS: &str = "lb_backends";
 pub const KEY_ROUTES: &str = "routes";
