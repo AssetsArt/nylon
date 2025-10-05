@@ -70,8 +70,11 @@ pub fn store(tls: Vec<&TlsConfig>, acme_dir: Option<String>) -> Result<(), Nylon
     insert::<HashMap<String, TlsStore>>(KEY_TLS, tls_store);
     crate::insert(crate::KEY_ACME_CONFIG, acme_configs);
 
-    // Initialize ACME certificates store
-    insert::<HashMap<String, CertificateInfo>>(KEY_ACME_CERTS, HashMap::new());
+    // Initialize ACME certificates store only if it doesn't exist
+    // Don't overwrite existing certificates on reload
+    if get::<HashMap<String, CertificateInfo>>(KEY_ACME_CERTS).is_none() {
+        insert::<HashMap<String, CertificateInfo>>(KEY_ACME_CERTS, HashMap::new());
+    }
 
     Ok(())
 }
