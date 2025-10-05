@@ -12,8 +12,20 @@ impl BackgroundService for NylonBackgroundService {
     async fn start(&self, mut shutdown: ShutdownWatch) {
         let mut period_1d = interval(Duration::from_secs(86400));
         let mut hc_interval = interval(Duration::from_secs(5));
+        let signal = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup());
+        let mut signal = match signal {
+            Ok(signal) => signal,
+            Err(e) => {
+                error!("Failed to create signal handler: {}", e);
+                std::process::exit(1);
+            }
+        };
         loop {
             tokio::select! {
+                _ = signal.recv() => {
+                    tracing::info!("Received signal: HUP");
+                    break;
+                },
                 _ = shutdown.changed() => {
                     // shutdown
                     tracing::info!("Shutting down background service");

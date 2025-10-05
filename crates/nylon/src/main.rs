@@ -101,52 +101,35 @@ fn handle_run_command(config_path: String) -> Result<(), NylonError> {
         }
 
         // wating signal HUP for reload config
-        loop {
-            let signal = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup());
-            let mut signal = match signal {
-                Ok(signal) => signal,
-                Err(e) => {
-                    error!("Failed to create signal handler: {}", e);
-                    break;
-                }
-            };
-            let signal = match signal.recv().await {
-                Some(_) => "HUP",
-                None => {
-                    warn!("Received signal is None");
-                    continue;
-                }
-            };
-            info!("Received signal: {}", signal);
+        // loop {
+        //     info!("Reloading runtime config...");
+        //     let config = match RuntimeConfig::from_file(&config_path) {
+        //         Ok(config) => config,
+        //         Err(e) => {
+        //             error!("Failed to load runtime config: {}", e);
+        //             continue;
+        //         }
+        //     };
+        //     match config.store() {
+        //         Ok(_) => {
+        //             info!("Runtime config stored successfully");
+        //         }
+        //         Err(e) => {
+        //             error!("Failed to store runtime config: {}", e);
+        //         }
+        //     }
 
-            info!("Reloading runtime config...");
-            let config = match RuntimeConfig::from_file(&config_path) {
-                Ok(config) => config,
-                Err(e) => {
-                    error!("Failed to load runtime config: {}", e);
-                    continue;
-                }
-            };
-            match config.store() {
-                Ok(_) => {
-                    info!("Runtime config stored successfully");
-                }
-                Err(e) => {
-                    error!("Failed to store runtime config: {}", e);
-                }
-            }
-
-            // store
-            info!("Storing proxy config...");
-            match proxy_config.store().await {
-                Ok(_) => {
-                    info!("Proxy config stored successfully");
-                }
-                Err(e) => {
-                    error!("Failed to store proxy config: {}", e);
-                }
-            }
-        }
+        //     // store
+        //     info!("Storing proxy config...");
+        //     match proxy_config.store().await {
+        //         Ok(_) => {
+        //             info!("Proxy config stored successfully");
+        //         }
+        //         Err(e) => {
+        //             error!("Failed to store proxy config: {}", e);
+        //         }
+        //     }
+        // }
 
         Ok::<(), NylonError>(())
     })?;
