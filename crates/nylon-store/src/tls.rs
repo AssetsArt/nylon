@@ -54,7 +54,9 @@ pub fn store(tls: Vec<&TlsConfig>, acme_dir: Option<String>) -> Result<(), Nylon
             }
             TlsKind::Acme => {
                 // เก็บ ACME config สำหรับแต่ละ domain
-                if let Some(mut acme_config) = t.acme.clone() {
+                // รองรับทั้ง nested (acme:) และ flat format
+                let acme_config = t.acme.clone().or_else(|| t.acme_flat.clone());
+                if let Some(mut acme_config) = acme_config {
                     // ตั้งค่า acme_dir จากที่ส่งมา
                     if acme_config.acme_dir.is_none() {
                         acme_config.acme_dir = acme_dir.clone();
