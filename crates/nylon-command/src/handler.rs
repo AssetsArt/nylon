@@ -347,27 +347,30 @@ fn restart_service() -> Result<()> {
     info!("Restarting {} service...", SERVICE_NAME);
 
     // Stop and start the service
-    match stop_service() {
-        Ok(_) => {
+    #[cfg(unix)]
+    {
+        use std::process::Command;
+        // pkill -9 nylon
+        let output = Command::new("pkill")
+            .args(["-9", SERVICE_NAME])
+            .output()?;
+
+        if !output.status.success() {
+            error!("Failed to stop service: {}", output.status);
+            return Err(ServiceError::Operation("Failed to stop service".to_string()));
         }
-        Err(e) => {
-            error!("Failed to stop service: {}", e);
-            return Err(e);
-        }
+
+        // wait a moment for clean shutdown
+        std::thread::sleep(std::time::Duration::from_secs(1));
     }
 
-    loop {
-        // check service status
-        match status_service() {
-            Ok(_) => {
-                break;
-            }
-            Err(e) => {
-                error!("Failed to check service status: {}", e);
-                return Err(e);
-            }
-        }
+    #[cfg(windows)]
+    {
+        // On Windows, we restart the service
+        info!("Restart is not supported on Windows, restarting service instead...");
+        stop_service()?;
     }
+
 
     // start
     match start_service() {
