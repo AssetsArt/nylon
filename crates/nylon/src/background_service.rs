@@ -259,6 +259,8 @@ async fn reload_acme_certificates() -> Result<(), nylon_error::NylonError> {
     for (domain, acme_config) in acme_configs.iter() {
         let acme_dir = acme_config.acme_dir.as_deref().unwrap_or(".acme");
 
+        info!("Checking certificate for domain: {}", domain);
+        
         // Check if certificate exists and is valid
         match nylon_tls::AcmeClient::load_certificate_with_chain(acme_dir, domain) {
             Ok((cert, key, chain)) => {
@@ -282,14 +284,21 @@ async fn reload_acme_certificates() -> Result<(), nylon_error::NylonError> {
                     }
                     Err(e) => {
                         warn!("Failed to parse certificate for {}: {}", domain, e);
+                        info!("Issuing new certificate for {}...", domain);
+                        renew_certificate(domain).await?;
                     }
                 }
             }
             Err(_) => {
+                // No certificate found - issue a new one for the new domain
                 info!(
-                    "No certificate found for {} after reload, will issue on first request",
+                    "No certificate found for {} after reload, issuing new certificate...",
                     domain
                 );
+                if let Err(e) = renew_certificate(domain).await {
+                    error!("Failed to issue certificate for {}: {}", domain, e);
+                    // Don't return error, continue with other domains
+                }
             }
         }
     }

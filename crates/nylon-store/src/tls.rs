@@ -54,7 +54,9 @@ pub fn store(tls: Vec<&TlsConfig>, acme_dir: Option<String>) -> Result<(), Nylon
             }
             TlsKind::Acme => {
                 // เก็บ ACME config สำหรับแต่ละ domain
-                if let Some(mut acme_config) = t.acme.clone() {
+                // รองรับทั้ง nested (acme:) และ flat format
+                let acme_config = t.acme.clone().or_else(|| t.acme_flat.clone());
+                if let Some(mut acme_config) = acme_config {
                     // ตั้งค่า acme_dir จากที่ส่งมา
                     if acme_config.acme_dir.is_none() {
                         acme_config.acme_dir = acme_dir.clone();
@@ -70,8 +72,11 @@ pub fn store(tls: Vec<&TlsConfig>, acme_dir: Option<String>) -> Result<(), Nylon
     insert::<HashMap<String, TlsStore>>(KEY_TLS, tls_store);
     crate::insert(crate::KEY_ACME_CONFIG, acme_configs);
 
-    // Initialize ACME certificates store
-    insert::<HashMap<String, CertificateInfo>>(KEY_ACME_CERTS, HashMap::new());
+    // Initialize ACME certificates store only if it doesn't exist
+    // Don't overwrite existing certificates on reload
+    if get::<HashMap<String, CertificateInfo>>(KEY_ACME_CERTS).is_none() {
+        insert::<HashMap<String, CertificateInfo>>(KEY_ACME_CERTS, HashMap::new());
+    }
 
     Ok(())
 }

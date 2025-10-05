@@ -16,7 +16,7 @@ use nylon_config::{proxy::ProxyConfigExt, runtime::RuntimeConfig};
 use nylon_error::NylonError;
 use nylon_types::proxy::ProxyConfig;
 use runtime::NylonRuntime;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// Main entry point for the Nylon proxy server
 fn main() {
@@ -165,6 +165,8 @@ async fn initialize_acme_certificates() -> Result<(), NylonError> {
     for (domain, acme_config) in acme_configs.iter() {
         let acme_dir = acme_config.acme_dir.as_deref().unwrap_or(".acme");
 
+        info!("Checking certificate for domain: {}", domain);
+        
         // ตรวจสอบว่ามี certificate อยู่แล้วหรือไม่ (พร้อม chain ถ้ามี)
         match nylon_tls::AcmeClient::load_certificate_with_chain(acme_dir, domain) {
             Ok((cert, key, chain)) => {
@@ -172,11 +174,15 @@ async fn initialize_acme_certificates() -> Result<(), NylonError> {
                 match nylon_tls::CertificateInfo::new(domain.clone(), cert, key, chain) {
                     Ok(cert_info) => {
                         if cert_info.is_expired() {
-                            info!(
+                            warn!(
                                 "Certificate for {} is expired, issuing new certificate...",
                                 domain
                             );
-                            issue_new_certificate(domain, acme_config).await?;
+                            if let Err(issue_err) = issue_new_certificate(domain, acme_config).await {
+                                error!("Failed to issue new certificate for {}: {}. Using expired certificate.", domain, issue_err);
+                                // Store the expired cert anyway - better than nothing
+                                nylon_store::tls::store_acme_cert(cert_info)?;
+                            }
                         } else {
                             info!(
                                 "Using existing certificate for {}, expires in {} days",
@@ -189,7 +195,11 @@ async fn initialize_acme_certificates() -> Result<(), NylonError> {
                     }
                     Err(e) => {
                         error!("Failed to parse existing certificate for {}: {}", domain, e);
-                        issue_new_certificate(domain, acme_config).await?;
+                        warn!("Attempting to issue new certificate for {}", domain);
+                        if let Err(issue_err) = issue_new_certificate(domain, acme_config).await {
+                            error!("Failed to issue new certificate for {}: {}. Server will continue without this certificate.", domain, issue_err);
+                            // Don't propagate error - let server continue
+                        }
                     }
                 }
             }
@@ -199,7 +209,10 @@ async fn initialize_acme_certificates() -> Result<(), NylonError> {
                     "No existing certificate for {}, issuing new certificate...",
                     domain
                 );
-                issue_new_certificate(domain, acme_config).await?;
+                if let Err(issue_err) = issue_new_certificate(domain, acme_config).await {
+                    error!("Failed to issue new certificate for {}: {}. Server will continue without this certificate.", domain, issue_err);
+                    // Don't propagate error - let server continue
+                }
             }
         }
     }
