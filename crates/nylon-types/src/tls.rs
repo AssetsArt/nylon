@@ -16,6 +16,9 @@ pub struct TlsConfig {
     pub cert: Option<String>,
     pub chain: Option<Vec<String>>,
     pub acme: Option<AcmeConfig>,
+    /// Flatten ACME fields to support both nested and flat config formats
+    #[serde(flatten)]
+    pub acme_flat: Option<AcmeConfig>,
     pub domains: Vec<String>,
 }
 

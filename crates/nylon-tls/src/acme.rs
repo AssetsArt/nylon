@@ -390,20 +390,29 @@ impl AcmeClient {
 
     /// แยก certificate chain
     fn split_certificate_chain(cert_chain: &str) -> Result<(Vec<u8>, Vec<Vec<u8>>), NylonError> {
-        let certs: Vec<&str> = cert_chain
-            .split("-----END CERTIFICATE-----")
+        // Split by the complete PEM boundary to preserve structure
+        let parts: Vec<&str> = cert_chain
+            .split("-----BEGIN CERTIFICATE-----")
             .filter(|s| !s.trim().is_empty())
             .collect();
 
-        if certs.is_empty() {
+        if parts.is_empty() {
             return Err(NylonError::ConfigError(
                 "No certificates found in chain".to_string(),
             ));
         }
 
         let mut result_certs = Vec::new();
-        for cert_str in certs {
-            let cert_pem = format!("{}-----END CERTIFICATE-----\n", cert_str.trim());
+        for part in parts {
+            // Each part should contain the cert body + END marker
+            // Reconstruct the complete PEM with proper boundaries
+            let cert_pem = format!("-----BEGIN CERTIFICATE-----{}", part);
+            // Ensure proper line ending after the END marker
+            let cert_pem = if !cert_pem.ends_with('\n') {
+                format!("{}\n", cert_pem)
+            } else {
+                cert_pem
+            };
             result_certs.push(cert_pem.into_bytes());
         }
 
@@ -557,11 +566,20 @@ impl AcmeClient {
         let chain = if chain_path.exists() {
             let data = std::fs::read(&chain_path)
                 .map_err(|e| NylonError::ConfigError(format!("Failed to read chain: {}", e)))?;
-            // Split concatenated PEMs by END marker
-            let parts: Vec<Vec<u8>> = String::from_utf8_lossy(&data)
-                .split("-----END CERTIFICATE-----")
+            // Split concatenated PEMs by BEGIN marker to preserve structure
+            let chain_str = String::from_utf8_lossy(&data);
+            let parts: Vec<Vec<u8>> = chain_str
+                .split("-----BEGIN CERTIFICATE-----")
                 .filter(|s| !s.trim().is_empty())
-                .map(|s| format!("{}-----END CERTIFICATE-----\n", s.trim()).into_bytes())
+                .map(|s| {
+                    let cert_pem = format!("-----BEGIN CERTIFICATE-----{}", s);
+                    // Ensure proper line ending
+                    if cert_pem.ends_with('\n') {
+                        cert_pem.into_bytes()
+                    } else {
+                        format!("{}\n", cert_pem).into_bytes()
+                    }
+                })
                 .collect();
             parts
         } else {
