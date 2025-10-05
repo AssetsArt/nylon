@@ -68,6 +68,9 @@ fn handle_commands(args: Commands) -> Result<(), NylonError> {
 fn handle_run_command(config_path: String) -> Result<(), NylonError> {
     info!("Loading configuration from: {}", config_path);
 
+    // Store config path for reload functionality
+    nylon_store::insert(nylon_store::KEY_CONFIG_PATH, config_path.clone());
+
     // Load and validate runtime configuration
     let config = RuntimeConfig::from_file(&config_path)?;
     config.store()?;
@@ -99,6 +102,37 @@ fn handle_run_command(config_path: String) -> Result<(), NylonError> {
         if let Err(e) = initialize_acme_certificates().await {
             error!("Failed to initialize ACME certificates: {}", e);
         }
+
+        // wating signal HUP for reload config
+        // loop {
+        //     info!("Reloading runtime config...");
+        //     let config = match RuntimeConfig::from_file(&config_path) {
+        //         Ok(config) => config,
+        //         Err(e) => {
+        //             error!("Failed to load runtime config: {}", e);
+        //             continue;
+        //         }
+        //     };
+        //     match config.store() {
+        //         Ok(_) => {
+        //             info!("Runtime config stored successfully");
+        //         }
+        //         Err(e) => {
+        //             error!("Failed to store runtime config: {}", e);
+        //         }
+        //     }
+
+        //     // store
+        //     info!("Storing proxy config...");
+        //     match proxy_config.store().await {
+        //         Ok(_) => {
+        //             info!("Proxy config stored successfully");
+        //         }
+        //         Err(e) => {
+        //             error!("Failed to store proxy config: {}", e);
+        //         }
+        //     }
+        // }
 
         Ok::<(), NylonError>(())
     })?;

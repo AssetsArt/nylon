@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use dashmap::DashMap;
-use nylon_types::{plugins::FfiPlugin, tls::AcmeConfig};
+use nylon_config::{proxy::ProxyConfigExt, runtime::RuntimeConfig};
+use nylon_types::{plugins::FfiPlugin, proxy::ProxyConfig, tls::AcmeConfig};
 use pingora::{server::ShutdownWatch, services::background::BackgroundService};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::time::{interval, sleep};
@@ -12,11 +13,27 @@ impl BackgroundService for NylonBackgroundService {
     async fn start(&self, mut shutdown: ShutdownWatch) {
         let mut period_1d = interval(Duration::from_secs(86400));
         let mut hc_interval = interval(Duration::from_secs(5));
+        let signal = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup());
+        let mut signal = match signal {
+            Ok(signal) => signal,
+            Err(e) => {
+                error!("Failed to create signal handler: {}", e);
+                std::process::exit(1);
+            }
+        };
         loop {
             tokio::select! {
+                _ = signal.recv() => {
+                    info!("Received SIGHUP signal - reloading configuration...");
+                    if let Err(e) = reload_configuration().await {
+                        error!("Failed to reload configuration: {}", e);
+                    } else {
+                        info!("✓ Configuration reloaded successfully");
+                    }
+                },
                 _ = shutdown.changed() => {
                     // shutdown
-                    tracing::info!("Shutting down background service");
+                    info!("Shutting down background service");
 
                     // Shutting down plugins
                     let plugins =
@@ -177,4 +194,106 @@ async fn renew_certificate(domain: &str) -> Result<(), nylon_error::NylonError> 
     }
 
     result
+}
+
+/// Reload configuration from file
+async fn reload_configuration() -> Result<(), nylon_error::NylonError> {
+    info!("Starting configuration reload...");
+
+    // Get stored config path
+    let config_path = nylon_store::get::<String>(nylon_store::KEY_CONFIG_PATH)
+        .ok_or_else(|| nylon_error::NylonError::ConfigError("Config path not found".to_string()))?;
+
+    info!("Loading runtime configuration from: {}", config_path);
+
+    // Load and validate runtime configuration
+    let runtime_config = RuntimeConfig::from_file(&config_path)?;
+    
+    // Store new runtime config
+    runtime_config.store()?;
+    info!("✓ Runtime configuration updated");
+
+    // Load proxy configuration from config_dir
+    let proxy_config = ProxyConfig::from_dir(
+        runtime_config
+            .config_dir
+            .to_string_lossy()
+            .to_string()
+            .as_str(),
+    )?;
+
+    // Store new proxy config
+    proxy_config.store().await?;
+    info!("✓ Proxy configuration updated");
+
+    // Reload ACME certificates if needed
+    if let Err(e) = reload_acme_certificates().await {
+        warn!("Failed to reload ACME certificates: {}", e);
+    }
+
+    Ok(())
+}
+
+/// Reload ACME certificates configuration
+async fn reload_acme_certificates() -> Result<(), nylon_error::NylonError> {
+    use nylon_types::tls::AcmeConfig;
+
+    info!("Reloading ACME certificates...");
+
+    // Get ACME configs
+    let acme_configs =
+        match nylon_store::get::<HashMap<String, AcmeConfig>>(nylon_store::KEY_ACME_CONFIG) {
+            Some(configs) if !configs.is_empty() => configs,
+            _ => {
+                info!("No ACME domains configured after reload");
+                return Ok(());
+            }
+        };
+
+    info!(
+        "Found {} domains configured for ACME after reload",
+        acme_configs.len()
+    );
+
+    // Check each domain's certificate
+    for (domain, acme_config) in acme_configs.iter() {
+        let acme_dir = acme_config.acme_dir.as_deref().unwrap_or(".acme");
+
+        // Check if certificate exists and is valid
+        match nylon_tls::AcmeClient::load_certificate_with_chain(acme_dir, domain) {
+            Ok((cert, key, chain)) => {
+                match nylon_tls::CertificateInfo::new(domain.clone(), cert, key, chain) {
+                    Ok(cert_info) => {
+                        if cert_info.is_expired() {
+                            info!(
+                                "Certificate for {} is expired, issuing new certificate...",
+                                domain
+                            );
+                            renew_certificate(domain).await?;
+                        } else {
+                            info!(
+                                "Certificate for {} is still valid, expires in {} days",
+                                domain,
+                                cert_info.days_until_expiry()
+                            );
+                            // Update in store
+                            nylon_store::tls::store_acme_cert(cert_info)?;
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse certificate for {}: {}", domain, e);
+                    }
+                }
+            }
+            Err(_) => {
+                info!(
+                    "No certificate found for {} after reload, will issue on first request",
+                    domain
+                );
+            }
+        }
+    }
+
+    info!("ACME certificates reload completed");
+    Ok(())
 }

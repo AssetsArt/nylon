@@ -134,12 +134,18 @@ fn create_default_config() -> Result<()> {
         fs::write(DEFAULT_CONFIG_PATH, DEFAULT_CONFIG_YAML)?;
         info!("✓ Default config created");
     } else {
-        warn!("Config file already exists, skipping: {}", DEFAULT_CONFIG_PATH);
+        warn!(
+            "Config file already exists, skipping: {}",
+            DEFAULT_CONFIG_PATH
+        );
     }
 
     // Create proxy config directory
     if !Path::new(DEFAULT_PROXY_CONFIG_DIR).exists() {
-        info!("Creating proxy config directory: {}", DEFAULT_PROXY_CONFIG_DIR);
+        info!(
+            "Creating proxy config directory: {}",
+            DEFAULT_PROXY_CONFIG_DIR
+        );
         fs::create_dir_all(DEFAULT_PROXY_CONFIG_DIR)?;
     }
 
@@ -203,6 +209,9 @@ fn install_service() -> Result<()> {
 
     let label: ServiceLabel = SERVICE_NAME.parse().unwrap();
 
+    // Create custom systemd service content with reload support
+    let service_contents = create_systemd_service_content(&exe_path);
+
     let service = ServiceInstallCtx {
         label: label.clone(),
         program: exe_path,
@@ -211,7 +220,7 @@ fn install_service() -> Result<()> {
             OsString::from("-c"),
             OsString::from(DEFAULT_CONFIG_PATH),
         ],
-        contents: None,
+        contents: service_contents,
         username: None,
         working_directory: None,
         environment: None,
@@ -229,12 +238,55 @@ fn install_service() -> Result<()> {
     info!("  • Static files: {}", DEFAULT_STATIC_DIR);
     info!("  • ACME certs: {}", DEFAULT_ACME_DIR);
     info!("");
+    info!("Service features:");
+    info!("  • Reload config without restart: systemctl reload nylon");
+    info!("  • Auto-restart on failure");
+    info!("");
     info!("Next steps:");
-    info!("  1. Edit your proxy config: {}/base.yaml", DEFAULT_PROXY_CONFIG_DIR);
+    info!(
+        "  1. Edit your proxy config: {}/base.yaml",
+        DEFAULT_PROXY_CONFIG_DIR
+    );
     info!("  2. Start the service: nylon service start");
     info!("  3. Visit http://localhost:8088");
+    info!("  4. Reload config anytime: systemctl reload nylon");
 
     Ok(())
+}
+
+/// Create custom systemd service content
+#[cfg(target_os = "linux")]
+fn create_systemd_service_content(exe_path: &std::path::Path) -> Option<String> {
+    let exe_path_str = exe_path.to_string_lossy();
+    Some(format!(
+        r#"[Unit]
+Description={}
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={} run -c {}
+ExecStop=/usr/bin/pkill -9 {}
+ExecReload=/usr/bin/pkill -HUP {}
+Restart=on-failure
+RestartSec=1
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
+"#,
+        SERVICE_DESCRIPTION,
+        exe_path_str,
+        DEFAULT_CONFIG_PATH,
+        SERVICE_NAME,
+        SERVICE_NAME
+    ))
+}
+
+/// For non-Linux platforms, no custom content
+#[cfg(not(target_os = "linux"))]
+fn create_systemd_service_content(_exe_path: &std::path::Path) -> Option<String> {
+    None
 }
 
 /// Uninstall the service
@@ -295,12 +347,41 @@ fn restart_service() -> Result<()> {
     info!("Restarting {} service...", SERVICE_NAME);
 
     // Stop and start the service
-    stop_service()?;
+    #[cfg(unix)]
+    {
+        use std::process::Command;
+        // pkill -9 nylon
+        let output = Command::new("pkill")
+            .args(["-9", SERVICE_NAME])
+            .output()?;
 
-    // Wait a moment for clean shutdown
-    std::thread::sleep(std::time::Duration::from_secs(1));
+        if !output.status.success() {
+            error!("Failed to stop service: {}", output.status);
+            return Err(ServiceError::Operation("Failed to stop service".to_string()));
+        }
 
-    start_service()?;
+        // wait a moment for clean shutdown
+        std::thread::sleep(std::time::Duration::from_secs(1));
+    }
+
+    #[cfg(windows)]
+    {
+        // On Windows, we restart the service
+        info!("Restart is not supported on Windows, restarting service instead...");
+        stop_service()?;
+    }
+
+
+    // start
+    match start_service() {
+        Ok(_) => {
+            println!("Service is running");
+        }
+        Err(e) => {
+            error!("Failed to start service: {}", e);
+            return Err(e);
+        }
+    }
 
     info!("✓ Service restarted successfully");
 
