@@ -165,6 +165,8 @@ async fn initialize_acme_certificates() -> Result<(), NylonError> {
     for (domain, acme_config) in acme_configs.iter() {
         let acme_dir = acme_config.acme_dir.as_deref().unwrap_or(".acme");
 
+        info!("Checking certificate for domain: {}", domain);
+        
         // ตรวจสอบว่ามี certificate อยู่แล้วหรือไม่ (พร้อม chain ถ้ามี)
         match nylon_tls::AcmeClient::load_certificate_with_chain(acme_dir, domain) {
             Ok((cert, key, chain)) => {

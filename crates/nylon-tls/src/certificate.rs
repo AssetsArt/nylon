@@ -1,5 +1,6 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc, TimeZone};
 use nylon_error::NylonError;
+use openssl::asn1::Asn1TimeRef;
 use openssl::x509::X509;
 use serde::{Deserialize, Serialize};
 
@@ -29,8 +30,8 @@ impl CertificateInfo {
         let not_before = x509.not_before();
 
         // แปลง ASN1Time เป็น DateTime<Utc>
-        let expires_at = parse_asn1_time(not_after.to_string().as_str())?;
-        let issued_at = parse_asn1_time(not_before.to_string().as_str())?;
+        let expires_at = asn1_time_to_datetime(not_after)?;
+        let issued_at = asn1_time_to_datetime(not_before)?;
 
         Ok(Self {
             domain,
@@ -60,23 +61,25 @@ impl CertificateInfo {
     }
 }
 
-/// แปลง ASN1Time string เป็น DateTime<Utc>
-fn parse_asn1_time(time_str: &str) -> Result<DateTime<Utc>, NylonError> {
-    // ASN1 time format: "Jan 1 12:00:00 2025 GMT"
-    use chrono::NaiveDateTime;
-
-    // พยายาม parse ด้วยรูปแบบ GMT ก่อน
-    if let Ok(parsed) = chrono::DateTime::parse_from_str(time_str, "%b %d %H:%M:%S %Y GMT") {
-        return Ok(parsed.to_utc());
-    }
-
-    // ถ้าไม่ได้ ลองรูปแบบอื่น
-    let naive = NaiveDateTime::parse_from_str(time_str, "%b %d %H:%M:%S %Y")
-        .map_err(|e| NylonError::ConfigError(format!("Failed to parse time: {}", e)))?;
-
-    Ok(chrono::DateTime::<Utc>::from_naive_utc_and_offset(
-        naive, Utc,
-    ))
+/// แปลง ASN1Time เป็น DateTime<Utc> โดยใช้ OpenSSL's diff method
+fn asn1_time_to_datetime(asn1_time: &Asn1TimeRef) -> Result<DateTime<Utc>, NylonError> {
+    // สร้าง reference time (Unix epoch)
+    let epoch = openssl::asn1::Asn1Time::from_unix(0)
+        .map_err(|e| NylonError::ConfigError(format!("Failed to create epoch time: {}", e)))?;
+    
+    // คำนวณ diff เป็นวินาที
+    let diff = asn1_time
+        .diff(&epoch)
+        .map_err(|e| NylonError::ConfigError(format!("Failed to calculate time diff: {}", e)))?;
+    
+    // แปลง diff เป็น timestamp
+    let days_in_seconds = diff.days as i64 * 86400;
+    let total_seconds = days_in_seconds + diff.secs as i64;
+    
+    // สร้าง DateTime จาก timestamp
+    Utc.timestamp_opt(total_seconds, 0)
+        .single()
+        .ok_or_else(|| NylonError::ConfigError("Invalid timestamp".to_string()))
 }
 
 /// Certificate store สำหรับเก็บข้อมูล ACME certificates

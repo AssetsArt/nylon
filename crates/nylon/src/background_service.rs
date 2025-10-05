@@ -259,6 +259,8 @@ async fn reload_acme_certificates() -> Result<(), nylon_error::NylonError> {
     for (domain, acme_config) in acme_configs.iter() {
         let acme_dir = acme_config.acme_dir.as_deref().unwrap_or(".acme");
 
+        info!("Checking certificate for domain: {}", domain);
+        
         // Check if certificate exists and is valid
         match nylon_tls::AcmeClient::load_certificate_with_chain(acme_dir, domain) {
             Ok((cert, key, chain)) => {
