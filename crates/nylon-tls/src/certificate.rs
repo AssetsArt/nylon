@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc, TimeZone};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use nylon_error::NylonError;
 use openssl::asn1::Asn1TimeRef;
 use openssl::x509::X509;
@@ -61,25 +61,33 @@ impl CertificateInfo {
     }
 }
 
-/// แปลง ASN1Time เป็น DateTime<Utc> โดยใช้ OpenSSL's diff method
+/// แปลง ASN1Time เป็น DateTime<Utc> โดย parse string format
 fn asn1_time_to_datetime(asn1_time: &Asn1TimeRef) -> Result<DateTime<Utc>, NylonError> {
-    // สร้าง reference time (Unix epoch)
-    let epoch = openssl::asn1::Asn1Time::from_unix(0)
-        .map_err(|e| NylonError::ConfigError(format!("Failed to create epoch time: {}", e)))?;
+    // ASN1Time format examples:
+    // "Oct  5 10:02:11 2025 GMT" (2 spaces for single digit day)
+    // "Oct 15 10:02:11 2025 GMT" (1 space for double digit day)
+    let time_str = asn1_time.to_string();
     
-    // คำนวณ diff เป็นวินาที
-    let diff = asn1_time
-        .diff(&epoch)
-        .map_err(|e| NylonError::ConfigError(format!("Failed to calculate time diff: {}", e)))?;
+    // Try parsing with various formats
+    // Format 1: "Oct  5 10:02:11 2025 GMT" (with GMT suffix)
+    if let Ok(naive) = NaiveDateTime::parse_from_str(&time_str, "%b %e %H:%M:%S %Y GMT") {
+        return Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc));
+    }
     
-    // แปลง diff เป็น timestamp
-    let days_in_seconds = diff.days as i64 * 86400;
-    let total_seconds = days_in_seconds + diff.secs as i64;
+    // Format 2: "Oct  5 10:02:11 2025" (without GMT suffix)
+    if let Ok(naive) = NaiveDateTime::parse_from_str(&time_str, "%b %e %H:%M:%S %Y") {
+        return Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc));
+    }
     
-    // สร้าง DateTime จาก timestamp
-    Utc.timestamp_opt(total_seconds, 0)
-        .single()
-        .ok_or_else(|| NylonError::ConfigError("Invalid timestamp".to_string()))
+    // Format 3: Try with explicit timezone
+    if let Ok(dt) = DateTime::parse_from_str(&time_str, "%b %e %H:%M:%S %Y %Z") {
+        return Ok(dt.to_utc());
+    }
+    
+    Err(NylonError::ConfigError(format!(
+        "Failed to parse ASN1 time: {}",
+        time_str
+    )))
 }
 
 /// Certificate store สำหรับเก็บข้อมูล ACME certificates
