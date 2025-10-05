@@ -347,12 +347,38 @@ fn restart_service() -> Result<()> {
     info!("Restarting {} service...", SERVICE_NAME);
 
     // Stop and start the service
-    stop_service()?;
+    match stop_service() {
+        Ok(_) => {
+        }
+        Err(e) => {
+            error!("Failed to stop service: {}", e);
+            return Err(e);
+        }
+    }
 
-    // Wait a moment for clean shutdown
-    std::thread::sleep(std::time::Duration::from_secs(1));
+    loop {
+        // check service status
+        match status_service() {
+            Ok(_) => {
+                break;
+            }
+            Err(e) => {
+                error!("Failed to check service status: {}", e);
+                return Err(e);
+            }
+        }
+    }
 
-    start_service()?;
+    // start
+    match start_service() {
+        Ok(_) => {
+            println!("Service is running");
+        }
+        Err(e) => {
+            error!("Failed to start service: {}", e);
+            return Err(e);
+        }
+    }
 
     info!("✓ Service restarted successfully");
 
