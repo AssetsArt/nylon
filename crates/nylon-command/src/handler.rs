@@ -209,6 +209,9 @@ fn install_service() -> Result<()> {
 
     let label: ServiceLabel = SERVICE_NAME.parse().unwrap();
 
+    // Create custom systemd service content with reload support
+    let service_contents = create_systemd_service_content(&exe_path);
+
     let service = ServiceInstallCtx {
         label: label.clone(),
         program: exe_path,
@@ -217,7 +220,7 @@ fn install_service() -> Result<()> {
             OsString::from("-c"),
             OsString::from(DEFAULT_CONFIG_PATH),
         ],
-        contents: None,
+        contents: service_contents,
         username: None,
         working_directory: None,
         environment: None,
@@ -235,6 +238,10 @@ fn install_service() -> Result<()> {
     info!("  • Static files: {}", DEFAULT_STATIC_DIR);
     info!("  • ACME certs: {}", DEFAULT_ACME_DIR);
     info!("");
+    info!("Service features:");
+    info!("  • Reload config without restart: systemctl reload nylon");
+    info!("  • Auto-restart on failure");
+    info!("");
     info!("Next steps:");
     info!(
         "  1. Edit your proxy config: {}/base.yaml",
@@ -242,8 +249,44 @@ fn install_service() -> Result<()> {
     );
     info!("  2. Start the service: nylon service start");
     info!("  3. Visit http://localhost:8088");
+    info!("  4. Reload config anytime: systemctl reload nylon");
 
     Ok(())
+}
+
+/// Create custom systemd service content
+#[cfg(target_os = "linux")]
+fn create_systemd_service_content(exe_path: &std::path::Path) -> Option<String> {
+    let exe_path_str = exe_path.to_string_lossy();
+    Some(format!(
+        r#"[Unit]
+Description={}
+After=network.target
+
+[Service]
+Type=simple
+ExecStart={} run -c {}
+ExecStop=/usr/bin/pkill -9 {}
+ExecReload=/usr/bin/pkill -HUP {}
+Restart=on-failure
+RestartSec=1
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
+"#,
+        SERVICE_DESCRIPTION,
+        exe_path_str,
+        DEFAULT_CONFIG_PATH,
+        SERVICE_NAME,
+        SERVICE_NAME
+    ))
+}
+
+/// For non-Linux platforms, no custom content
+#[cfg(not(target_os = "linux"))]
+fn create_systemd_service_content(_exe_path: &std::path::Path) -> Option<String> {
+    None
 }
 
 /// Uninstall the service
