@@ -14,7 +14,7 @@ fn default_acme_dir() -> PathBuf {
 }
 
 fn default_daemon() -> bool {
-    true
+    false
 }
 
 fn default_threads() -> usize {

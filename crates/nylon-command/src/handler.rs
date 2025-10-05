@@ -134,12 +134,18 @@ fn create_default_config() -> Result<()> {
         fs::write(DEFAULT_CONFIG_PATH, DEFAULT_CONFIG_YAML)?;
         info!("✓ Default config created");
     } else {
-        warn!("Config file already exists, skipping: {}", DEFAULT_CONFIG_PATH);
+        warn!(
+            "Config file already exists, skipping: {}",
+            DEFAULT_CONFIG_PATH
+        );
     }
 
     // Create proxy config directory
     if !Path::new(DEFAULT_PROXY_CONFIG_DIR).exists() {
-        info!("Creating proxy config directory: {}", DEFAULT_PROXY_CONFIG_DIR);
+        info!(
+            "Creating proxy config directory: {}",
+            DEFAULT_PROXY_CONFIG_DIR
+        );
         fs::create_dir_all(DEFAULT_PROXY_CONFIG_DIR)?;
     }
 
@@ -230,7 +236,10 @@ fn install_service() -> Result<()> {
     info!("  • ACME certs: {}", DEFAULT_ACME_DIR);
     info!("");
     info!("Next steps:");
-    info!("  1. Edit your proxy config: {}/base.yaml", DEFAULT_PROXY_CONFIG_DIR);
+    info!(
+        "  1. Edit your proxy config: {}/base.yaml",
+        DEFAULT_PROXY_CONFIG_DIR
+    );
     info!("  2. Start the service: nylon service start");
     info!("  3. Visit http://localhost:8088");
 
