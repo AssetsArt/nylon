@@ -104,14 +104,34 @@ func init() {
 		fmt.Println("Start MyApp[Go] sessionID", phase.SessionId)
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 			fmt.Println("MyApp[Go] RequestFilter sessionID", phase.SessionId)
+
+			req := ctx.Request()
+
+			// Test new methods
+			fmt.Println("MyApp[Go] URL:", req.URL())
+			fmt.Println("MyApp[Go] Path:", req.Path())
+			fmt.Println("MyApp[Go] Query:", req.Query())
+			fmt.Println("MyApp[Go] Params:", req.Params())
+			fmt.Println("MyApp[Go] Host:", req.Host())
+			fmt.Println("MyApp[Go] ClientIP:", req.ClientIP())
+			fmt.Println("MyApp[Go] Headers:", req.Headers())
+
 			res := ctx.Response()
 			// set status and headers
 			res.SetStatus(200)
-			res.SetHeader("Content-Type", "text/plain")
-			res.RemoveHeader("Content-Length")
+			res.SetHeader("Content-Type", "application/json")
 			res.SetHeader("Transfer-Encoding", "chunked")
-			// res.SetHeader("Content-Length", "13")
-			res.BodyText("Hello, World!")
+
+			// Return info as JSON
+			info := map[string]interface{}{
+				"url":       req.URL(),
+				"path":      req.Path(),
+				"query":     req.Query(),
+				"params":    req.Params(),
+				"host":      req.Host(),
+				"client_ip": req.ClientIP(),
+			}
+			res.BodyJSON(info)
 
 			ctx.End()
 		})

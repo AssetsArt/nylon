@@ -23,6 +23,12 @@ const (
 	NylonMethodReadRequestFullBody NylonMethods = "read_request_full_body"
 	NylonMethodReadRequestHeader   NylonMethods = "read_request_header"
 	NylonMethodReadRequestHeaders  NylonMethods = "read_request_headers"
+	NylonMethodReadRequestURL      NylonMethods = "read_request_url"
+	NylonMethodReadRequestPath     NylonMethods = "read_request_path"
+	NylonMethodReadRequestQuery    NylonMethods = "read_request_query"
+	NylonMethodReadRequestParams   NylonMethods = "read_request_params"
+	NylonMethodReadRequestHost     NylonMethods = "read_request_host"
+	NylonMethodReadRequestClientIP NylonMethods = "read_request_client_ip"
 )
 
 // WebSocket methods
@@ -66,6 +72,12 @@ var MethodIDMapping = map[NylonMethods]uint32{
 	NylonMethodReadRequestFullBody: 200,
 	NylonMethodReadRequestHeader:   201,
 	NylonMethodReadRequestHeaders:  202,
+	NylonMethodReadRequestURL:      203,
+	NylonMethodReadRequestPath:     204,
+	NylonMethodReadRequestQuery:    205,
+	NylonMethodReadRequestParams:   206,
+	NylonMethodReadRequestHost:     207,
+	NylonMethodReadRequestClientIP: 208,
 
 	// WebSocket methods
 	NylonMethodWebSocketUpgrade:             300,

@@ -117,6 +117,30 @@ impl SessionHandler {
                 Self::handle_read_request_headers(session_stream, session).await?;
                 Ok(None)
             }
+            methods::READ_REQUEST_URL => {
+                Self::handle_read_request_url(session_stream, session, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_PATH => {
+                Self::handle_read_request_path(session_stream, session).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_QUERY => {
+                Self::handle_read_request_query(session_stream, session).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_PARAMS => {
+                Self::handle_read_request_params(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_HOST => {
+                Self::handle_read_request_host(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_CLIENT_IP => {
+                Self::handle_read_request_client_ip(session_stream, ctx).await?;
+                Ok(None)
+            }
 
             // WebSocket control methods (temporary stub to simulate events)
             methods::WEBSOCKET_UPGRADE => {
@@ -568,6 +592,145 @@ impl SessionHandler {
         let headers = fbs.finished_data();
         session_stream
             .event_stream(PluginPhase::Zero, methods::READ_REQUEST_HEADERS, headers)
+            .await
+    }
+
+    async fn handle_read_request_url(
+        session_stream: &SessionStream,
+        session: &mut Session,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        // Build full URL: scheme://host[:port]/path?query
+        let is_tls = ctx.tls.load(std::sync::atomic::Ordering::Relaxed);
+        let scheme = if is_tls { "https" } else { "http" };
+        let port = ctx
+            .port
+            .read()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+            .clone();
+        let host = ctx
+            .host
+            .read()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+            .clone();
+
+        let host_part = if !port.is_empty() && !["80", "443"].contains(&port.as_str()) {
+            format!("{}:{}", host, port)
+        } else {
+            host
+        };
+
+        let uri = match session.as_http2() {
+            Some(h2) => &h2.req_header().uri,
+            None => &session.req_header().uri,
+        };
+
+        let path_and_query = uri
+            .path_and_query()
+            .map(|pq| pq.as_str())
+            .unwrap_or(uri.path());
+
+        let full_url = format!("{}://{}{}", scheme, host_part, path_and_query);
+
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_URL,
+                full_url.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_path(
+        session_stream: &SessionStream,
+        session: &mut Session,
+    ) -> Result<(), NylonError> {
+        let path = match session.as_http2() {
+            Some(h2) => h2.req_header().uri.path(),
+            None => session.req_header().uri.path(),
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_PATH,
+                path.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_query(
+        session_stream: &SessionStream,
+        session: &mut Session,
+    ) -> Result<(), NylonError> {
+        let query = match session.as_http2() {
+            Some(h2) => h2.req_header().uri.query().unwrap_or(""),
+            None => session.req_header().uri.query().unwrap_or(""),
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_QUERY,
+                query.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_params(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let params_json = {
+            let params = ctx
+                .params
+                .read()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
+            serde_json::to_vec(&*params)
+                .map_err(|e| NylonError::InternalServerError(format!("serialize error: {}", e)))?
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_PARAMS,
+                &params_json,
+            )
+            .await
+    }
+
+    async fn handle_read_request_host(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let host = {
+            ctx.host
+                .read()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+                .clone()
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_HOST,
+                host.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_client_ip(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let client_ip = {
+            ctx.client_ip
+                .read()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+                .clone()
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_CLIENT_IP,
+                client_ip.as_bytes(),
+            )
             .await
     }
 }

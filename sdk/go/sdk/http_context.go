@@ -174,6 +174,100 @@ func (r *Request) Headers() *Headers {
 	}
 }
 
+func (r *Request) URL() string {
+	ctx := r.ctx
+	methodID := MethodIDMapping[NylonMethodReadRequestURL]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	go func() {
+		RequestMethod(ctx.sessionID, 0, NylonMethodReadRequestURL, nil)
+	}()
+
+	ctx.cond.Wait()
+	return string(ctx.dataMap[methodID])
+}
+
+func (r *Request) Path() string {
+	ctx := r.ctx
+	methodID := MethodIDMapping[NylonMethodReadRequestPath]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	go func() {
+		RequestMethod(ctx.sessionID, 0, NylonMethodReadRequestPath, nil)
+	}()
+
+	ctx.cond.Wait()
+	return string(ctx.dataMap[methodID])
+}
+
+func (r *Request) Query() string {
+	ctx := r.ctx
+	methodID := MethodIDMapping[NylonMethodReadRequestQuery]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	go func() {
+		RequestMethod(ctx.sessionID, 0, NylonMethodReadRequestQuery, nil)
+	}()
+
+	ctx.cond.Wait()
+	return string(ctx.dataMap[methodID])
+}
+
+func (r *Request) Params() map[string]string {
+	ctx := r.ctx
+	methodID := MethodIDMapping[NylonMethodReadRequestParams]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	go func() {
+		RequestMethod(ctx.sessionID, 0, NylonMethodReadRequestParams, nil)
+	}()
+
+	ctx.cond.Wait()
+
+	// Parse JSON response
+	var params map[string]string
+	json.Unmarshal(ctx.dataMap[methodID], &params)
+	return params
+}
+
+func (r *Request) Host() string {
+	ctx := r.ctx
+	methodID := MethodIDMapping[NylonMethodReadRequestHost]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	go func() {
+		RequestMethod(ctx.sessionID, 0, NylonMethodReadRequestHost, nil)
+	}()
+
+	ctx.cond.Wait()
+	return string(ctx.dataMap[methodID])
+}
+
+func (r *Request) ClientIP() string {
+	ctx := r.ctx
+	methodID := MethodIDMapping[NylonMethodReadRequestClientIP]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	go func() {
+		RequestMethod(ctx.sessionID, 0, NylonMethodReadRequestClientIP, nil)
+	}()
+
+	ctx.cond.Wait()
+	return string(ctx.dataMap[methodID])
+}
+
 // WebSocket send helpers
 func (ws *WebSocketConn) SendText(msg string) error {
 	return RequestMethod(ws.ctx.sessionID, 0, NylonMethodWebSocketSendText, []byte(msg))
