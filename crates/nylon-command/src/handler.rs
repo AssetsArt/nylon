@@ -275,11 +275,7 @@ KillMode=process
 [Install]
 WantedBy=multi-user.target
 "#,
-        SERVICE_DESCRIPTION,
-        exe_path_str,
-        DEFAULT_CONFIG_PATH,
-        SERVICE_NAME,
-        SERVICE_NAME
+        SERVICE_DESCRIPTION, exe_path_str, DEFAULT_CONFIG_PATH, SERVICE_NAME, SERVICE_NAME
     ))
 }
 
@@ -351,13 +347,13 @@ fn restart_service() -> Result<()> {
     {
         use std::process::Command;
         // pkill -9 nylon
-        let output = Command::new("pkill")
-            .args(["-9", SERVICE_NAME])
-            .output()?;
+        let output = Command::new("pkill").args(["-9", SERVICE_NAME]).output()?;
 
         if !output.status.success() {
             error!("Failed to stop service: {}", output.status);
-            return Err(ServiceError::Operation("Failed to stop service".to_string()));
+            return Err(ServiceError::Operation(
+                "Failed to stop service".to_string(),
+            ));
         }
 
         // wait a moment for clean shutdown
@@ -370,7 +366,6 @@ fn restart_service() -> Result<()> {
         info!("Restart is not supported on Windows, restarting service instead...");
         stop_service()?;
     }
-
 
     // start
     match start_service() {

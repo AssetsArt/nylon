@@ -67,23 +67,23 @@ fn asn1_time_to_datetime(asn1_time: &Asn1TimeRef) -> Result<DateTime<Utc>, Nylon
     // "Oct  5 10:02:11 2025 GMT" (2 spaces for single digit day)
     // "Oct 15 10:02:11 2025 GMT" (1 space for double digit day)
     let time_str = asn1_time.to_string();
-    
+
     // Try parsing with various formats
     // Format 1: "Oct  5 10:02:11 2025 GMT" (with GMT suffix)
     if let Ok(naive) = NaiveDateTime::parse_from_str(&time_str, "%b %e %H:%M:%S %Y GMT") {
         return Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc));
     }
-    
+
     // Format 2: "Oct  5 10:02:11 2025" (without GMT suffix)
     if let Ok(naive) = NaiveDateTime::parse_from_str(&time_str, "%b %e %H:%M:%S %Y") {
         return Ok(DateTime::<Utc>::from_naive_utc_and_offset(naive, Utc));
     }
-    
+
     // Format 3: Try with explicit timezone
     if let Ok(dt) = DateTime::parse_from_str(&time_str, "%b %e %H:%M:%S %Y %Z") {
         return Ok(dt.to_utc());
     }
-    
+
     Err(NylonError::ConfigError(format!(
         "Failed to parse ASN1 time: {}",
         time_str

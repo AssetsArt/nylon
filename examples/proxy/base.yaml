@@ -18,7 +18,7 @@ services:
       - ip: 127.0.0.1
         port: 3001
     health_check:
-      enabled: true
+      enabled: false
       path: /health
       interval: 3s
       timeout: 1s
@@ -45,6 +45,12 @@ services:
       root: ./examples/static
       index: index.html
       spa: true
+
+  - name: myapp-service
+    service_type: plugin
+    plugin:
+      name: plugin_sdk
+      entry: myapp
 
 middleware_groups:
   # Security & request metadata headers applied to most routes

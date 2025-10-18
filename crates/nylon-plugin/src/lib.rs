@@ -18,6 +18,7 @@ use crate::{
 };
 use bytes::Bytes;
 use nylon_error::NylonError;
+use nylon_types::plugins::PluginPhase;
 use nylon_types::{context::NylonContext, plugins::SessionStream, template::Expr};
 use pingora::proxy::{ProxyHttp, Session};
 use std::collections::HashMap;
@@ -27,7 +28,7 @@ use tokio::time::{self, Duration};
 pub async fn session_stream<T>(
     proxy: &T,
     plugin_name: &str,
-    phase: u8,
+    phase: PluginPhase,
     entry: &str,
     ctx: &mut NylonContext,
     session: &mut Session,
@@ -151,6 +152,7 @@ where
                 )
                 .await?
                 {
+                    // println!("result: {:?}", result);
                     return Ok(result);
                 }
             } else {
@@ -173,6 +175,7 @@ where
                     payload,
                     payload_ast,
                 ).await? {
+                    // println!("result: {:?}", result);
                     return Ok(result);
                 }
             }
@@ -245,10 +248,10 @@ where
                             // handle opcodes
                             match opcode {
                                 0x1 => { // text
-                                    session_stream.event_stream(0, methods::WEBSOCKET_ON_MESSAGE_TEXT, &payload).await?;
+                                    session_stream.event_stream(PluginPhase::Zero, methods::WEBSOCKET_ON_MESSAGE_TEXT, &payload).await?;
                                 }
                                 0x2 => { // binary
-                                    session_stream.event_stream(0, methods::WEBSOCKET_ON_MESSAGE_BINARY, &payload).await?;
+                                    session_stream.event_stream(PluginPhase::Zero, methods::WEBSOCKET_ON_MESSAGE_BINARY, &payload).await?;
                                 }
                                 0x8 => { // close
                                     // Send close frame response to client
@@ -259,7 +262,7 @@ where
                                     ]).await;
 
                                     // Notify plugin that connection is closing (await to ensure delivery)
-                                    session_stream.event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[]).await?;
+                                    session_stream.event_stream(PluginPhase::Zero, methods::WEBSOCKET_ON_CLOSE, &[]).await?;
                                     // unregister and remove from adapter
                                     let conn_id = format!("{}:{}", nylon_store::websockets::get_node_id().await.unwrap_or_default(), session_stream.session_id);
                                     nylon_store::websockets::unregister_local_sender(&conn_id);
@@ -281,7 +284,7 @@ where
                     }
                     Ok(None) | Err(_) => {
                         // client closed or error
-                        session_stream.event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[]).await?;
+                        session_stream.event_stream(PluginPhase::Zero, methods::WEBSOCKET_ON_CLOSE, &[]).await?;
                         let conn_id = format!("{}:{}", nylon_store::websockets::get_node_id().await.unwrap_or_default(), session_stream.session_id);
                         nylon_store::websockets::unregister_local_sender(&conn_id);
                         tokio::spawn(async move {
@@ -297,7 +300,7 @@ where
 
 pub async fn run_middleware<T>(
     proxy: &T,
-    phase: u8,
+    phase: &PluginPhase,
     middleware_context: &MiddlewareContext,
     ctx: &mut NylonContext,
     session: &mut Session,
@@ -333,7 +336,7 @@ where
             let result = session_stream(
                 proxy,
                 plugin_name,
-                phase,
+                phase.clone(),
                 entry,
                 ctx,
                 session,

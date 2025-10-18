@@ -1,6 +1,10 @@
 use serde::Deserialize;
 use serde_json::Value;
 
+pub const HTTP_METHODS: [&str; 9] = [
+    "GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "CONNECT", "TRACE", "PATCH",
+];
+
 #[derive(Debug, Deserialize, Clone)]
 pub struct MiddlewareItem {
     pub group: Option<String>,
