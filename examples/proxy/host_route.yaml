@@ -8,6 +8,8 @@ routes:
       type: host
       value: localhost # localhost|api.localhost
     name: app-route
+    middleware:
+      - group: auth
     paths:
       - path:
           - /static
@@ -22,7 +24,7 @@ routes:
           name: ws-service
       - path:
           - /myapp
-        # methods: [GET, POST, OPTIONS]
+          - /myapp/{name}
         service:
           name: myapp-service
       - path:

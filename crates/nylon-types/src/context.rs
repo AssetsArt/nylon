@@ -6,7 +6,7 @@ use std::{
     collections::HashMap,
     sync::{
         RwLock,
-        atomic::{AtomicBool, AtomicU16, Ordering},
+        atomic::{AtomicBool, AtomicU16, AtomicU64, Ordering},
     },
 };
 
@@ -26,6 +26,7 @@ pub struct NylonContext {
     pub route: RwLock<Option<Route>>,
     pub params: RwLock<Option<HashMap<String, String>>>,
     pub host: RwLock<String>,
+    pub port: RwLock<String>,
     pub tls: AtomicBool,
     pub session_ids: RwLock<HashMap<String, u32>>,
     pub session_stream: RwLock<HashMap<String, SessionStream>>,
@@ -38,6 +39,9 @@ pub struct NylonContext {
     // Caches per request to avoid repeated parsing
     pub cached_query: RwLock<Option<HashMap<String, String>>>,
     pub cached_cookies: RwLock<Option<HashMap<String, String>>>,
+    // Logging information
+    pub request_timestamp: AtomicU64,
+    pub error_message: RwLock<Option<String>>,
 }
 
 impl Default for NylonContext {
@@ -51,6 +55,7 @@ impl Default for NylonContext {
             route: RwLock::new(None),
             params: RwLock::new(None),
             host: RwLock::new("".to_string()),
+            port: RwLock::new("".to_string()),
             tls: AtomicBool::new(false),
             session_ids: RwLock::new(HashMap::new()),
             session_stream: RwLock::new(HashMap::new()),
@@ -68,6 +73,10 @@ impl Default for NylonContext {
             // Request caches
             cached_query: RwLock::new(None),
             cached_cookies: RwLock::new(None),
+
+            // Logging information
+            request_timestamp: AtomicU64::new(0),
+            error_message: RwLock::new(None),
         }
     }
 }
@@ -80,6 +89,7 @@ impl Clone for NylonContext {
             route: RwLock::new(self.route.read().expect("lock").clone()),
             params: RwLock::new(self.params.read().expect("lock").clone()),
             host: RwLock::new(self.host.read().expect("lock").clone()),
+            port: RwLock::new(self.port.read().expect("lock").clone()),
             tls: AtomicBool::new(self.tls.load(Ordering::Relaxed)),
             session_ids: RwLock::new(self.session_ids.read().expect("lock").clone()),
             session_stream: RwLock::new(self.session_stream.read().expect("lock").clone()),
@@ -95,6 +105,8 @@ impl Clone for NylonContext {
             request_body: RwLock::new(self.request_body.read().expect("lock").clone()),
             cached_query: RwLock::new(self.cached_query.read().expect("lock").clone()),
             cached_cookies: RwLock::new(self.cached_cookies.read().expect("lock").clone()),
+            request_timestamp: AtomicU64::new(self.request_timestamp.load(Ordering::Relaxed)),
+            error_message: RwLock::new(self.error_message.read().expect("lock").clone()),
         }
     }
 }

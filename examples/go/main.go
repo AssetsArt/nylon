@@ -68,6 +68,58 @@ func init() {
 			fmt.Println("Authz[Go] ResponseFilter sessionID", phase.SessionId)
 			ctx.SetResponseHeader("X-ResponseFilter", "authz-2")
 
+			// for modify response body
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.Next()
+		})
+
+		phase.ResponseBodyFilter(func(ctx *sdk.PhaseResponseBodyFilter) {
+			fmt.Println("Authz[Go] ResponseBodyFilter sessionID", phase.SessionId)
+
+			// Read response body
+			res := ctx.Response()
+			body := res.ReadBody()
+			fmt.Println("Authz[Go] ResponseBody length:", len(body))
+
+			// Modify response body (example: append text)
+			modifiedBody := append(body, []byte("\n<!-- Modified by Authz plugin -->")...)
+			res.BodyRaw(modifiedBody)
+
+			ctx.Next()
+		})
+
+		phase.Logging(func(ctx *sdk.PhaseLogging) {
+			fmt.Println("Authz[Go] Logging sessionID", phase.SessionId)
+
+			// Access request info for logging
+			req := ctx.Request()
+			res := ctx.Response()
+
+			// Log with all available information
+			fmt.Printf("Authz[Go] Log: %s %s | Status: %d | ReqBytes: %d | ResBytes: %d | Duration: %dms | Host: %s | Client: %s | Timestamp: %d\n",
+				req.Method(),
+				req.Path(),
+				res.Status(),
+				req.Bytes(),
+				res.Bytes(),
+				res.Duration(),
+				req.Host(),
+				req.ClientIP(),
+				req.Timestamp(),
+			)
+
+			// Log error if any
+			if err := res.Error(); err != "" {
+				fmt.Printf("Authz[Go] Error: %s\n", err)
+			}
+
+			// Log response headers (example: show content-type)
+			resHeaders := res.Headers()
+			if contentType, ok := resHeaders["content-type"]; ok {
+				fmt.Printf("Authz[Go] Content-Type: %s\n", contentType)
+			}
+
 			ctx.Next()
 		})
 
@@ -104,14 +156,34 @@ func init() {
 		fmt.Println("Start MyApp[Go] sessionID", phase.SessionId)
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 			fmt.Println("MyApp[Go] RequestFilter sessionID", phase.SessionId)
+
+			req := ctx.Request()
+
+			// Test new methods
+			fmt.Println("MyApp[Go] URL:", req.URL())
+			fmt.Println("MyApp[Go] Path:", req.Path())
+			fmt.Println("MyApp[Go] Query:", req.Query())
+			fmt.Println("MyApp[Go] Params:", req.Params())
+			fmt.Println("MyApp[Go] Host:", req.Host())
+			fmt.Println("MyApp[Go] ClientIP:", req.ClientIP())
+			fmt.Println("MyApp[Go] Headers:", req.Headers())
+
 			res := ctx.Response()
 			// set status and headers
 			res.SetStatus(200)
-			res.SetHeader("Content-Type", "text/plain")
-			res.RemoveHeader("Content-Length")
+			res.SetHeader("Content-Type", "application/json")
 			res.SetHeader("Transfer-Encoding", "chunked")
-			// res.SetHeader("Content-Length", "13")
-			res.BodyText("Hello, World!")
+
+			// Return info as JSON
+			info := map[string]interface{}{
+				"url":       req.URL(),
+				"path":      req.Path(),
+				"query":     req.Query(),
+				"params":    req.Params(),
+				"host":      req.Host(),
+				"client_ip": req.ClientIP(),
+			}
+			res.BodyJSON(info)
 
 			ctx.End()
 		})

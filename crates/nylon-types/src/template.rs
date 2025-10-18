@@ -1,11 +1,19 @@
 use crate::context::NylonContext;
 use chrono::Utc;
+use lru::LruCache;
 use nylon_error::NylonError;
+use once_cell::sync::Lazy;
 use pingora::http::RequestHeader;
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
+use std::sync::Mutex;
 use uuid::Uuid;
+
+// LRU cache for parsed template expressions - cache up to 5,000 unique template strings
+static PARSED_TEMPLATE_CACHE: Lazy<Mutex<LruCache<String, Vec<Expr>>>> =
+    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(5_000).unwrap())));
 
 fn percent_decode_plus(input: &str, plus_as_space: bool) -> String {
     let mut result = String::with_capacity(input.len());
@@ -222,6 +230,26 @@ fn skip_whitespace<I: Iterator<Item = char>>(chars: &mut std::iter::Peekable<I>)
 
 /// Extract and parse template expressions from a string
 pub fn extract_and_parse_templates(input: &str) -> Result<Vec<Expr>, NylonError> {
+    // Check cache first
+    if let Ok(mut cache) = PARSED_TEMPLATE_CACHE.lock()
+        && let Some(cached) = cache.get(input)
+    {
+        return Ok(cached.clone());
+    }
+
+    // Cache miss - parse template
+    let parsed = parse_template_uncached(input)?;
+
+    // Store in cache
+    if let Ok(mut cache) = PARSED_TEMPLATE_CACHE.lock() {
+        cache.put(input.to_string(), parsed.clone());
+    }
+
+    Ok(parsed)
+}
+
+/// Internal function to parse template without cache
+fn parse_template_uncached(input: &str) -> Result<Vec<Expr>, NylonError> {
     let re = Regex::new(r"\$\{([^}]+)\}")
         .map_err(|e| NylonError::ConfigError(format!("Invalid regex: {e}")))?;
 
@@ -256,6 +284,22 @@ pub fn extract_and_parse_templates(input: &str) -> Result<Vec<Expr>, NylonError>
     }
 
     Ok(result)
+}
+
+/// Clear parsed template cache
+pub fn clear_parsed_template_cache() {
+    if let Ok(mut cache) = PARSED_TEMPLATE_CACHE.lock() {
+        cache.clear();
+    }
+}
+
+/// Get parsed template cache statistics
+pub fn get_parsed_template_cache_stats() -> (usize, usize) {
+    if let Ok(cache) = PARSED_TEMPLATE_CACHE.lock() {
+        (cache.len(), cache.cap().get())
+    } else {
+        (0, 0)
+    }
 }
 
 /// Evaluate a template expression in the given context

@@ -14,9 +14,9 @@ services:
     algorithm: round_robin # Options: round_robin, random, consistent, weighted
     endpoints:
       - ip: 127.0.0.1
-        port: 3000
-      - ip: 127.0.0.1
         port: 3001
+      - ip: 127.0.0.1
+        port: 3002
     health_check:
       enabled: false
       path: /health

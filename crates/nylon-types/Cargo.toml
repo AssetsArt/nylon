@@ -15,3 +15,5 @@ bytes = { workspace = true }
 libloading = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true }
+lru = { workspace = true }
+once_cell = { workspace = true }
