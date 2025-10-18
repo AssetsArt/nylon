@@ -142,6 +142,22 @@ impl SessionHandler {
                 Self::handle_read_request_client_ip(session_stream, ctx).await?;
                 Ok(None)
             }
+            methods::READ_REQUEST_METHOD => {
+                Self::handle_read_request_method(session_stream, session).await?;
+                Ok(None)
+            }
+            methods::READ_RESPONSE_STATUS => {
+                Self::handle_read_response_status(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_BYTES => {
+                Self::handle_read_request_bytes(session_stream, session).await?;
+                Ok(None)
+            }
+            methods::READ_RESPONSE_BYTES => {
+                Self::handle_read_response_bytes(session_stream, ctx, response_body).await?;
+                Ok(None)
+            }
 
             // WebSocket control methods (temporary stub to simulate events)
             methods::WEBSOCKET_UPGRADE => {
@@ -735,6 +751,88 @@ impl SessionHandler {
                 PluginPhase::Zero,
                 methods::READ_REQUEST_CLIENT_IP,
                 client_ip.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_method(
+        session_stream: &SessionStream,
+        session: &Session,
+    ) -> Result<(), NylonError> {
+        let method = match session.as_http2() {
+            Some(h2) => h2.req_header().method.as_str(),
+            None => session.req_header().method.as_str(),
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_METHOD,
+                method.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_response_status(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let status = ctx
+            .set_response_status
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let status_str = status.to_string();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_RESPONSE_STATUS,
+                status_str.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_bytes(
+        session_stream: &SessionStream,
+        session: &Session,
+    ) -> Result<(), NylonError> {
+        // Try to get Content-Length from request headers
+        let bytes: i64 = session
+            .req_header()
+            .headers
+            .get("content-length")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s: &str| s.parse::<i64>().ok())
+            .unwrap_or(0);
+        let bytes_str = bytes.to_string();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_BYTES,
+                bytes_str.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_response_bytes(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+        response_body: &Option<Bytes>,
+    ) -> Result<(), NylonError> {
+        // Try to get response body length from context
+        let mut bytes: i64 = ctx
+            .set_response_body
+            .read()
+            .map(|body| body.len() as i64)
+            .unwrap_or(0);
+
+        if let Some(response_body) = response_body {
+            bytes += response_body.len() as i64;
+        }
+
+        let bytes_str = bytes.to_string();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_RESPONSE_BYTES,
+                bytes_str.as_bytes(),
             )
             .await
     }

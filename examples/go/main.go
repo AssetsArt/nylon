@@ -89,6 +89,26 @@ func init() {
 			ctx.Next()
 		})
 
+		phase.Logging(func(ctx *sdk.PhaseLogging) {
+			fmt.Println("Authz[Go] Logging sessionID", phase.SessionId)
+
+			// Access request info for logging
+			req := ctx.Request()
+			res := ctx.Response()
+
+			fmt.Printf("Authz[Go] Log: %s %s | Status: %d | ReqBytes: %d | ResBytes: %d | Host: %s | Client: %s\n",
+				req.Method(),
+				req.Path(),
+				res.Status(),
+				req.Bytes(),
+				res.Bytes(),
+				req.Host(),
+				req.ClientIP(),
+			)
+
+			ctx.Next()
+		})
+
 	})
 
 	plugin.AddPhaseHandler("stream", func(phase *sdk.PhaseHandler) {

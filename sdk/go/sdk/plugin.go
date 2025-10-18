@@ -144,6 +144,9 @@ func register_session_stream(sessionID C.uint32_t, entry *C.char, length C.uint3
 		responseBodyFilter: func(ctx *PhaseResponseBodyFilter) {
 			ctx.Next()
 		},
+		logging: func(ctx *PhaseLogging) {
+			ctx.Next()
+		},
 	}
 	handler(phase)
 	streamSessions.Store(sid, phase)
@@ -177,6 +180,12 @@ func event_stream(ffiBuffer *C.FfiBuffer) {
 	case 3:
 		go func() {
 			phaseHandler.responseBodyFilter(&PhaseResponseBodyFilter{
+				ctx: phaseHandler.http_ctx,
+			})
+		}()
+	case 4:
+		go func() {
+			phaseHandler.logging(&PhaseLogging{
 				ctx: phaseHandler.http_ctx,
 			})
 		}()
@@ -310,6 +319,7 @@ type PhaseHandler struct {
 	requestFilter      func(ctx *PhaseRequestFilter)
 	responseFilter     func(ctx *PhaseResponseFilter)
 	responseBodyFilter func(ctx *PhaseResponseBodyFilter)
+	logging            func(ctx *PhaseLogging)
 }
 
 func (p *NylonPlugin) AddPhaseHandler(phaseName string, phaseHandler func(phase *PhaseHandler)) {
@@ -326,4 +336,8 @@ func (p *PhaseHandler) ResponseFilter(phaseResponseFilter func(responseFilter *P
 
 func (p *PhaseHandler) ResponseBodyFilter(phaseResponseBodyFilter func(responseBodyFilter *PhaseResponseBodyFilter)) {
 	p.responseBodyFilter = phaseResponseBodyFilter
+}
+
+func (p *PhaseHandler) Logging(phaseLogging func(logging *PhaseLogging)) {
+	p.logging = phaseLogging
 }

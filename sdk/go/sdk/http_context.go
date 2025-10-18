@@ -3,6 +3,7 @@ package sdk
 import (
 	"encoding/binary"
 	"encoding/json"
+	"strconv"
 
 	"github.com/AssetsArt/nylon/sdk/go/fbs/nylon_plugin"
 	flatbuffers "github.com/google/flatbuffers/go"
@@ -266,6 +267,81 @@ func (r *Request) ClientIP() string {
 
 	ctx.cond.Wait()
 	return string(ctx.dataMap[methodID])
+}
+
+func (r *Request) Method() string {
+	ctx := r.ctx
+	methodID := MethodIDMapping[NylonMethodReadRequestMethod]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	go func() {
+		RequestMethod(ctx.sessionID, 0, NylonMethodReadRequestMethod, nil)
+	}()
+
+	ctx.cond.Wait()
+	return string(ctx.dataMap[methodID])
+}
+
+func (r *Request) Bytes() int64 {
+	ctx := r.ctx
+	methodID := MethodIDMapping[NylonMethodReadRequestBytes]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	go func() {
+		RequestMethod(ctx.sessionID, 0, NylonMethodReadRequestBytes, nil)
+	}()
+
+	ctx.cond.Wait()
+	bytesStr := string(ctx.dataMap[methodID])
+	bytes := int64(0)
+	if len(bytesStr) > 0 {
+		bytes, _ = strconv.ParseInt(bytesStr, 10, 64)
+	}
+	return bytes
+}
+
+func (r *Response) Status() int {
+	ctx := r.ctx
+	methodID := MethodIDMapping[NylonMethodReadResponseStatus]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	go func() {
+		RequestMethod(ctx.sessionID, 0, NylonMethodReadResponseStatus, nil)
+	}()
+
+	ctx.cond.Wait()
+	statusStr := string(ctx.dataMap[methodID])
+	status := 0
+	if len(statusStr) > 0 {
+		status, _ = strconv.Atoi(statusStr)
+	}
+	return status
+}
+
+func (r *Response) Bytes() int64 {
+	ctx := r.ctx
+	methodID := MethodIDMapping[NylonMethodReadResponseBytes]
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
+
+	go func() {
+		RequestMethod(ctx.sessionID, 0, NylonMethodReadResponseBytes, nil)
+	}()
+
+	ctx.cond.Wait()
+	bytesStr := string(ctx.dataMap[methodID])
+	bytes := int64(0)
+	if len(bytesStr) > 0 {
+		bytes, _ = strconv.ParseInt(bytesStr, 10, 64)
+	}
+	return bytes
 }
 
 // WebSocket send helpers

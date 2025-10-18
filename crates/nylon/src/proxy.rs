@@ -544,14 +544,13 @@ impl ProxyHttp for NylonRuntime {
         Ok(None)
     }
 
-    async fn logging(
-        &self,
-        _session: &mut Session,
-        _e: Option<&pingora::Error>,
-        ctx: &mut Self::CTX,
-    ) where
+    async fn logging(&self, session: &mut Session, _e: Option<&pingora::Error>, ctx: &mut Self::CTX)
+    where
         Self::CTX: Send + Sync,
     {
+        // Process middleware for logging phase
+        let _ = process_middleware(self, PluginPhase::Logging, ctx, session, &None).await;
+
         let streams = ctx
             .session_stream
             .read()
