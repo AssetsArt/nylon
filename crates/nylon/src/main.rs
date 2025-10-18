@@ -103,37 +103,6 @@ fn handle_run_command(config_path: String) -> Result<(), NylonError> {
             error!("Failed to initialize ACME certificates: {}", e);
         }
 
-        // wating signal HUP for reload config
-        // loop {
-        //     info!("Reloading runtime config...");
-        //     let config = match RuntimeConfig::from_file(&config_path) {
-        //         Ok(config) => config,
-        //         Err(e) => {
-        //             error!("Failed to load runtime config: {}", e);
-        //             continue;
-        //         }
-        //     };
-        //     match config.store() {
-        //         Ok(_) => {
-        //             info!("Runtime config stored successfully");
-        //         }
-        //         Err(e) => {
-        //             error!("Failed to store runtime config: {}", e);
-        //         }
-        //     }
-
-        //     // store
-        //     info!("Storing proxy config...");
-        //     match proxy_config.store().await {
-        //         Ok(_) => {
-        //             info!("Proxy config stored successfully");
-        //         }
-        //         Err(e) => {
-        //             error!("Failed to store proxy config: {}", e);
-        //         }
-        //     }
-        // }
-
         Ok::<(), NylonError>(())
     })?;
 
@@ -166,7 +135,7 @@ async fn initialize_acme_certificates() -> Result<(), NylonError> {
         let acme_dir = acme_config.acme_dir.as_deref().unwrap_or(".acme");
 
         info!("Checking certificate for domain: {}", domain);
-        
+
         // ตรวจสอบว่ามี certificate อยู่แล้วหรือไม่ (พร้อม chain ถ้ามี)
         match nylon_tls::AcmeClient::load_certificate_with_chain(acme_dir, domain) {
             Ok((cert, key, chain)) => {
@@ -178,8 +147,12 @@ async fn initialize_acme_certificates() -> Result<(), NylonError> {
                                 "Certificate for {} is expired, issuing new certificate...",
                                 domain
                             );
-                            if let Err(issue_err) = issue_new_certificate(domain, acme_config).await {
-                                error!("Failed to issue new certificate for {}: {}. Using expired certificate.", domain, issue_err);
+                            if let Err(issue_err) = issue_new_certificate(domain, acme_config).await
+                            {
+                                error!(
+                                    "Failed to issue new certificate for {}: {}. Using expired certificate.",
+                                    domain, issue_err
+                                );
                                 // Store the expired cert anyway - better than nothing
                                 nylon_store::tls::store_acme_cert(cert_info)?;
                             }
@@ -197,7 +170,10 @@ async fn initialize_acme_certificates() -> Result<(), NylonError> {
                         error!("Failed to parse existing certificate for {}: {}", domain, e);
                         warn!("Attempting to issue new certificate for {}", domain);
                         if let Err(issue_err) = issue_new_certificate(domain, acme_config).await {
-                            error!("Failed to issue new certificate for {}: {}. Server will continue without this certificate.", domain, issue_err);
+                            error!(
+                                "Failed to issue new certificate for {}: {}. Server will continue without this certificate.",
+                                domain, issue_err
+                            );
                             // Don't propagate error - let server continue
                         }
                     }
@@ -210,7 +186,10 @@ async fn initialize_acme_certificates() -> Result<(), NylonError> {
                     domain
                 );
                 if let Err(issue_err) = issue_new_certificate(domain, acme_config).await {
-                    error!("Failed to issue new certificate for {}: {}. Server will continue without this certificate.", domain, issue_err);
+                    error!(
+                        "Failed to issue new certificate for {}: {}. Server will continue without this certificate.",
+                        domain, issue_err
+                    );
                     // Don't propagate error - let server continue
                 }
             }

@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use nylon_error::NylonError;
 use nylon_plugin::{run_middleware, stream::PluginSessionStream, types::MiddlewareContext};
-use nylon_types::{context::NylonContext, services::ServiceType};
+use nylon_types::{context::NylonContext, plugins::PluginPhase, services::ServiceType};
 use pingora::{
     ErrorType,
     http::ResponseHeader,
@@ -122,7 +122,7 @@ fn process_tls_redirect(host: &str, tls: bool) -> Option<String> {
 
 async fn process_middleware<T>(
     proxy: &T,
-    phase: u8,
+    phase: PluginPhase,
     ctx: &mut NylonContext,
     session: &mut Session,
 ) -> pingora::Result<bool>
@@ -158,7 +158,7 @@ where
 
         match run_middleware(
             proxy,
-            phase,
+            &phase,
             &MiddlewareContext {
                 middleware: middleware.0.clone(),
                 payload: middleware.0.payload.clone(),
@@ -268,7 +268,7 @@ impl ProxyHttp for NylonRuntime {
         }
 
         // Process middleware
-        match process_middleware(self, 1, res.ctx, session).await {
+        match process_middleware(self, PluginPhase::RequestFilter, res.ctx, session).await {
             Ok(true) => return Ok(true),
             Ok(false) => {}
             Err(e) => {
@@ -283,7 +283,7 @@ impl ProxyHttp for NylonRuntime {
                 match nylon_plugin::session_stream(
                     self,
                     plugin.name.as_str(),
-                    1,
+                    PluginPhase::RequestFilter,
                     plugin.entry.as_str(),
                     res.ctx,
                     session,
@@ -456,7 +456,7 @@ impl ProxyHttp for NylonRuntime {
         Self::CTX: Send + Sync,
     {
         // Process middleware
-        let _ = process_middleware(self, 2, ctx, session).await;
+        let _ = process_middleware(self, PluginPhase::ResponseFilter, ctx, session).await;
 
         // Add response headers
         for (key, value) in ctx

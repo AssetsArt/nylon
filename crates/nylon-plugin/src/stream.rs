@@ -2,7 +2,7 @@
 
 use async_trait::async_trait;
 use nylon_error::NylonError;
-use nylon_types::plugins::{FfiBuffer, FfiPlugin, SessionStream};
+use nylon_types::plugins::{FfiBuffer, FfiPlugin, PluginPhase, SessionStream};
 use nylon_types::websocket::WebSocketMessage;
 use once_cell::sync::Lazy;
 use std::{
@@ -75,7 +75,7 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
 pub trait PluginSessionStream {
     fn new(plugin: Arc<FfiPlugin>, session_id: u32) -> Self;
     async fn open(&self, entry: &str) -> Result<u32, NylonError>;
-    async fn event_stream(&self, phase: u8, method: u32, data: &[u8]) -> Result<(), NylonError>;
+    async fn event_stream(&self, phase: PluginPhase, method: u32, data: &[u8]) -> Result<(), NylonError>;
     async fn close(&self) -> Result<(), NylonError>;
 }
 
@@ -127,10 +127,10 @@ impl PluginSessionStream for SessionStream {
         Ok(self.session_id)
     }
 
-    async fn event_stream(&self, phase: u8, method: u32, data: &[u8]) -> Result<(), NylonError> {
+    async fn event_stream(&self, phase: PluginPhase, method: u32, data: &[u8]) -> Result<(), NylonError> {
         let ffi_buffer = &FfiBuffer {
             sid: self.session_id,
-            phase,
+            phase: phase.to_u8(),
             method,
             ptr: data.as_ptr(),
             len: data.len() as u64,

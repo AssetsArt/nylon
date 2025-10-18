@@ -6,6 +6,7 @@ use nylon_error::NylonError;
 use nylon_sdk::fbs::plugin_generated::nylon_plugin::{
     HeaderKeyValue, HeaderKeyValueArgs, NylonHttpHeaders, NylonHttpHeadersArgs,
 };
+use nylon_types::plugins::PluginPhase;
 use nylon_types::websocket::WebSocketMessage;
 use nylon_types::{
     context::NylonContext,
@@ -196,7 +197,7 @@ impl SessionHandler {
 
                 // Notify plugin side that WebSocket connection is established immediately
                 let _ = session_stream
-                    .event_stream(0, methods::WEBSOCKET_ON_OPEN, &[])
+                    .event_stream(PluginPhase::Zero, methods::WEBSOCKET_ON_OPEN, &[])
                     .await;
 
                 // Spawn task to forward cluster messages to client frames
@@ -240,7 +241,7 @@ impl SessionHandler {
                     let session_stream = session_stream.clone();
                     async move {
                         let _ = session_stream
-                            .event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[])
+                            .event_stream(PluginPhase::Zero, methods::WEBSOCKET_ON_CLOSE, &[])
                             .await;
                     }
                 });
@@ -355,7 +356,7 @@ impl SessionHandler {
         };
         let payload_slice = payload.as_deref().unwrap_or_default();
         session_stream
-            .event_stream(0, methods::GET_PAYLOAD, payload_slice)
+            .event_stream(PluginPhase::Zero, methods::GET_PAYLOAD, payload_slice)
             .await
     }
 
@@ -468,7 +469,7 @@ impl SessionHandler {
                 .clone()
         };
         session_stream
-            .event_stream(0, methods::READ_RESPONSE_FULL_BODY, &body)
+            .event_stream(PluginPhase::Zero, methods::READ_RESPONSE_FULL_BODY, &body)
             .await
     }
 
@@ -495,7 +496,7 @@ impl SessionHandler {
                 .clone()
         };
         session_stream
-            .event_stream(0, methods::READ_REQUEST_FULL_BODY, &req_body)
+            .event_stream(PluginPhase::Zero, methods::READ_REQUEST_FULL_BODY, &req_body)
             .await
     }
 
@@ -512,12 +513,12 @@ impl SessionHandler {
             };
             if let Some(value) = headers.get(&read_key) {
                 session_stream
-                    .event_stream(0, methods::READ_REQUEST_HEADER, value.as_bytes())
+                    .event_stream(PluginPhase::Zero, methods::READ_REQUEST_HEADER, value.as_bytes())
                     .await?;
             }
         } else {
             session_stream
-                .event_stream(0, methods::READ_REQUEST_HEADER, &[])
+                .event_stream(PluginPhase::Zero, methods::READ_REQUEST_HEADER, &[])
                 .await?;
         }
         Ok(())
@@ -558,7 +559,7 @@ impl SessionHandler {
         fbs.finish(headers, None);
         let headers = fbs.finished_data();
         session_stream
-            .event_stream(0, methods::READ_REQUEST_HEADERS, headers)
+            .event_stream(PluginPhase::Zero, methods::READ_REQUEST_HEADERS, headers)
             .await
     }
 }
