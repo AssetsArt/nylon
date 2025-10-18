@@ -68,10 +68,7 @@ impl SessionHandler {
                 Ok(None)
             }
             methods::NEXT => Ok(Some(PluginResult::default())),
-            methods::END => {
-                // println!("END method: {}, sid: {}", method, session_stream.session_id);
-                return Ok(Some(PluginResult::new(true, false)));
-            }
+            methods::END => Ok(Some(PluginResult::new(true, false))),
 
             // Response methods
             methods::SET_RESPONSE_HEADER => {

@@ -1,15 +1,23 @@
 #![allow(clippy::type_complexity)]
 use crate as store;
+use lru::LruCache;
 use nylon_error::NylonError;
 use nylon_types::{
     context::Route,
-    route::{MiddlewareItem, PathConfig, RouteConfig, HTTP_METHODS},
+    route::{HTTP_METHODS, MiddlewareItem, PathConfig, RouteConfig},
     services::ServiceItem,
-    template::{extract_and_parse_templates, walk_json, Expr},
+    template::{Expr, extract_and_parse_templates, walk_json},
 };
+use once_cell::sync::Lazy;
 use pingora::proxy::Session;
 use serde_json::Value;
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
+use std::sync::Mutex;
+
+// LRU cache for route matching - cache up to 10,000 route lookups
+static ROUTE_CACHE: Lazy<Mutex<LruCache<String, (Route, HashMap<String, String>)>>> =
+    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(10_000).unwrap())));
 
 fn parsed_middleware(
     middleware: Vec<MiddlewareItem>,
@@ -58,6 +66,10 @@ pub fn store(
     store::insert(store::KEY_ROUTES_MATCHIT, globa_routes_matchit);
     store::insert(store::KEY_ROUTES, store_route);
     store::insert(store::KEY_TLS_ROUTES, tls_routes);
+
+    // Clear route cache when routes are reloaded
+    clear_route_cache();
+
     Ok(())
 }
 
@@ -68,6 +80,23 @@ pub fn get_tls_route(host: &str) -> Result<Option<String>, NylonError> {
         NylonError::RouteNotFound(format!("TLS route not found for host: {}", host))
     })?;
     Ok(tls_route.clone())
+}
+
+/// Clear the route cache - useful when routes are reloaded
+pub fn clear_route_cache() {
+    if let Ok(mut cache) = ROUTE_CACHE.lock() {
+        cache.clear();
+        tracing::info!("Route cache cleared");
+    }
+}
+
+/// Get route cache statistics
+pub fn get_route_cache_stats() -> (usize, usize) {
+    if let Ok(cache) = ROUTE_CACHE.lock() {
+        (cache.len(), cache.cap().get())
+    } else {
+        (0, 0)
+    }
 }
 
 fn process_route_matcher(
@@ -144,9 +173,11 @@ fn create_matchit_router(
                 //     NylonError::ConfigError(format!("Failed to register route: {e}"))
                 // })?;
                 for method in HTTP_METHODS {
-                    matchit_route.insert(format!("/{method}{p}"), service.clone()).map_err(|e| {
-                        NylonError::ConfigError(format!("Failed to register route: {e}"))
-                    })?;
+                    matchit_route
+                        .insert(format!("/{method}{p}"), service.clone())
+                        .map_err(|e| {
+                            NylonError::ConfigError(format!("Failed to register route: {e}"))
+                        })?;
                 }
                 tracing::info!("[{}] Add All Methods: {:?}", route.name, p);
             }
@@ -311,6 +342,20 @@ fn find_matching_route(
     path: &str,
     method: &str,
 ) -> Result<(Route, HashMap<String, String>), NylonError> {
+    // Create cache key from route_name, method, and path
+    let cache_key = format!("{}:{}:{}", route_name, method, path);
+
+    // Check cache first
+    if let Ok(mut cache) = ROUTE_CACHE.lock()
+        && let Some(cached) = cache.get(&cache_key)
+    {
+        tracing::debug!("Route cache hit: {}:{}:{}", route_name, method, path);
+        return Ok(cached.clone());
+    }
+
+    // Cache miss - perform actual route matching
+    tracing::debug!("Route cache miss: {}:{}:{}", route_name, method, path);
+
     let router = routes_matchit
         .get(route_name)
         .ok_or_else(|| NylonError::RouteNotFound("Route map missing for given name".into()))?;
@@ -318,8 +363,7 @@ fn find_matching_route(
     // Normalize method and prefer method-specific match first to avoid catch-all overshadowing
     let normalized_method = method.to_uppercase();
     let path_with_method = format!("/{normalized_method}{path}");
-    // println!("path_with_method: {}", path_with_method);
-    // println!("path: {}", path);
+
     let result = router
         .at(&path_with_method)
         .or_else(|_| router.at(path))
@@ -328,13 +372,18 @@ fn find_matching_route(
                 "No route matched for method: {method}, path: {path}"
             ))
         })?;
-    // println!("result: {:?}", result);
+
     let route = result.value.clone();
-    let params = result
+    let params: HashMap<String, String> = result
         .params
         .iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
+
+    // Store in cache
+    if let Ok(mut cache) = ROUTE_CACHE.lock() {
+        cache.put(cache_key, (route.clone(), params.clone()));
+    }
 
     Ok((route, params))
 }
