@@ -1,8 +1,16 @@
 use crate::{KEY_ACME_CERTS, KEY_TLS, get, insert};
+use lru::LruCache;
 use nylon_error::NylonError;
 use nylon_tls::CertificateInfo;
 use nylon_types::tls::{TlsConfig, TlsKind};
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use std::num::NonZeroUsize;
+use std::sync::Mutex;
+
+// LRU cache for TLS certificate lookups - cache up to 1,000 domains
+static TLS_CERT_CACHE: Lazy<Mutex<LruCache<String, TlsStore>>> =
+    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(1_000).unwrap())));
 
 #[derive(Debug, Clone)]
 pub struct TlsStore {
@@ -78,10 +86,36 @@ pub fn store(tls: Vec<&TlsConfig>, acme_dir: Option<String>) -> Result<(), Nylon
         insert::<HashMap<String, CertificateInfo>>(KEY_ACME_CERTS, HashMap::new());
     }
 
+    // Clear TLS cert cache when configuration is reloaded
+    clear_tls_cert_cache();
+
     Ok(())
 }
 
 pub fn get_certs(domain: &str) -> Result<TlsStore, NylonError> {
+    // Check cache first
+    if let Ok(mut cache) = TLS_CERT_CACHE.lock()
+        && let Some(cached) = cache.get(domain)
+    {
+        tracing::debug!("TLS cert cache hit: {}", domain);
+        return Ok(cached.clone());
+    }
+
+    tracing::debug!("TLS cert cache miss: {}", domain);
+
+    // Cache miss - lookup certificate
+    let cert_store = lookup_cert_from_store(domain)?;
+
+    // Store in cache
+    if let Ok(mut cache) = TLS_CERT_CACHE.lock() {
+        cache.put(domain.to_string(), cert_store.clone());
+    }
+
+    Ok(cert_store)
+}
+
+/// Internal function to lookup certificate from store (without cache)
+fn lookup_cert_from_store(domain: &str) -> Result<TlsStore, NylonError> {
     // ลองหาจาก ACME certificates ก่อน
     if let Some(acme_certs) = get::<HashMap<String, CertificateInfo>>(KEY_ACME_CERTS)
         && let Some(cert_info) = acme_certs.get(domain)
@@ -111,10 +145,34 @@ pub fn store_acme_cert(cert_info: CertificateInfo) -> Result<(), NylonError> {
     let mut acme_certs =
         get::<HashMap<String, CertificateInfo>>(KEY_ACME_CERTS).unwrap_or_default();
 
-    acme_certs.insert(cert_info.domain.clone(), cert_info);
+    let domain = cert_info.domain.clone();
+    acme_certs.insert(domain.clone(), cert_info);
     insert::<HashMap<String, CertificateInfo>>(KEY_ACME_CERTS, acme_certs);
 
+    // Invalidate cache for this domain
+    if let Ok(mut cache) = TLS_CERT_CACHE.lock() {
+        cache.pop(&domain);
+        tracing::info!("Invalidated TLS cert cache for domain: {}", domain);
+    }
+
     Ok(())
+}
+
+/// Clear TLS certificate cache - useful when certificates are reloaded
+pub fn clear_tls_cert_cache() {
+    if let Ok(mut cache) = TLS_CERT_CACHE.lock() {
+        cache.clear();
+        tracing::info!("TLS certificate cache cleared");
+    }
+}
+
+/// Get TLS certificate cache statistics
+pub fn get_tls_cert_cache_stats() -> (usize, usize) {
+    if let Ok(cache) = TLS_CERT_CACHE.lock() {
+        (cache.len(), cache.cap().get())
+    } else {
+        (0, 0)
+    }
 }
 
 /// ดึงรายการ certificates ทั้งหมดที่ต้องตรวจสอบการ renew

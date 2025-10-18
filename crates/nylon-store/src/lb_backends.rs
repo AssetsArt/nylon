@@ -1,7 +1,9 @@
 use crate as store;
 use fnv::FnvHasher;
+use lru::LruCache;
 use nylon_error::NylonError;
 use nylon_types::services::{Algorithm, HealthCheck, ServiceItem, ServiceType};
+use once_cell::sync::Lazy;
 use pingora::http::RequestHeader;
 use pingora::lb::health_check::HttpHealthCheck;
 use pingora::{
@@ -16,11 +18,17 @@ use pingora::{
     prelude::HttpPeer,
     protocols::l4::socket::SocketAddr,
 };
+use std::num::NonZeroUsize;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::{
     collections::{BTreeSet, HashMap},
     sync::Arc,
 };
+
+// LRU cache for backend service lookups - cache up to 500 services
+static BACKEND_SERVICE_CACHE: Lazy<Mutex<LruCache<String, HttpService>>> =
+    Lazy::new(|| Mutex::new(LruCache::new(NonZeroUsize::new(500).unwrap())));
 
 #[derive(Clone)]
 pub enum BackendType {
@@ -242,22 +250,58 @@ pub async fn store(services: &Vec<&ServiceItem>) -> Result<(), NylonError> {
         );
     }
     store::insert(store::KEY_LB_BACKENDS, store_backends);
+
+    // Clear backend service cache when backends are reloaded
+    clear_backend_service_cache();
+
     Ok(())
 }
 
 pub async fn get(service_name: &str) -> Result<HttpService, NylonError> {
+    // Check cache first
+    if let Ok(mut cache) = BACKEND_SERVICE_CACHE.lock()
+        && let Some(cached) = cache.get(service_name)
+    {
+        tracing::debug!("Backend service cache hit: {}", service_name);
+        return Ok(cached.clone());
+    }
+
+    tracing::debug!("Backend service cache miss: {}", service_name);
+
+    // Cache miss - lookup from store
     let Some(services) = store::get::<HashMap<String, HttpService>>(store::KEY_LB_BACKENDS) else {
         return Err(NylonError::ConfigError(format!(
             "Services not found: {}",
             service_name
         )));
     };
-    match services.get(service_name) {
-        Some(service) => Ok(service.clone()),
-        None => Err(NylonError::ConfigError(format!(
-            "Service not found: {}",
-            service_name
-        ))),
+    let service = services
+        .get(service_name)
+        .ok_or_else(|| NylonError::ConfigError(format!("Service not found: {}", service_name)))?
+        .clone();
+
+    // Store in cache
+    if let Ok(mut cache) = BACKEND_SERVICE_CACHE.lock() {
+        cache.put(service_name.to_string(), service.clone());
+    }
+
+    Ok(service)
+}
+
+/// Clear backend service cache - useful when services are reloaded
+pub fn clear_backend_service_cache() {
+    if let Ok(mut cache) = BACKEND_SERVICE_CACHE.lock() {
+        cache.clear();
+        tracing::info!("Backend service cache cleared");
+    }
+}
+
+/// Get backend service cache statistics
+pub fn get_backend_service_cache_stats() -> (usize, usize) {
+    if let Ok(cache) = BACKEND_SERVICE_CACHE.lock() {
+        (cache.len(), cache.cap().get())
+    } else {
+        (0, 0)
     }
 }
 
