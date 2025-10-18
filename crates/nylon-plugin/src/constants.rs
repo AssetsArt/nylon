@@ -18,6 +18,9 @@ pub mod methods {
     pub const READ_RESPONSE_FULL_BODY: u32 = 107;
     pub const READ_RESPONSE_STATUS: u32 = 108;
     pub const READ_RESPONSE_BYTES: u32 = 109;
+    pub const READ_RESPONSE_HEADERS: u32 = 110;
+    pub const READ_RESPONSE_DURATION: u32 = 111;
+    pub const READ_RESPONSE_ERROR: u32 = 112;
 
     // Request methods
     pub const READ_REQUEST_FULL_BODY: u32 = 200;
@@ -31,6 +34,7 @@ pub mod methods {
     pub const READ_REQUEST_CLIENT_IP: u32 = 208;
     pub const READ_REQUEST_METHOD: u32 = 209;
     pub const READ_REQUEST_BYTES: u32 = 210;
+    pub const READ_REQUEST_TIMESTAMP: u32 = 211;
 
     // WebSocket methods (Plugin -> Rust)
     pub const WEBSOCKET_UPGRADE: u32 = 300;

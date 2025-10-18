@@ -158,6 +158,22 @@ impl SessionHandler {
                 Self::handle_read_response_bytes(session_stream, ctx, response_body).await?;
                 Ok(None)
             }
+            methods::READ_REQUEST_TIMESTAMP => {
+                Self::handle_read_request_timestamp(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_RESPONSE_HEADERS => {
+                Self::handle_read_response_headers(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_RESPONSE_DURATION => {
+                Self::handle_read_response_duration(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_RESPONSE_ERROR => {
+                Self::handle_read_response_error(session_stream, ctx).await?;
+                Ok(None)
+            }
 
             // WebSocket control methods (temporary stub to simulate events)
             methods::WEBSOCKET_UPGRADE => {
@@ -833,6 +849,110 @@ impl SessionHandler {
                 PluginPhase::Zero,
                 methods::READ_RESPONSE_BYTES,
                 bytes_str.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_timestamp(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let timestamp = ctx
+            .request_timestamp
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let timestamp_str = timestamp.to_string();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_TIMESTAMP,
+                timestamp_str.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_response_headers(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        // Build flatbuffers for response headers from context
+        let mut builder = flatbuffers::FlatBufferBuilder::new();
+        let mut headers_vec = vec![];
+
+        // Get response headers from context
+        let headers_map = ctx
+            .add_response_header
+            .read()
+            .map(|h| h.clone())
+            .unwrap_or_default();
+
+        for (key, value) in headers_map.iter() {
+            let key_str = builder.create_string(key);
+            let value_str = builder.create_string(value);
+
+            let header = HeaderKeyValue::create(
+                &mut builder,
+                &HeaderKeyValueArgs {
+                    key: Some(key_str),
+                    value: Some(value_str),
+                },
+            );
+            headers_vec.push(header);
+        }
+
+        let headers_offset = builder.create_vector(&headers_vec);
+        let http_headers = NylonHttpHeaders::create(
+            &mut builder,
+            &NylonHttpHeadersArgs {
+                headers: Some(headers_offset),
+            },
+        );
+        builder.finish(http_headers, None);
+
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_RESPONSE_HEADERS,
+                builder.finished_data(),
+            )
+            .await
+    }
+
+    async fn handle_read_response_duration(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let start_time = ctx
+            .request_timestamp
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let duration = now.saturating_sub(start_time);
+        let duration_str = duration.to_string();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_RESPONSE_DURATION,
+                duration_str.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_response_error(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let error_msg = ctx
+            .error_message
+            .read()
+            .map(|e| e.clone().unwrap_or_default())
+            .unwrap_or_default();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_RESPONSE_ERROR,
+                error_msg.as_bytes(),
             )
             .await
     }

@@ -20,19 +20,23 @@ const (
 )
 
 const (
-	NylonMethodReadRequestFullBody NylonMethods = "read_request_full_body"
-	NylonMethodReadRequestHeader   NylonMethods = "read_request_header"
-	NylonMethodReadRequestHeaders  NylonMethods = "read_request_headers"
-	NylonMethodReadRequestURL      NylonMethods = "read_request_url"
-	NylonMethodReadRequestPath     NylonMethods = "read_request_path"
-	NylonMethodReadRequestQuery    NylonMethods = "read_request_query"
-	NylonMethodReadRequestParams   NylonMethods = "read_request_params"
-	NylonMethodReadRequestHost     NylonMethods = "read_request_host"
-	NylonMethodReadRequestClientIP NylonMethods = "read_request_client_ip"
-	NylonMethodReadRequestMethod   NylonMethods = "read_request_method"
-	NylonMethodReadRequestBytes    NylonMethods = "read_request_bytes"
-	NylonMethodReadResponseStatus  NylonMethods = "read_response_status"
-	NylonMethodReadResponseBytes   NylonMethods = "read_response_bytes"
+	NylonMethodReadRequestFullBody  NylonMethods = "read_request_full_body"
+	NylonMethodReadRequestHeader    NylonMethods = "read_request_header"
+	NylonMethodReadRequestHeaders   NylonMethods = "read_request_headers"
+	NylonMethodReadRequestURL       NylonMethods = "read_request_url"
+	NylonMethodReadRequestPath      NylonMethods = "read_request_path"
+	NylonMethodReadRequestQuery     NylonMethods = "read_request_query"
+	NylonMethodReadRequestParams    NylonMethods = "read_request_params"
+	NylonMethodReadRequestHost      NylonMethods = "read_request_host"
+	NylonMethodReadRequestClientIP  NylonMethods = "read_request_client_ip"
+	NylonMethodReadRequestMethod    NylonMethods = "read_request_method"
+	NylonMethodReadRequestBytes     NylonMethods = "read_request_bytes"
+	NylonMethodReadRequestTimestamp NylonMethods = "read_request_timestamp"
+	NylonMethodReadResponseStatus   NylonMethods = "read_response_status"
+	NylonMethodReadResponseBytes    NylonMethods = "read_response_bytes"
+	NylonMethodReadResponseHeaders  NylonMethods = "read_response_headers"
+	NylonMethodReadResponseDuration NylonMethods = "read_response_duration"
+	NylonMethodReadResponseError    NylonMethods = "read_response_error"
 )
 
 // WebSocket methods
@@ -73,19 +77,23 @@ var MethodIDMapping = map[NylonMethods]uint32{
 	NylonMethodReadResponseFullBody:    107,
 
 	// Request methods
-	NylonMethodReadRequestFullBody: 200,
-	NylonMethodReadRequestHeader:   201,
-	NylonMethodReadRequestHeaders:  202,
-	NylonMethodReadRequestURL:      203,
-	NylonMethodReadRequestPath:     204,
-	NylonMethodReadRequestQuery:    205,
-	NylonMethodReadRequestParams:   206,
-	NylonMethodReadRequestHost:     207,
-	NylonMethodReadRequestClientIP: 208,
-	NylonMethodReadRequestMethod:   209,
-	NylonMethodReadRequestBytes:    210,
-	NylonMethodReadResponseStatus:  108,
-	NylonMethodReadResponseBytes:   109,
+	NylonMethodReadRequestFullBody:  200,
+	NylonMethodReadRequestHeader:    201,
+	NylonMethodReadRequestHeaders:   202,
+	NylonMethodReadRequestURL:       203,
+	NylonMethodReadRequestPath:      204,
+	NylonMethodReadRequestQuery:     205,
+	NylonMethodReadRequestParams:    206,
+	NylonMethodReadRequestHost:      207,
+	NylonMethodReadRequestClientIP:  208,
+	NylonMethodReadRequestMethod:    209,
+	NylonMethodReadRequestBytes:     210,
+	NylonMethodReadRequestTimestamp: 211,
+	NylonMethodReadResponseStatus:   108,
+	NylonMethodReadResponseBytes:    109,
+	NylonMethodReadResponseHeaders:  110,
+	NylonMethodReadResponseDuration: 111,
+	NylonMethodReadResponseError:    112,
 
 	// WebSocket methods
 	NylonMethodWebSocketUpgrade:             300,

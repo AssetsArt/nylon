@@ -96,15 +96,29 @@ func init() {
 			req := ctx.Request()
 			res := ctx.Response()
 
-			fmt.Printf("Authz[Go] Log: %s %s | Status: %d | ReqBytes: %d | ResBytes: %d | Host: %s | Client: %s\n",
+			// Log with all available information
+			fmt.Printf("Authz[Go] Log: %s %s | Status: %d | ReqBytes: %d | ResBytes: %d | Duration: %dms | Host: %s | Client: %s | Timestamp: %d\n",
 				req.Method(),
 				req.Path(),
 				res.Status(),
 				req.Bytes(),
 				res.Bytes(),
+				res.Duration(),
 				req.Host(),
 				req.ClientIP(),
+				req.Timestamp(),
 			)
+
+			// Log error if any
+			if err := res.Error(); err != "" {
+				fmt.Printf("Authz[Go] Error: %s\n", err)
+			}
+
+			// Log response headers (example: show content-type)
+			resHeaders := res.Headers()
+			if contentType, ok := resHeaders["content-type"]; ok {
+				fmt.Printf("Authz[Go] Content-Type: %s\n", contentType)
+			}
 
 			ctx.Next()
 		})
