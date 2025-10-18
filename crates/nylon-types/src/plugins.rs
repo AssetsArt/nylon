@@ -2,6 +2,27 @@ use libloading::{Library, Symbol};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+#[derive(Debug, Clone)]
+pub enum PluginPhase {
+    Zero,
+    RequestFilter,
+    ResponseFilter,
+    ResponseBodyFilter,
+    Logging,
+}
+
+impl PluginPhase {
+    pub fn to_u8(self) -> u8 {
+        match self {
+            PluginPhase::Zero => 0,
+            PluginPhase::RequestFilter => 1,
+            PluginPhase::ResponseFilter => 2,
+            PluginPhase::ResponseBodyFilter => 3,
+            PluginPhase::Logging => 4,
+        }
+    }
+}
+
 #[repr(C)]
 pub struct FfiBuffer {
     pub sid: u32,

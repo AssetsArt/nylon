@@ -59,10 +59,25 @@ impl NylonContextExt for NylonContext {
                     .write()
                     .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
                 *h = host.to_string();
+                let mut p = self
+                    .port
+                    .write()
+                    .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
+                *p = "".to_string();
             }
             None => {
                 let host = match session.req_header().headers.get("Host") {
-                    Some(h) => h.to_str().unwrap_or("").split(':').next().unwrap_or(""),
+                    Some(h) => {
+                        // h.to_str().unwrap_or("").split(':').next().unwrap_or("")
+                        let host = h.to_str().unwrap_or("").split(':').next().unwrap_or("");
+                        let port = h.to_str().unwrap_or("").split(':').nth(1).unwrap_or("");
+                        let mut p = self
+                            .port
+                            .write()
+                            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
+                        *p = port.to_string();
+                        host
+                    }
                     None => "",
                 };
                 let mut h = self

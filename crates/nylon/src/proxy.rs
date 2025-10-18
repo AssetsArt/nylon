@@ -2,8 +2,12 @@ use crate::{backend, context::NylonContextExt, response::Response, runtime::Nylo
 use async_trait::async_trait;
 use bytes::Bytes;
 use nylon_error::NylonError;
-use nylon_plugin::{run_middleware, stream::PluginSessionStream, types::MiddlewareContext};
-use nylon_types::{context::NylonContext, services::ServiceType};
+use nylon_plugin::{
+    run_middleware,
+    stream::PluginSessionStream,
+    types::{MiddlewareContext, PluginResult},
+};
+use nylon_types::{context::NylonContext, plugins::PluginPhase, services::ServiceType};
 use pingora::{
     ErrorType,
     http::ResponseHeader,
@@ -122,14 +126,22 @@ fn process_tls_redirect(host: &str, tls: bool) -> Option<String> {
 
 async fn process_middleware<T>(
     proxy: &T,
-    phase: u8,
+    phase: PluginPhase,
     ctx: &mut NylonContext,
     session: &mut Session,
-) -> pingora::Result<bool>
+    response_body: &Option<Bytes>,
+    error: Option<&pingora::Error>,
+) -> pingora::Result<PluginResult>
 where
     T: ProxyHttp + Send + Sync,
     <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
 {
+    // Store error message if present
+    if let Some(err) = error
+        && let Ok(mut error_msg) = ctx.error_message.write()
+    {
+        *error_msg = Some(err.to_string());
+    }
     // Collect all middleware items from route and path levels
     let route_opt = ctx
         .route
@@ -143,7 +155,7 @@ where
         })?
         .clone();
     let Some(route) = &route_opt else {
-        return Ok(false);
+        return Ok(PluginResult::default());
     };
     let path_middleware = &route.path_middleware;
     let middleware_items = route
@@ -158,7 +170,7 @@ where
 
         match run_middleware(
             proxy,
-            phase,
+            &phase,
             &MiddlewareContext {
                 middleware: middleware.0.clone(),
                 payload: middleware.0.payload.clone(),
@@ -166,14 +178,15 @@ where
             },
             ctx,
             session,
+            response_body,
         )
         .await
         {
             Ok((http_end, _)) if http_end => {
-                return Ok(true);
+                return Ok(PluginResult::new(true, false));
             }
             Ok((_, stream_end)) if stream_end => {
-                return Ok(true);
+                return Ok(PluginResult::new(false, true));
             }
             Ok(_) => {
                 continue;
@@ -189,7 +202,7 @@ where
         }
     }
 
-    Ok(false)
+    Ok(PluginResult::default())
 }
 
 #[async_trait]
@@ -197,7 +210,15 @@ impl ProxyHttp for NylonRuntime {
     type CTX = NylonContext;
 
     fn new_ctx(&self) -> Self::CTX {
-        NylonContext::default()
+        let ctx = NylonContext::default();
+        // Set request timestamp
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        ctx.request_timestamp
+            .store(timestamp, std::sync::atomic::Ordering::Relaxed);
+        ctx
     }
 
     async fn request_filter(
@@ -268,9 +289,23 @@ impl ProxyHttp for NylonRuntime {
         }
 
         // Process middleware
-        match process_middleware(self, 1, res.ctx, session).await {
-            Ok(true) => return Ok(true),
-            Ok(false) => {}
+        match process_middleware(
+            self,
+            PluginPhase::RequestFilter,
+            res.ctx,
+            session,
+            &None,
+            None,
+        )
+        .await
+        {
+            Ok(result) => {
+                if result.http_end {
+                    return res.send(session).await;
+                } else if result.stream_end {
+                    return Ok(true);
+                }
+            }
             Err(e) => {
                 let nylon_error = NylonError::InternalServerError(e.to_string());
                 return handle_error_response(&mut res, session, nylon_error).await;
@@ -283,18 +318,23 @@ impl ProxyHttp for NylonRuntime {
                 match nylon_plugin::session_stream(
                     self,
                     plugin.name.as_str(),
-                    1,
+                    PluginPhase::RequestFilter,
                     plugin.entry.as_str(),
                     res.ctx,
                     session,
                     &plugin.payload,
                     &None,
+                    &None,
                 )
                 .await
                 {
-                    Ok(_result) => {
-                        // Plugin service handled the request lifecycle (HTTP or stream)
-                        return Ok(true);
+                    Ok(result) => {
+                        if result.http_end {
+                            return res.send(session).await;
+                        } else if result.stream_end {
+                            return Ok(true);
+                        }
+                        return Ok(false);
                     }
                     Err(e) => {
                         return handle_error_response(&mut res, session, e).await;
@@ -456,7 +496,8 @@ impl ProxyHttp for NylonRuntime {
         Self::CTX: Send + Sync,
     {
         // Process middleware
-        let _ = process_middleware(self, 2, ctx, session).await;
+        let _ =
+            process_middleware(self, PluginPhase::ResponseFilter, ctx, session, &None, None).await;
 
         // Add response headers
         for (key, value) in ctx
@@ -499,7 +540,7 @@ impl ProxyHttp for NylonRuntime {
 
     fn response_body_filter(
         &self,
-        _session: &mut Session,
+        session: &mut Session,
         body: &mut Option<Bytes>,
         _end_of_stream: bool,
         ctx: &mut Self::CTX,
@@ -507,38 +548,42 @@ impl ProxyHttp for NylonRuntime {
     where
         Self::CTX: Send + Sync,
     {
-        {
-            let mut buf = ctx.set_response_body.write().map_err(|_| {
-                pingora::Error::because(
-                    ErrorType::InternalError,
-                    "[body_filter]",
-                    "set_response_body lock".to_string(),
+        // Process middleware for response_body_filter phase
+        let _ = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                process_middleware(
+                    self,
+                    PluginPhase::ResponseBodyFilter,
+                    ctx,
+                    session,
+                    body,
+                    None,
                 )
-            })?;
-            if !buf.is_empty() {
-                if let Some(old_body) = body {
-                    let mut rs_body = old_body.to_vec();
-                    rs_body.extend_from_slice(&buf);
-                    buf.clear();
-                    *body = Some(Bytes::from(rs_body));
-                } else {
-                    let rs_body = Bytes::from(buf.clone());
-                    buf.clear();
-                    *body = Some(rs_body);
-                }
-            }
+                .await
+            })
+        });
+
+        let buf = ctx.set_response_body.write().map_err(|_| {
+            pingora::Error::because(
+                ErrorType::InternalError,
+                "[body_filter]",
+                "set_response_body lock".to_string(),
+            )
+        })?;
+
+        if !buf.is_empty() {
+            *body = Some(Bytes::from(buf.clone()));
         }
         Ok(None)
     }
 
-    async fn logging(
-        &self,
-        _session: &mut Session,
-        _e: Option<&pingora::Error>,
-        ctx: &mut Self::CTX,
-    ) where
+    async fn logging(&self, session: &mut Session, e: Option<&pingora::Error>, ctx: &mut Self::CTX)
+    where
         Self::CTX: Send + Sync,
     {
+        // Process middleware for logging phase
+        let _ = process_middleware(self, PluginPhase::Logging, ctx, session, &None, e).await;
+
         let streams = ctx
             .session_stream
             .read()

@@ -6,6 +6,7 @@ use nylon_error::NylonError;
 use nylon_sdk::fbs::plugin_generated::nylon_plugin::{
     HeaderKeyValue, HeaderKeyValueArgs, NylonHttpHeaders, NylonHttpHeadersArgs,
 };
+use nylon_types::plugins::PluginPhase;
 use nylon_types::websocket::WebSocketMessage;
 use nylon_types::{
     context::NylonContext,
@@ -53,6 +54,7 @@ impl SessionHandler {
         session_stream: &SessionStream,
         payload: &Option<serde_json::Value>,
         payload_ast: &Option<HashMap<String, Vec<Expr>>>,
+        response_body: &Option<Bytes>,
     ) -> Result<Option<PluginResult>, NylonError>
     where
         T: ProxyHttp + Send + Sync,
@@ -99,7 +101,7 @@ impl SessionHandler {
                 Ok(Some(PluginResult::new(false, true)))
             }
             methods::READ_RESPONSE_FULL_BODY => {
-                Self::handle_read_response_full_body(session_stream, ctx).await?;
+                Self::handle_read_response_full_body(session_stream, ctx, response_body).await?;
                 Ok(None)
             }
 
@@ -114,6 +116,62 @@ impl SessionHandler {
             }
             methods::READ_REQUEST_HEADERS => {
                 Self::handle_read_request_headers(session_stream, session).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_URL => {
+                Self::handle_read_request_url(session_stream, session, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_PATH => {
+                Self::handle_read_request_path(session_stream, session).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_QUERY => {
+                Self::handle_read_request_query(session_stream, session).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_PARAMS => {
+                Self::handle_read_request_params(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_HOST => {
+                Self::handle_read_request_host(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_CLIENT_IP => {
+                Self::handle_read_request_client_ip(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_METHOD => {
+                Self::handle_read_request_method(session_stream, session).await?;
+                Ok(None)
+            }
+            methods::READ_RESPONSE_STATUS => {
+                Self::handle_read_response_status(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_BYTES => {
+                Self::handle_read_request_bytes(session_stream, session).await?;
+                Ok(None)
+            }
+            methods::READ_RESPONSE_BYTES => {
+                Self::handle_read_response_bytes(session_stream, ctx, response_body).await?;
+                Ok(None)
+            }
+            methods::READ_REQUEST_TIMESTAMP => {
+                Self::handle_read_request_timestamp(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_RESPONSE_HEADERS => {
+                Self::handle_read_response_headers(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_RESPONSE_DURATION => {
+                Self::handle_read_response_duration(session_stream, ctx).await?;
+                Ok(None)
+            }
+            methods::READ_RESPONSE_ERROR => {
+                Self::handle_read_response_error(session_stream, ctx).await?;
                 Ok(None)
             }
 
@@ -196,7 +254,7 @@ impl SessionHandler {
 
                 // Notify plugin side that WebSocket connection is established immediately
                 let _ = session_stream
-                    .event_stream(0, methods::WEBSOCKET_ON_OPEN, &[])
+                    .event_stream(PluginPhase::Zero, methods::WEBSOCKET_ON_OPEN, &[])
                     .await;
 
                 // Spawn task to forward cluster messages to client frames
@@ -240,7 +298,7 @@ impl SessionHandler {
                     let session_stream = session_stream.clone();
                     async move {
                         let _ = session_stream
-                            .event_stream(0, methods::WEBSOCKET_ON_CLOSE, &[])
+                            .event_stream(PluginPhase::Zero, methods::WEBSOCKET_ON_CLOSE, &[])
                             .await;
                     }
                 });
@@ -355,7 +413,7 @@ impl SessionHandler {
         };
         let payload_slice = payload.as_deref().unwrap_or_default();
         session_stream
-            .event_stream(0, methods::GET_PAYLOAD, payload_slice)
+            .event_stream(PluginPhase::Zero, methods::GET_PAYLOAD, payload_slice)
             .await
     }
 
@@ -460,15 +518,19 @@ impl SessionHandler {
     async fn handle_read_response_full_body(
         session_stream: &SessionStream,
         ctx: &mut NylonContext,
+        response_body: &Option<Bytes>,
     ) -> Result<(), NylonError> {
-        let body = {
+        let mut body = {
             ctx.set_response_body
                 .read()
                 .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
                 .clone()
         };
+        if let Some(response_body) = response_body {
+            body.extend_from_slice(response_body.as_ref());
+        }
         session_stream
-            .event_stream(0, methods::READ_RESPONSE_FULL_BODY, &body)
+            .event_stream(PluginPhase::Zero, methods::READ_RESPONSE_FULL_BODY, &body)
             .await
     }
 
@@ -495,7 +557,11 @@ impl SessionHandler {
                 .clone()
         };
         session_stream
-            .event_stream(0, methods::READ_REQUEST_FULL_BODY, &req_body)
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_FULL_BODY,
+                &req_body,
+            )
             .await
     }
 
@@ -512,12 +578,16 @@ impl SessionHandler {
             };
             if let Some(value) = headers.get(&read_key) {
                 session_stream
-                    .event_stream(0, methods::READ_REQUEST_HEADER, value.as_bytes())
+                    .event_stream(
+                        PluginPhase::Zero,
+                        methods::READ_REQUEST_HEADER,
+                        value.as_bytes(),
+                    )
                     .await?;
             }
         } else {
             session_stream
-                .event_stream(0, methods::READ_REQUEST_HEADER, &[])
+                .event_stream(PluginPhase::Zero, methods::READ_REQUEST_HEADER, &[])
                 .await?;
         }
         Ok(())
@@ -558,7 +628,332 @@ impl SessionHandler {
         fbs.finish(headers, None);
         let headers = fbs.finished_data();
         session_stream
-            .event_stream(0, methods::READ_REQUEST_HEADERS, headers)
+            .event_stream(PluginPhase::Zero, methods::READ_REQUEST_HEADERS, headers)
+            .await
+    }
+
+    async fn handle_read_request_url(
+        session_stream: &SessionStream,
+        session: &mut Session,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        // Build full URL: scheme://host[:port]/path?query
+        let is_tls = ctx.tls.load(std::sync::atomic::Ordering::Relaxed);
+        let scheme = if is_tls { "https" } else { "http" };
+        let port = ctx
+            .port
+            .read()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+            .clone();
+        let host = ctx
+            .host
+            .read()
+            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+            .clone();
+
+        let host_part = if !port.is_empty() && !["80", "443"].contains(&port.as_str()) {
+            format!("{}:{}", host, port)
+        } else {
+            host
+        };
+
+        let uri = match session.as_http2() {
+            Some(h2) => &h2.req_header().uri,
+            None => &session.req_header().uri,
+        };
+
+        let path_and_query = uri
+            .path_and_query()
+            .map(|pq| pq.as_str())
+            .unwrap_or(uri.path());
+
+        let full_url = format!("{}://{}{}", scheme, host_part, path_and_query);
+
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_URL,
+                full_url.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_path(
+        session_stream: &SessionStream,
+        session: &mut Session,
+    ) -> Result<(), NylonError> {
+        let path = match session.as_http2() {
+            Some(h2) => h2.req_header().uri.path(),
+            None => session.req_header().uri.path(),
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_PATH,
+                path.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_query(
+        session_stream: &SessionStream,
+        session: &mut Session,
+    ) -> Result<(), NylonError> {
+        let query = match session.as_http2() {
+            Some(h2) => h2.req_header().uri.query().unwrap_or(""),
+            None => session.req_header().uri.query().unwrap_or(""),
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_QUERY,
+                query.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_params(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let params_json = {
+            let params = ctx
+                .params
+                .read()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
+            serde_json::to_vec(&*params)
+                .map_err(|e| NylonError::InternalServerError(format!("serialize error: {}", e)))?
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_PARAMS,
+                &params_json,
+            )
+            .await
+    }
+
+    async fn handle_read_request_host(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let host = {
+            ctx.host
+                .read()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+                .clone()
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_HOST,
+                host.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_client_ip(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let client_ip = {
+            ctx.client_ip
+                .read()
+                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
+                .clone()
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_CLIENT_IP,
+                client_ip.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_method(
+        session_stream: &SessionStream,
+        session: &Session,
+    ) -> Result<(), NylonError> {
+        let method = match session.as_http2() {
+            Some(h2) => h2.req_header().method.as_str(),
+            None => session.req_header().method.as_str(),
+        };
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_METHOD,
+                method.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_response_status(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let status = ctx
+            .set_response_status
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let status_str = status.to_string();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_RESPONSE_STATUS,
+                status_str.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_bytes(
+        session_stream: &SessionStream,
+        session: &Session,
+    ) -> Result<(), NylonError> {
+        // Try to get Content-Length from request headers
+        let bytes: i64 = session
+            .req_header()
+            .headers
+            .get("content-length")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s: &str| s.parse::<i64>().ok())
+            .unwrap_or(0);
+        let bytes_str = bytes.to_string();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_BYTES,
+                bytes_str.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_response_bytes(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+        response_body: &Option<Bytes>,
+    ) -> Result<(), NylonError> {
+        // Try to get response body length from context
+        let mut bytes: i64 = ctx
+            .set_response_body
+            .read()
+            .map(|body| body.len() as i64)
+            .unwrap_or(0);
+
+        if let Some(response_body) = response_body {
+            bytes += response_body.len() as i64;
+        }
+
+        let bytes_str = bytes.to_string();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_RESPONSE_BYTES,
+                bytes_str.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_request_timestamp(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let timestamp = ctx
+            .request_timestamp
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let timestamp_str = timestamp.to_string();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_TIMESTAMP,
+                timestamp_str.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_response_headers(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        // Build flatbuffers for response headers from context
+        let mut builder = flatbuffers::FlatBufferBuilder::new();
+        let mut headers_vec = vec![];
+
+        // Get response headers from context
+        let headers_map = ctx
+            .add_response_header
+            .read()
+            .map(|h| h.clone())
+            .unwrap_or_default();
+
+        for (key, value) in headers_map.iter() {
+            let key_str = builder.create_string(key);
+            let value_str = builder.create_string(value);
+
+            let header = HeaderKeyValue::create(
+                &mut builder,
+                &HeaderKeyValueArgs {
+                    key: Some(key_str),
+                    value: Some(value_str),
+                },
+            );
+            headers_vec.push(header);
+        }
+
+        let headers_offset = builder.create_vector(&headers_vec);
+        let http_headers = NylonHttpHeaders::create(
+            &mut builder,
+            &NylonHttpHeadersArgs {
+                headers: Some(headers_offset),
+            },
+        );
+        builder.finish(http_headers, None);
+
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_RESPONSE_HEADERS,
+                builder.finished_data(),
+            )
+            .await
+    }
+
+    async fn handle_read_response_duration(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let start_time = ctx
+            .request_timestamp
+            .load(std::sync::atomic::Ordering::Relaxed);
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let duration = now.saturating_sub(start_time);
+        let duration_str = duration.to_string();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_RESPONSE_DURATION,
+                duration_str.as_bytes(),
+            )
+            .await
+    }
+
+    async fn handle_read_response_error(
+        session_stream: &SessionStream,
+        ctx: &NylonContext,
+    ) -> Result<(), NylonError> {
+        let error_msg = ctx
+            .error_message
+            .read()
+            .map(|e| e.clone().unwrap_or_default())
+            .unwrap_or_default();
+        session_stream
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_RESPONSE_ERROR,
+                error_msg.as_bytes(),
+            )
             .await
     }
 }
