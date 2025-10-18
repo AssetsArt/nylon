@@ -342,6 +342,7 @@ fn find_matching_route(
     path: &str,
     method: &str,
 ) -> Result<(Route, HashMap<String, String>), NylonError> {
+    // let now = std::time::Instant::now();
     // Create cache key from route_name, method, and path
     let cache_key = format!("{}:{}:{}", route_name, method, path);
 
@@ -349,6 +350,7 @@ fn find_matching_route(
     if let Ok(mut cache) = ROUTE_CACHE.lock()
         && let Some(cached) = cache.get(&cache_key)
     {
+        // println!("Time taken to find matching route: {:?}", now.elapsed());
         tracing::debug!("Route cache hit: {}:{}:{}", route_name, method, path);
         return Ok(cached.clone());
     }
@@ -380,6 +382,7 @@ fn find_matching_route(
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
 
+    // println!("Time taken to find matching route: {:?}", now.elapsed());
     // Store in cache
     if let Ok(mut cache) = ROUTE_CACHE.lock() {
         cache.put(cache_key, (route.clone(), params.clone()));
