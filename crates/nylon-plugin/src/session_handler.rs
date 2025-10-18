@@ -54,6 +54,7 @@ impl SessionHandler {
         session_stream: &SessionStream,
         payload: &Option<serde_json::Value>,
         payload_ast: &Option<HashMap<String, Vec<Expr>>>,
+        response_body: &Option<Bytes>,
     ) -> Result<Option<PluginResult>, NylonError>
     where
         T: ProxyHttp + Send + Sync,
@@ -100,7 +101,7 @@ impl SessionHandler {
                 Ok(Some(PluginResult::new(false, true)))
             }
             methods::READ_RESPONSE_FULL_BODY => {
-                Self::handle_read_response_full_body(session_stream, ctx).await?;
+                Self::handle_read_response_full_body(session_stream, ctx, response_body).await?;
                 Ok(None)
             }
 
@@ -485,13 +486,17 @@ impl SessionHandler {
     async fn handle_read_response_full_body(
         session_stream: &SessionStream,
         ctx: &mut NylonContext,
+        response_body: &Option<Bytes>,
     ) -> Result<(), NylonError> {
-        let body = {
+        let mut body = {
             ctx.set_response_body
                 .read()
                 .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
                 .clone()
         };
+        if let Some(response_body) = response_body {
+            body.extend_from_slice(response_body.as_ref());
+        }
         session_stream
             .event_stream(PluginPhase::Zero, methods::READ_RESPONSE_FULL_BODY, &body)
             .await

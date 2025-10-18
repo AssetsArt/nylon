@@ -44,6 +44,10 @@ type PhaseResponseFilter struct {
 	ctx *NylonHttpPluginCtx
 }
 
+type PhaseResponseBodyFilter struct {
+	ctx *NylonHttpPluginCtx
+}
+
 // WebSocket types
 
 type WebSocketConn struct {

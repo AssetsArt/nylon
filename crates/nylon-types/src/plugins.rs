@@ -7,6 +7,7 @@ pub enum PluginPhase {
     Zero,
     RequestFilter,
     ResponseFilter,
+    ResponseBodyFilter,
 }
 
 impl PluginPhase {
@@ -15,6 +16,7 @@ impl PluginPhase {
             PluginPhase::Zero => 0,
             PluginPhase::RequestFilter => 1,
             PluginPhase::ResponseFilter => 2,
+            PluginPhase::ResponseBodyFilter => 3,
         }
     }
 }

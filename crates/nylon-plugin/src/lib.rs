@@ -34,6 +34,7 @@ pub async fn session_stream<T>(
     session: &mut Session,
     payload: &Option<serde_json::Value>,
     payload_ast: &Option<HashMap<String, Vec<Expr>>>,
+    response_body: &Option<Bytes>,
 ) -> Result<PluginResult, NylonError>
 where
     T: ProxyHttp + Send + Sync,
@@ -149,6 +150,7 @@ where
                     &session_stream,
                     payload,
                     payload_ast,
+                    response_body,
                 )
                 .await?
                 {
@@ -174,6 +176,7 @@ where
                     &session_stream,
                     payload,
                     payload_ast,
+                    response_body
                 ).await? {
                     // println!("result: {:?}", result);
                     return Ok(result);
@@ -304,6 +307,7 @@ pub async fn run_middleware<T>(
     middleware_context: &MiddlewareContext,
     ctx: &mut NylonContext,
     session: &mut Session,
+    response_body: &Option<Bytes>,
 ) -> Result<(bool, bool), NylonError>
 where
     T: ProxyHttp + Send + Sync,
@@ -342,6 +346,7 @@ where
                 session,
                 payload,
                 payload_ast,
+                response_body,
             )
             .await?;
             Ok((result.http_end, result.stream_end))

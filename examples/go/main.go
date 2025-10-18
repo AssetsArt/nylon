@@ -68,6 +68,24 @@ func init() {
 			fmt.Println("Authz[Go] ResponseFilter sessionID", phase.SessionId)
 			ctx.SetResponseHeader("X-ResponseFilter", "authz-2")
 
+			// for modify response body
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.Next()
+		})
+
+		phase.ResponseBodyFilter(func(ctx *sdk.PhaseResponseBodyFilter) {
+			fmt.Println("Authz[Go] ResponseBodyFilter sessionID", phase.SessionId)
+
+			// Read response body
+			res := ctx.Response()
+			body := res.ReadBody()
+			fmt.Println("Authz[Go] ResponseBody length:", len(body))
+
+			// Modify response body (example: append text)
+			modifiedBody := append(body, []byte("\n<!-- Modified by Authz plugin -->")...)
+			res.BodyRaw(modifiedBody)
+
 			ctx.Next()
 		})
 

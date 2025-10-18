@@ -8,6 +8,8 @@ routes:
       type: host
       value: localhost # localhost|api.localhost
     name: app-route
+    middleware:
+      - group: auth
     paths:
       - path:
           - /static
