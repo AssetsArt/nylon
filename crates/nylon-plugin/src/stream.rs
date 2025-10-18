@@ -37,6 +37,7 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
     let ffi = unsafe { &*data };
     let session_id = ffi.sid;
     let method = ffi.method;
+    // println!("handle_ffi_event: session_id={}, method={}, phase={}", session_id, method, ffi.phase);
     // let phase = ffi.phase;
     let len = ffi.len as usize;
     let ptr = ffi.ptr;
@@ -53,6 +54,7 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
     if let Some(sender) = sender_opt {
         if ptr.is_null() {
             trace!("handle_ffi_event: null payload");
+            // println!("handle_ffi_event: null payload");
             let _ = sender.send((method, Vec::new()));
             return;
         }
@@ -61,6 +63,10 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
             // Fast copy from raw pointer without creating uninitialized values
             let slice = std::slice::from_raw_parts(ptr, len);
             let buf = slice.to_vec();
+            // println!("handle_ffi_event: session_id={}, method={}, phase={}", session_id, method, ffi.phase);
+            // println!("handle_ffi_event: buf={:?}", buf);
+            // println!("handle_ffi_event: buf len={}", buf.len());
+            // println!("handle_ffi_event: buf as string={}", String::from_utf8_lossy(&buf));
             if let Err(_e) = sender.send((method, buf)) {
                 debug!("send error: {:?}", session_id);
             }
@@ -75,7 +81,12 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
 pub trait PluginSessionStream {
     fn new(plugin: Arc<FfiPlugin>, session_id: u32) -> Self;
     async fn open(&self, entry: &str) -> Result<u32, NylonError>;
-    async fn event_stream(&self, phase: PluginPhase, method: u32, data: &[u8]) -> Result<(), NylonError>;
+    async fn event_stream(
+        &self,
+        phase: PluginPhase,
+        method: u32,
+        data: &[u8],
+    ) -> Result<(), NylonError>;
     async fn close(&self) -> Result<(), NylonError>;
 }
 
@@ -127,7 +138,12 @@ impl PluginSessionStream for SessionStream {
         Ok(self.session_id)
     }
 
-    async fn event_stream(&self, phase: PluginPhase, method: u32, data: &[u8]) -> Result<(), NylonError> {
+    async fn event_stream(
+        &self,
+        phase: PluginPhase,
+        method: u32,
+        data: &[u8],
+    ) -> Result<(), NylonError> {
         let ffi_buffer = &FfiBuffer {
             sid: self.session_id,
             phase: phase.to_u8(),

@@ -68,7 +68,10 @@ impl SessionHandler {
                 Ok(None)
             }
             methods::NEXT => Ok(Some(PluginResult::default())),
-            methods::END => Ok(Some(PluginResult::new(true, false))),
+            methods::END => {
+                // println!("END method: {}, sid: {}", method, session_stream.session_id);
+                return Ok(Some(PluginResult::new(true, false)));
+            }
 
             // Response methods
             methods::SET_RESPONSE_HEADER => {
@@ -496,7 +499,11 @@ impl SessionHandler {
                 .clone()
         };
         session_stream
-            .event_stream(PluginPhase::Zero, methods::READ_REQUEST_FULL_BODY, &req_body)
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_FULL_BODY,
+                &req_body,
+            )
             .await
     }
 
@@ -513,7 +520,11 @@ impl SessionHandler {
             };
             if let Some(value) = headers.get(&read_key) {
                 session_stream
-                    .event_stream(PluginPhase::Zero, methods::READ_REQUEST_HEADER, value.as_bytes())
+                    .event_stream(
+                        PluginPhase::Zero,
+                        methods::READ_REQUEST_HEADER,
+                        value.as_bytes(),
+                    )
                     .await?;
             }
         } else {

@@ -2,7 +2,11 @@ use crate::{backend, context::NylonContextExt, response::Response, runtime::Nylo
 use async_trait::async_trait;
 use bytes::Bytes;
 use nylon_error::NylonError;
-use nylon_plugin::{run_middleware, stream::PluginSessionStream, types::MiddlewareContext};
+use nylon_plugin::{
+    run_middleware,
+    stream::PluginSessionStream,
+    types::{MiddlewareContext, PluginResult},
+};
 use nylon_types::{context::NylonContext, plugins::PluginPhase, services::ServiceType};
 use pingora::{
     ErrorType,
@@ -125,7 +129,7 @@ async fn process_middleware<T>(
     phase: PluginPhase,
     ctx: &mut NylonContext,
     session: &mut Session,
-) -> pingora::Result<bool>
+) -> pingora::Result<PluginResult>
 where
     T: ProxyHttp + Send + Sync,
     <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
@@ -143,7 +147,7 @@ where
         })?
         .clone();
     let Some(route) = &route_opt else {
-        return Ok(false);
+        return Ok(PluginResult::default());
     };
     let path_middleware = &route.path_middleware;
     let middleware_items = route
@@ -170,10 +174,10 @@ where
         .await
         {
             Ok((http_end, _)) if http_end => {
-                return Ok(true);
+                return Ok(PluginResult::new(true, false));
             }
             Ok((_, stream_end)) if stream_end => {
-                return Ok(true);
+                return Ok(PluginResult::new(false, true));
             }
             Ok(_) => {
                 continue;
@@ -189,7 +193,7 @@ where
         }
     }
 
-    Ok(false)
+    Ok(PluginResult::default())
 }
 
 #[async_trait]
@@ -269,8 +273,13 @@ impl ProxyHttp for NylonRuntime {
 
         // Process middleware
         match process_middleware(self, PluginPhase::RequestFilter, res.ctx, session).await {
-            Ok(true) => return Ok(true),
-            Ok(false) => {}
+            Ok(result) => {
+                if result.http_end {
+                    return res.send(session).await;
+                } else if result.stream_end {
+                    return Ok(true);
+                }
+            }
             Err(e) => {
                 let nylon_error = NylonError::InternalServerError(e.to_string());
                 return handle_error_response(&mut res, session, nylon_error).await;
@@ -292,9 +301,13 @@ impl ProxyHttp for NylonRuntime {
                 )
                 .await
                 {
-                    Ok(_result) => {
-                        // Plugin service handled the request lifecycle (HTTP or stream)
-                        return Ok(true);
+                    Ok(result) => {
+                        if result.http_end {
+                            return res.send(session).await;
+                        } else if result.stream_end {
+                            return Ok(true);
+                        }
+                        return Ok(false);
                     }
                     Err(e) => {
                         return handle_error_response(&mut res, session, e).await;

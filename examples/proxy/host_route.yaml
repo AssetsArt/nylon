@@ -21,6 +21,11 @@ routes:
         service:
           name: ws-service
       - path:
+          - /myapp
+        # methods: [GET, POST, OPTIONS]
+        service:
+          name: myapp-service
+      - path:
           - /stream
         methods: [GET, POST, OPTIONS]
         service:

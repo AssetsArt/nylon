@@ -100,6 +100,23 @@ func init() {
 		})
 	})
 
+	plugin.AddPhaseHandler("myapp", func(phase *sdk.PhaseHandler) {
+		fmt.Println("Start MyApp[Go] sessionID", phase.SessionId)
+		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
+			fmt.Println("MyApp[Go] RequestFilter sessionID", phase.SessionId)
+			res := ctx.Response()
+			// set status and headers
+			res.SetStatus(200)
+			res.SetHeader("Content-Type", "text/plain")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
+			// res.SetHeader("Content-Length", "13")
+			res.BodyText("Hello, World!")
+
+			ctx.End()
+		})
+	})
+
 	// WebSocket example
 	plugin.AddPhaseHandler("ws", func(phase *sdk.PhaseHandler) {
 		fmt.Println("Start WS[Go] sessionID", phase.SessionId)

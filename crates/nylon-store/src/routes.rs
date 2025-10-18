@@ -3,9 +3,9 @@ use crate as store;
 use nylon_error::NylonError;
 use nylon_types::{
     context::Route,
-    route::{MiddlewareItem, PathConfig, RouteConfig},
+    route::{MiddlewareItem, PathConfig, RouteConfig, HTTP_METHODS},
     services::ServiceItem,
-    template::{Expr, extract_and_parse_templates, walk_json},
+    template::{extract_and_parse_templates, walk_json, Expr},
 };
 use pingora::proxy::Session;
 use serde_json::Value;
@@ -140,10 +140,15 @@ fn create_matchit_router(
             }
         } else {
             for p in match_path {
-                matchit_route.insert(p, service.clone()).map_err(|e| {
-                    NylonError::ConfigError(format!("Failed to register route: {e}"))
-                })?;
-                tracing::info!("[{}] Add: {:?}", route.name, p);
+                // matchit_route.insert(p, service.clone()).map_err(|e| {
+                //     NylonError::ConfigError(format!("Failed to register route: {e}"))
+                // })?;
+                for method in HTTP_METHODS {
+                    matchit_route.insert(format!("/{method}{p}"), service.clone()).map_err(|e| {
+                        NylonError::ConfigError(format!("Failed to register route: {e}"))
+                    })?;
+                }
+                tracing::info!("[{}] Add All Methods: {:?}", route.name, p);
             }
         }
     }
@@ -313,7 +318,8 @@ fn find_matching_route(
     // Normalize method and prefer method-specific match first to avoid catch-all overshadowing
     let normalized_method = method.to_uppercase();
     let path_with_method = format!("/{normalized_method}{path}");
-
+    // println!("path_with_method: {}", path_with_method);
+    // println!("path: {}", path);
     let result = router
         .at(&path_with_method)
         .or_else(|_| router.at(path))
@@ -322,7 +328,7 @@ fn find_matching_route(
                 "No route matched for method: {method}, path: {path}"
             ))
         })?;
-
+    // println!("result: {:?}", result);
     let route = result.value.clone();
     let params = result
         .params

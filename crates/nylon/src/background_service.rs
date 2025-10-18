@@ -208,7 +208,7 @@ async fn reload_configuration() -> Result<(), nylon_error::NylonError> {
 
     // Load and validate runtime configuration
     let runtime_config = RuntimeConfig::from_file(&config_path)?;
-    
+
     // Store new runtime config
     runtime_config.store()?;
     info!("✓ Runtime configuration updated");
@@ -260,7 +260,7 @@ async fn reload_acme_certificates() -> Result<(), nylon_error::NylonError> {
         let acme_dir = acme_config.acme_dir.as_deref().unwrap_or(".acme");
 
         info!("Checking certificate for domain: {}", domain);
-        
+
         // Check if certificate exists and is valid
         match nylon_tls::AcmeClient::load_certificate_with_chain(acme_dir, domain) {
             Ok((cert, key, chain)) => {

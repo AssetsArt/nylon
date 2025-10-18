@@ -46,6 +46,12 @@ services:
       index: index.html
       spa: true
 
+  - name: myapp-service
+    service_type: plugin
+    plugin:
+      name: plugin_sdk
+      entry: myapp
+
 middleware_groups:
   # Security & request metadata headers applied to most routes
   security:
