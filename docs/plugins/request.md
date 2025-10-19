@@ -118,7 +118,7 @@ fmt.Printf("Request from: %s\n", clientIP)
 Get all request headers:
 
 ```go
-headers := req.Headers()
+headers := req.Headers().GetAll()
 // map[string]string
 
 userAgent := headers["user-agent"]
@@ -444,36 +444,35 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 
 ## Working with Payload
 
-Pass data between middleware phases:
+`ctx.GetPayload()` exposes the static payload configured for the middleware entry in YAML.  
+Use it to pass configuration or constants into your handler:
+
+```yaml
+middleware:
+  - plugin: audit-plugin
+    entry: "audit"
+    payload:
+      log_level: "debug"
+      team: "platform"
+```
 
 ```go
 phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
-    req := ctx.Request()
-    
-    // Extract user from token
-    token := req.Header("Authorization")
-    user := validateToken(token)
-    
-    // Store in payload
-    ctx.SetPayload(map[string]interface{}{
-        "user_id": user.ID,
-        "role": user.Role,
-        "timestamp": time.Now().Unix(),
-    })
-    
-    ctx.Next()
-})
-
-phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
-    // Access payload from request phase
     payload := ctx.GetPayload()
-    userID := payload["user_id"].(string)
-    
-    // Add to response
-    ctx.SetResponseHeader("X-User-ID", userID)
+    logLevel, _ := payload["log_level"].(string)
+    team, _ := payload["team"].(string)
+
+    log.Printf("[audit] team=%s level=%s path=%s",
+        team,
+        logLevel,
+        ctx.Request().Path(),
+    )
+
     ctx.Next()
 })
 ```
+
+If you need per-request state across phases, keep it in your own map keyed by request metadata until the SDK exposes a first-class API.
 
 ## Best Practices
 
@@ -565,4 +564,3 @@ ctx.Next()
 - [Response Handling](/plugins/response) - Handle responses
 - [Plugin Phases](/plugins/phases) - Understanding phases
 - [Go SDK](/plugins/go-sdk) - Complete SDK reference
-

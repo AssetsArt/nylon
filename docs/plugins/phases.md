@@ -65,8 +65,8 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 	path := req.Path()
 	url := req.URL()
 	query := req.Query()
-	headers := req.Headers()
-	body := req.ReadBody()
+	headers := req.Headers().GetAll()
+	body := req.RawBody()
 	params := req.Params()
 	host := req.Host()
 	clientIP := req.ClientIP()
@@ -79,11 +79,6 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 	res.RemoveHeader("Content-Length")
 	res.SetHeader("Transfer-Encoding", "chunked")
 	ctx.End()
-	
-	// Store data for later phases
-	ctx.SetPayload(map[string]interface{}{
-		"user_id": "123",
-	})
 	
 	// Continue or stop
 	ctx.Next() // Continue to backend
@@ -119,11 +114,6 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 		ctx.End()
 		return
 	}
-	
-	// Store user data for later phases
-	ctx.SetPayload(map[string]interface{}{
-		"user": user,
-	})
 	
 	ctx.Next() // Continue to backend
 })
@@ -176,9 +166,9 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 	status := res.Status()
 	
 	// Modify response headers
-	res.SetResponseHeader("X-Powered-By", "Nylon")
-	res.RemoveResponseHeader("Server")
-	res.SetResponseHeader("Cache-Control", "max-age=3600")
+	res.SetHeader("X-Powered-By", "Nylon")
+	res.RemoveHeader("Server")
+	res.SetHeader("Cache-Control", "max-age=3600")
 	
 	// Access stored data
 	payload := ctx.GetPayload()
@@ -194,10 +184,10 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 	res := ctx.Response()
 	
 	// Add security headers
-	res.SetResponseHeader("X-Content-Type-Options", "nosniff")
-	res.SetResponseHeader("X-Frame-Options", "DENY")
-	res.SetResponseHeader("X-XSS-Protection", "1; mode=block")
-	res.SetResponseHeader("Strict-Transport-Security", "max-age=31536000")
+	res.SetHeader("X-Content-Type-Options", "nosniff")
+	res.SetHeader("X-Frame-Options", "DENY")
+	res.SetHeader("X-XSS-Protection", "1; mode=block")
+	res.SetHeader("Strict-Transport-Security", "max-age=31536000")
 	
 	ctx.Next()
 })
@@ -212,9 +202,9 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 	
 	// Cache GET requests with 200 status
 	if req.Method() == "GET" && res.Status() == 200 {
-		res.SetResponseHeader("Cache-Control", "public, max-age=3600")
+		res.SetHeader("Cache-Control", "public, max-age=3600")
 	} else {
-		res.SetResponseHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+		res.SetHeader("Cache-Control", "no-cache, no-store, must-revalidate")
 	}
 	
 	ctx.Next()
@@ -287,8 +277,8 @@ When modifying response body, you need to:
 ```go
 phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 	res := ctx.Response()
-	res.RemoveResponseHeader("Content-Length")
-	res.SetResponseHeader("Transfer-Encoding", "chunked")
+	res.RemoveHeader("Content-Length")
+	res.SetHeader("Transfer-Encoding", "chunked")
 	ctx.Next()
 })
 ```
@@ -399,39 +389,36 @@ phase.Logging(func(ctx *sdk.PhaseLogging) {
 
 ## Phase Communication
 
-Use `SetPayload` and `GetPayload` to share data between phases:
+Per-request payload mutation is not yet supported in the Go SDK.  
+`ctx.GetPayload()` returns the static `payload` that you configure in YAML for the middleware entry.
+
+```yaml
+middleware:
+  - plugin: auth-plugin
+    entry: "auth-handler"
+    payload:
+      audience: "admin-api"
+      api_key: "${env(API_KEY)}"
+```
 
 ```go
-// Phase 1: Store data
 phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
-	ctx.SetPayload(map[string]interface{}{
-		"user_id": "12345",
-		"role": "admin",
-		"request_time": time.Now(),
-	})
-	ctx.Next()
-})
-
-// Phase 2: Use stored data
-phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 	payload := ctx.GetPayload()
-	if userID, ok := payload["user_id"].(string); ok {
+	requiredKey, _ := payload["api_key"].(string)
+
+	if ctx.Request().Header("X-API-Key") != requiredKey {
 		res := ctx.Response()
-		res.SetResponseHeader("X-User-ID", userID)
+		res.SetStatus(401)
+		res.BodyText("Unauthorized")
+		ctx.End()
+		return
 	}
-	ctx.Next()
-})
 
-// Phase 4: Calculate total time
-phase.Logging(func(ctx *sdk.PhaseLogging) {
-	payload := ctx.GetPayload()
-	if reqTime, ok := payload["request_time"].(time.Time); ok {
-		totalTime := time.Since(reqTime)
-		log.Printf("Total processing time: %v", totalTime)
-	}
 	ctx.Next()
 })
 ```
+
+If you need to share dynamic state across phases today, store it in your own package-level cache keyed by request metadata (e.g., `req.ClientIP()` or UUID headers).
 
 ## Best Practices
 
@@ -470,7 +457,7 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 ```go
 phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 	req := ctx.Request()
-	body := req.ReadBody()
+	body := req.RawBody()
 	
 	var data map[string]interface{}
 	if err := json.Unmarshal(body, &data); err != nil {
@@ -514,4 +501,3 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 	ctx.Next()
 })
 ```
-

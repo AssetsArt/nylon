@@ -31,20 +31,22 @@ routes:
           name: admin-service
 ```
 
-### Path-Based Routing
+### Header-Based Routing
 
-Match requests by path prefix:
+Match requests by header value (requires `header_selector` to be set):
 
 ```yaml
+header_selector: x-nylon-proxy
+
 routes:
   - route:
-      type: path
-      value: /api
-    name: api-route
+      type: header
+      value: tenant-admin
+    name: admin-route
     paths:
       - path: /*
         service:
-          name: api-service
+          name: admin-service
 ```
 
 ## Path Patterns
@@ -353,4 +355,3 @@ paths:
 - [Configuration](/core/configuration) - Full configuration reference
 - [Middleware](/core/middleware) - Apply logic to routes
 - [Examples](/examples/basic-proxy) - Routing examples
-

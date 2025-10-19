@@ -114,11 +114,20 @@ Use dynamic values in header modifications:
 | Function | Description | Example |
 |----------|-------------|---------|
 | `${header(name)}` | Request header value | `${header(user-agent)}` |
-| `${request(client_ip)}` | Client IP address | `${request(client_ip)}` |
-| `${uuid(v7)}` | Generate UUID v7 | `${uuid(v7)}` |
-| `${timestamp()}` | Current timestamp | `${timestamp()}` |
+| `${query(name[, default])}` | Query parameter | `${query(version, 'v1')}` |
+| `${cookie(name[, default])}` | Cookie value | `${cookie(session_id)}` |
+| `${param(name[, default])}` | Route parameter | `${param(user_id)}` |
+| `${request(field)}` | Request metadata (`client_ip`, `host`, `method`, `path`, `scheme`, `tls`) | `${request(method)}` |
 | `${env(VAR_NAME)}` | Environment variable | `${env(SERVER_NAME)}` |
-| `${or(val1, val2)}` | First non-empty value | `${or(env(NAME), 'default')}` |
+| `${uuid(v4|v7)}` | Generate UUID | `${uuid(v7)}` |
+| `${timestamp()}` | Current timestamp (RFC3339) | `${timestamp()}` |
+| `${or(a, b, …)}` | First non-empty value | `${or(env(NAME), 'default')}` |
+| `${eq(a, b[, value])}` | Optional value when `a == b` | `${eq(request(method), 'GET', 'cacheable')}` |
+| `${neq(a, b[, value])}` | Optional value when `a != b` | `${neq(request(scheme), 'https', 'insecure')}` |
+| `${concat(values…)}` | Concatenate all arguments | `${concat(header(host), '-', uuid(v4))}` |
+| `${upper(value)}` / `${lower(value)}` | Case conversion | `${upper(param(region))}` |
+| `${len(value)}` | String length | `${len(header(user-agent))}` |
+| `${if_cond(condition, then, else)}` | Conditional evaluation | `${if_cond(request(tls), 'https', 'http')}` |
 
 ### Examples
 
@@ -445,4 +454,3 @@ middleware_groups:
 - [Configuration](/core/configuration) - Middleware configuration reference
 - [Plugin Phases](/plugins/phases) - Understanding plugin execution
 - [Examples](/examples/custom-headers) - Middleware examples
-

@@ -183,7 +183,7 @@ nylon --version
 nylon --help
 
 # Test configuration
-nylon -c config.yaml --test
+nylon run -c config.yaml
 ```
 
 ## Go SDK for Plugin Development
@@ -343,4 +343,3 @@ docker rmi ghcr.io/assetsart/nylon:latest
 - [Quick Start](/introduction/quick-start) - Get started with Nylon
 - [Configuration](/core/configuration) - Configure Nylon
 - [Plugin Development](/plugins/overview) - Extend with plugins
-

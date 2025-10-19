@@ -303,14 +303,8 @@ Nylon logs health check status changes:
 
 ### Metrics
 
-Health check metrics available on metrics endpoint:
-
-```
-nylon_backend_health{service="api-service",backend="10.0.0.1:3000"} 1
-nylon_backend_health{service="api-service",backend="10.0.0.2:3000"} 0
-nylon_health_check_total{service="api-service",status="success"} 1234
-nylon_health_check_total{service="api-service",status="failure"} 56
-```
+Prometheus metrics export for health checks is planned but not yet available.
+For now, rely on the structured logs above to monitor backend health.
 
 ## Best Practices
 
@@ -375,4 +369,3 @@ Use metrics and logs to track:
 - [Configuration](/core/configuration) - Full configuration reference
 - [Health Checks](#health-checks) - Detailed health check configuration
 - [Examples](/examples/basic-proxy) - Load balancing examples
-

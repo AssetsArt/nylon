@@ -62,13 +62,14 @@ Execute after the request is complete:
 ```go
 package main
 
+import "C"
 import sdk "github.com/AssetsArt/nylon/sdk/go/sdk"
 
 func main() {}
 
 //export NewNylonPlugin
 func NewNylonPlugin() *sdk.NylonPlugin {
-	plugin := sdk.NylonPlugin{}
+	plugin := sdk.NewNylonPlugin()
 	
 	// Register phase handlers
 	plugin.AddPhaseHandler("my-handler", func(phase *sdk.PhaseHandler) {
@@ -97,7 +98,7 @@ func NewNylonPlugin() *sdk.NylonPlugin {
 		})
 	})
 	
-	return &plugin
+	return plugin
 }
 ```
 
@@ -116,7 +117,7 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 	
 	// Headers
 	auth := req.Header("Authorization")
-	headers := req.Headers()   // All headers
+		headers := req.Headers().GetAll()
 	
 	// Method and metadata
 	method := req.Method()     // GET, POST, etc.
@@ -128,7 +129,7 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 	userId := params["user_id"]
 	
 	// Body
-	body := req.ReadBody()     // Read request body
+	body := req.RawBody()      // Read request body (byte slice)
 	
 	// Timestamp
 	timestamp := req.Timestamp() // Request timestamp (ms)
@@ -148,8 +149,8 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 	
 	// Set headers
 	res.SetHeader("X-Custom-Header", "value")
-	res.SetResponseHeader("Cache-Control", "no-cache")
-	res.RemoveResponseHeader("Server")
+	res.SetHeader("Cache-Control", "no-cache")
+	res.RemoveHeader("Server")
 	
 	// Set body
 	res.BodyRaw([]byte("Hello, World!"))
@@ -194,15 +195,16 @@ phase.Logging(func(ctx *sdk.PhaseLogging) {
 // plugin.go
 package main
 
+import "C"
 import sdk "github.com/AssetsArt/nylon/sdk/go/sdk"
 
 func main() {}
 
 //export NewNylonPlugin
 func NewNylonPlugin() *sdk.NylonPlugin {
-	// Your plugin implementation
-	plugin := sdk.NylonPlugin{}
-	return &plugin
+	plugin := sdk.NewNylonPlugin()
+	// Register your handlers here
+	return plugin
 }
 ```
 
@@ -217,18 +219,43 @@ go build -buildmode=plugin -o myplugin.so plugin.go
 ```yaml
 plugins:
   - name: myplugin
-    path: "./myplugin.so"
+    type: ffi
+    file: ./myplugin.so
+    config:
+      some_flag: true
 
-proxy:
-  - name: my-proxy
-    routes:
-      - path: "/*"
-        service: backend
-        middlewares:
-          - type: Plugin
-            name: myplugin
-            config:
-              phase: request_filter
+services:
+  - name: backend
+    service_type: http
+    endpoints:
+      - ip: 127.0.0.1
+        port: 3000
+
+routes:
+  - route:
+      type: host
+      value: example.com
+    name: main
+    paths:
+      - path: /*
+        service:
+          name: backend
+        middleware:
+          - plugin: myplugin
+            entry: "my-handler"
+```
+
+> **Tip:** The `entry` value must match the name you pass to `AddPhaseHandler` in your plugin (e.g. `"my-handler"` in the example above).
+
+You can optionally provide structured data to the handler via `payload`:
+
+```yaml
+middleware:
+  - plugin: myplugin
+    entry: "my-handler"
+    payload:
+      api_key: "secret"
+      mode: "strict"
 ```
 
 ## Best Practices
@@ -250,7 +277,7 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 ```go
 phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 	req := ctx.Request()
-	body := req.ReadBody()
+	body := req.RawBody()
 	
 	var data map[string]interface{}
 	if err := json.Unmarshal(body, &data); err != nil {
@@ -292,24 +319,19 @@ phase.ResponseBodyFilter(func(ctx *sdk.PhaseResponseBodyFilter) {
 
 ```go
 phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
-	// Store data in payload for later phases
-	payload := map[string]interface{}{
-		"user_id": "12345",
-		"role": "admin",
-	}
-	ctx.SetPayload(payload)
-	
-	ctx.Next()
-})
-
-phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
-	// Retrieve data from earlier phase
+	// Access middleware payload provided in YAML config
 	payload := ctx.GetPayload()
-	if userID, ok := payload["user_id"].(string); ok {
-		res := ctx.Response()
-		res.SetHeader("X-User-ID", userID)
+	if apiKey, ok := payload["api_key"].(string); ok {
+		req := ctx.Request()
+		if req.Header("X-API-Key") != apiKey {
+			res := ctx.Response()
+			res.SetStatus(401)
+			res.BodyText("Unauthorized")
+			ctx.End()
+			return
+		}
 	}
-	
+
 	ctx.Next()
 })
 ```
@@ -319,4 +341,3 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 - Learn about [Plugin Phases](/plugins/phases) in detail
 - Explore the [Go SDK API](/plugins/go-sdk)
 - See [Plugin Examples](/examples/authentication)
-

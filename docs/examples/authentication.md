@@ -63,26 +63,17 @@ func init() {
 			return
 		}
 			
-			// Store auth info for logging
-			ctx.SetPayload(map[string]interface{}{
-				"authenticated": true,
-				"api_key": apiKey,
-			})
-			
 			fmt.Printf("[Auth] Authenticated: %s\n", req.ClientIP())
 			ctx.Next()
 		})
 		
 		phase.Logging(func(ctx *sdk.PhaseLogging) {
-			payload := ctx.GetPayload()
-			if auth, ok := payload["authenticated"].(bool); ok && auth {
-				req := ctx.Request()
-				fmt.Printf("[Auth] Access: %s %s from %s\n",
-					req.Method(),
-					req.Path(),
-					req.ClientIP(),
-				)
-			}
+			req := ctx.Request()
+			fmt.Printf("[Auth] Access: %s %s from %s\n",
+				req.Method(),
+				req.Path(),
+				req.ClientIP(),
+			)
 			ctx.Next()
 		})
 	})
@@ -222,17 +213,9 @@ func init() {
 			ctx.End()
 			return
 		}
-			
-			// TODO: Actually validate JWT signature
-			// For demo, just extract claims
-			
-			// Store user info
-			ctx.SetPayload(map[string]interface{}{
-				"user_id": "123",
-				"role": "admin",
-			})
-			
-			ctx.Next()
+		
+		// TODO: Actually validate JWT signature and expose claims using your own storage
+		ctx.Next()
 		})
 	})
 }
@@ -270,11 +253,17 @@ func init() {
 			return
 		}
 		
-		userRole, ok := payload["role"].(string)
-		if !ok {
+		payload := ctx.GetPayload()
+		requiredRole, _ := payload["required_role"].(string)
+		if requiredRole == "" {
+			requiredRole = "admin"
+		}
+
+		userRole := req.Header("X-User-Role")
+		if userRole == "" {
 			res := ctx.Response()
 			res.SetStatus(401)
-			res.BodyText("Invalid authentication")
+			res.BodyText("Authentication required")
 			res.RemoveHeader("Content-Length")
 			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
@@ -283,7 +272,7 @@ func init() {
 		
 		// Check if path requires admin
 		path := req.Path()
-		if strings.HasPrefix(path, "/admin") && userRole != "admin" {
+		if strings.HasPrefix(path, "/admin") && userRole != requiredRole {
 			res := ctx.Response()
 			res.SetStatus(403)
 			res.BodyText("Access denied: admin role required")
@@ -315,6 +304,8 @@ middleware_groups:
       entry: "jwt"
     - plugin: auth
       entry: "rbac"
+      payload:
+        required_role: "admin"
 
 routes:
   - route:

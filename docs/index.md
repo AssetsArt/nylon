@@ -39,7 +39,7 @@ features:
   
   - icon: 📊
     title: Observability
-    details: Request logging, metrics, duration tracking. Production-grade monitoring.
+    details: Structured request logging and TLS certificate health tracking. Prometheus exporter coming soon.
 ---
 
 <style scoped>
@@ -296,7 +296,7 @@ routes:
 <div style="text-align: center; margin: 32px 0;">
 
 ```bash
-nylon -c config.yaml
+nylon run -c config.yaml
 ```
 
 <p style="color: var(--vp-c-text-2); margin-top: 16px; font-size: 18px;">
@@ -377,7 +377,7 @@ Nylon combines the best of modern proxy technology:
 - **🔌 Extensible** - Plugin system with Go SDK (more languages coming)
 - **🔄 Zero Downtime** - Hot reload configuration without dropping connections
 - **🔒 Auto HTTPS** - Built-in ACME support for Let's Encrypt
-- **📊 Observability** - Comprehensive logging, metrics, and health checks
+- **📊 Observability** - Structured logging today, with broader metrics planned
 
 ## Features
 

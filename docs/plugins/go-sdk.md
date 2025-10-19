@@ -13,13 +13,14 @@ go get github.com/AssetsArt/nylon/sdk/go/sdk
 ```go
 package main
 
+import "C"
 import sdk "github.com/AssetsArt/nylon/sdk/go/sdk"
 
 func main() {}
 
 //export NewNylonPlugin
 func NewNylonPlugin() *sdk.NylonPlugin {
-	plugin := sdk.NylonPlugin{}
+	plugin := sdk.NewNylonPlugin()
 	
 	plugin.AddPhaseHandler("handler", func(phase *sdk.PhaseHandler) {
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
@@ -28,7 +29,7 @@ func NewNylonPlugin() *sdk.NylonPlugin {
 		})
 	})
 	
-	return &plugin
+	return plugin
 }
 ```
 
@@ -41,9 +42,9 @@ func NewNylonPlugin() *sdk.NylonPlugin {
 - `req.URL()` - Full URL
 - `req.Query()` - Query string
 - `req.Header(key)` - Get header
-- `req.Headers()` - All headers
+- `req.Headers()` - All headers (`Get`, `GetAll`)
 - `req.Params()` - URL parameters
-- `req.ReadBody()` - Request body
+- `req.RawBody()` - Request body
 - `req.Host()` - Host header
 - `req.ClientIP()` - Client IP
 - `req.Timestamp()` - Request timestamp
@@ -53,16 +54,16 @@ func NewNylonPlugin() *sdk.NylonPlugin {
 
 - `res.SetStatus(code)` - Set status code
 - `res.SetHeader(key, value)` - Set header
-- `res.SetResponseHeader(key, value)` - Set response header
-- `res.RemoveResponseHeader(key)` - Remove header
+- `res.RemoveHeader(key)` - Remove header
 - `res.BodyRaw([]byte)` - Set body
 - `res.BodyText(string)` - Set text body
+- `res.BodyJSON(any)` - Set JSON body
 - `res.ReadBody()` - Read response body
 - `res.Status()` - Get status code
 - `res.Headers()` - Get response headers
 - `res.Bytes()` - Response size
 - `res.Duration()` - Request duration
 - `res.Error()` - Error message
+- `res.Redirect(url)` - Redirect helper
 
-More details coming soon...
-
+> `ctx.GetPayload()` is available on every phase context and returns the payload configured in your YAML middleware entry.

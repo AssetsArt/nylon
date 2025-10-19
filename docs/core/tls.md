@@ -18,7 +18,9 @@ acme: "./acme"  # Certificate storage directory
 ```yaml
 # Proxy config
 tls:
-  - domains:
+  - type: acme
+    provider: letsencrypt
+    domains:
       - example.com
       - www.example.com
     acme:
@@ -50,7 +52,8 @@ That's it! Nylon will:
 
 ```yaml
 tls:
-  - domains:
+  - type: custom
+    domains:
       - example.com
       - www.example.com
     cert: /path/to/cert.pem
@@ -79,7 +82,9 @@ Nylon accepts standard PEM-encoded certificates:
 
 ```yaml
 tls:
-  - domains:
+  - type: acme
+    provider: letsencrypt
+    domains:
       - example.com
     acme:
       email: admin@example.com
@@ -90,7 +95,9 @@ tls:
 
 ```yaml
 tls:
-  - domains:
+  - type: acme
+    provider: letsencrypt
+    domains:
       - example.com
     acme:
       email: admin@example.com
@@ -119,14 +126,18 @@ Nylon automatically handles HTTP-01 challenge:
 ```yaml
 tls:
   # Certificate for api.example.com
-  - domains:
+  - type: acme
+    provider: letsencrypt
+    domains:
       - api.example.com
     acme:
       email: admin@example.com
       directory_url: https://acme-v02.api.letsencrypt.org/directory
 
   # Certificate for admin.example.com
-  - domains:
+  - type: acme
+    provider: letsencrypt
+    domains:
       - admin.example.com
     acme:
       email: admin@example.com
@@ -148,7 +159,9 @@ tls:
 
 ```yaml
 tls:
-  - domains:
+  - type: acme
+    provider: letsencrypt
+    domains:
       - api.example.com
       - admin.example.com
       - app.example.com
@@ -462,4 +475,3 @@ openssl x509 -in acme/example.com.cert -noout -dates
 - [Configuration](/core/configuration) - TLS configuration reference
 - [Routing](/core/routing) - Configure routes with TLS
 - [Examples](/examples/basic-proxy) - TLS examples
-
