@@ -17,87 +17,128 @@ cargo build --release
 # The binary will be at target/release/nylon
 ```
 
-### Using the Install Script
-
-```bash
-curl -sSL https://raw.githubusercontent.com/yourusername/nylon/main/scripts/install.sh | bash
-```
-
 ## Your First Proxy
 
-Create a simple configuration file `config.yaml`:
+Nylon uses two configuration files:
+
+1. **Runtime config** (`config.yaml`) - Server settings
+2. **Proxy config** (in `config_dir`) - Services, routes, plugins
+
+### 1. Create Runtime Config
+
+Create `config.yaml`:
 
 ```yaml
-runtime:
+http:
+  - 0.0.0.0:8080
+
+config_dir: "./config"
+
+pingora:
+  daemon: false
   threads: 4
   work_stealing: true
-
-proxy:
-  - name: my-first-proxy
-    listen:
-      - "0.0.0.0:8080"
-    routes:
-      - path: "/*"
-        service: backend
-
-services:
-  - name: backend
-    backend:
-      round_robin:
-        - "127.0.0.1:3000"
+  grace_period_seconds: 60
+  graceful_shutdown_timeout_seconds: 10
 ```
 
-Start the proxy:
+### 2. Create Proxy Config
+
+Create `config/proxy.yaml`:
+
+```yaml
+services:
+  - name: backend
+    service_type: http
+    algorithm: round_robin
+    endpoints:
+      - ip: 127.0.0.1
+        port: 3000
+
+routes:
+  - route:
+      type: host
+      value: localhost
+    name: default
+    paths:
+      - path: /*
+        service:
+          name: backend
+```
+
+### 3. Start the Proxy
 
 ```bash
 nylon -c config.yaml
 ```
 
-Test it:
+### 4. Test It
 
 ```bash
 curl http://localhost:8080
 ```
 
-## With TLS/HTTPS
+## With HTTPS/TLS
 
 Enable HTTPS with automatic certificate management:
 
-```yaml
-runtime:
-  threads: 4
-  work_stealing: true
+### Runtime Config
 
-proxy:
-  - name: https-proxy
-    listen:
-      - "0.0.0.0:443"
-    tls:
-      - domains:
-          - "example.com"
-        acme:
-          email: "admin@example.com"
-          directory_url: "https://acme-v02.api.letsencrypt.org/directory"
-    routes:
-      - path: "/*"
-        service: backend
+```yaml
+http:
+  - 0.0.0.0:80
+https:
+  - 0.0.0.0:443
+
+config_dir: "./config"
+acme: "./acme"
+
+pingora:
+  daemon: false
+  threads: 4
+```
+
+### Proxy Config with TLS
+
+```yaml
+tls:
+  - domains:
+      - example.com
+    acme:
+      email: admin@example.com
+      directory_url: https://acme-v02.api.letsencrypt.org/directory
 
 services:
   - name: backend
-    backend:
-      round_robin:
-        - "127.0.0.1:3000"
+    service_type: http
+    algorithm: round_robin
+    endpoints:
+      - ip: 127.0.0.1
+        port: 3000
+
+routes:
+  - route:
+      type: host
+      value: example.com
+    name: https-route
+    tls:
+      enabled: true
+    paths:
+      - path: /*
+        service:
+          name: backend
 ```
 
 ## With Plugins
 
-### 1. Build a Go Plugin
+### 1. Create Plugin
 
 Create `plugin.go`:
 
 ```go
 package main
 
+import "C"
 import (
 	"fmt"
 	sdk "github.com/AssetsArt/nylon/sdk/go/sdk"
@@ -105,67 +146,81 @@ import (
 
 func main() {}
 
-//export NewNylonPlugin
-func NewNylonPlugin() *sdk.NylonPlugin {
-	plugin := sdk.NylonPlugin{}
-	
+func init() {
+	plugin := sdk.NewNylonPlugin()
+
+	// Initialize handler (optional)
+	plugin.Initialize(sdk.NewInitializer(func(config map[string]interface{}) {
+		fmt.Println("[Plugin] Initialized")
+		fmt.Println("[Plugin] Config:", config)
+	}))
+
+	// Shutdown handler (optional)
+	plugin.Shutdown(func() {
+		fmt.Println("[Plugin] Shutdown")
+	})
+
+	// Register phase handler
 	plugin.AddPhaseHandler("auth", func(phase *sdk.PhaseHandler) {
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 			req := ctx.Request()
 			
-			// Simple authentication
+			// Simple API key authentication
 			apiKey := req.Header("X-API-Key")
 			if apiKey != "secret-key" {
 				res := ctx.Response()
 				res.SetStatus(401)
-				res.BodyRaw([]byte("Unauthorized"))
-				return
+				res.BodyText("Unauthorized")
+				return // Stop here
 			}
 			
-			ctx.Next()
+			ctx.Next() // Continue
 		})
 	})
-	
-	return &plugin
 }
 ```
 
-Build the plugin:
+### 2. Build Plugin
 
 ```bash
 go build -buildmode=plugin -o auth.so plugin.go
 ```
 
-### 2. Configure Nylon to Use the Plugin
+### 3. Configure Nylon
+
+**Proxy config (`config/proxy.yaml`):**
 
 ```yaml
-runtime:
-  threads: 4
-  work_stealing: true
-
 plugins:
   - name: auth
-    path: "./auth.so"
-
-proxy:
-  - name: protected-api
-    listen:
-      - "0.0.0.0:8080"
-    routes:
-      - path: "/*"
-        service: backend
-        middlewares:
-          - type: Plugin
-            name: auth
+    type: ffi
+    file: ./auth.so
+    config:
+      debug: true
 
 services:
-  - name: backend
-    backend:
-      round_robin:
-        - "127.0.0.1:3000"
+  - name: protected-api
+    service_type: http
+    algorithm: round_robin
+    endpoints:
+      - ip: 127.0.0.1
+        port: 3000
+
+routes:
+  - route:
+      type: host
+      value: localhost
+    name: protected
+    paths:
+      - path: /*
+        service:
+          name: protected-api
+        middleware:
+          - plugin: auth
+            entry: "auth"
 ```
 
-### 3. Test the Protected Endpoint
+### 4. Test Protected Endpoint
 
 Without API key (should fail):
 ```bash
@@ -179,38 +234,102 @@ curl -H "X-API-Key: secret-key" http://localhost:8080/api
 # Response: forwarded to backend
 ```
 
-## Load Balancing Example
+## Load Balancing
 
-Configure multiple backends with different strategies:
+Configure multiple backends with different algorithms:
 
 ```yaml
 services:
-  - name: api-service
-    backend:
-      # Round Robin (default)
-      round_robin:
-        - "10.0.0.1:3000"
-        - "10.0.0.2:3000"
-        - "10.0.0.3:3000"
+  # Round Robin (default)
+  - name: api-roundrobin
+    service_type: http
+    algorithm: round_robin
+    endpoints:
+      - ip: 10.0.0.1
+        port: 3000
+      - ip: 10.0.0.2
+        port: 3000
+      - ip: 10.0.0.3
+        port: 3000
 
-  - name: weighted-service
-    backend:
-      # Weighted Round Robin
-      weighted:
-        - addr: "10.0.0.1:3000"
-          weight: 5
-        - addr: "10.0.0.2:3000"
-          weight: 3
-        - addr: "10.0.0.3:3000"
-          weight: 2
+  # Weighted Round Robin
+  - name: api-weighted
+    service_type: http
+    algorithm: weighted
+    endpoints:
+      - ip: 10.0.0.1
+        port: 3000
+        weight: 5
+      - ip: 10.0.0.2
+        port: 3000
+        weight: 3
+      - ip: 10.0.0.3
+        port: 3000
+        weight: 2
 
-  - name: consistent-service
-    backend:
-      # Consistent Hashing
-      consistent:
-        - "10.0.0.1:3000"
-        - "10.0.0.2:3000"
-        - "10.0.0.3:3000"
+  # Consistent Hashing
+  - name: api-consistent
+    service_type: http
+    algorithm: consistent
+    endpoints:
+      - ip: 10.0.0.1
+        port: 3000
+      - ip: 10.0.0.2
+        port: 3000
+      - ip: 10.0.0.3
+        port: 3000
+
+  # Random
+  - name: api-random
+    service_type: http
+    algorithm: random
+    endpoints:
+      - ip: 10.0.0.1
+        port: 3000
+      - ip: 10.0.0.2
+        port: 3000
+```
+
+## Service Types
+
+Nylon supports three types of services:
+
+### HTTP Service
+Forward requests to HTTP backends:
+
+```yaml
+services:
+  - name: http-backend
+    service_type: http
+    algorithm: round_robin
+    endpoints:
+      - ip: 127.0.0.1
+        port: 3000
+```
+
+### Plugin Service
+Handle requests with Go plugins:
+
+```yaml
+services:
+  - name: custom-handler
+    service_type: plugin
+    plugin:
+      name: my-plugin
+      entry: "handler"
+```
+
+### Static Service
+Serve static files:
+
+```yaml
+services:
+  - name: static-files
+    service_type: static
+    static:
+      root: ./public
+      index: index.html
+      spa: true  # SPA fallback mode
 ```
 
 ## Next Steps
@@ -218,4 +337,3 @@ services:
 - Learn about [Configuration](/core/configuration) in detail
 - Explore [Plugin Development](/plugins/overview)
 - Check out [Examples](/examples/basic-proxy)
-
