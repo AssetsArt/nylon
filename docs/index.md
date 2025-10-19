@@ -20,23 +20,23 @@ features:
   - icon: ⚡️
     title: Blazing Fast
     details: Built on Cloudflare Pingora. Handle millions of requests per second with minimal latency.
-  
+
   - icon: 🔌
     title: Plugin Ecosystem
     details: Extensible plugin system. Go SDK ready, more languages coming soon.
-  
+
   - icon: 🎯
     title: Smart Routing
     details: Host and path-based routing. Parameters, rewrites, middleware chains.
-  
+
   - icon: 🔒
     title: Automatic TLS
     details: Let's Encrypt integration. Zero-config HTTPS with automatic renewal.
-  
+
   - icon: 🔄
     title: Load Balancing
     details: Round robin, weighted, consistent hashing, or random selection.
-  
+
   - icon: 📊
     title: Observability
     details: Structured request logging and TLS certificate health tracking. Prometheus exporter coming soon.
@@ -225,7 +225,7 @@ features:
   .code-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .phase-arrow {
     display: none;
   }
@@ -457,35 +457,29 @@ services:
 
 <div class="phase-flow">
   <div class="phase-item">
-    <div class="phase-icon">🌐</div>
     <strong>Client</strong>
   </div>
   <div class="phase-arrow">→</div>
   <div class="phase-item">
-    <div class="phase-icon">🔍</div>
     <strong>RequestFilter</strong>
     <div style="font-size: 12px; color: var(--vp-c-text-2);">Auth, Rate Limit</div>
   </div>
   <div class="phase-arrow">→</div>
   <div class="phase-item">
-    <div class="phase-icon">🖥️</div>
     <strong>Backend</strong>
   </div>
   <div class="phase-arrow">→</div>
   <div class="phase-item">
-    <div class="phase-icon">📝</div>
     <strong>ResponseFilter</strong>
     <div style="font-size: 12px; color: var(--vp-c-text-2);">Headers</div>
   </div>
   <div class="phase-arrow">→</div>
   <div class="phase-item">
-    <div class="phase-icon">✏️</div>
     <strong>BodyFilter</strong>
     <div style="font-size: 12px; color: var(--vp-c-text-2);">Transform</div>
   </div>
   <div class="phase-arrow">→</div>
   <div class="phase-item">
-    <div class="phase-icon">📊</div>
     <strong>Logging</strong>
     <div style="font-size: 12px; color: var(--vp-c-text-2);">Analytics</div>
   </div>
@@ -504,7 +498,7 @@ services:
   <p style="font-size: 20px; color: var(--vp-c-text-2); margin-bottom: 32px;">
     Install Nylon and start proxying requests right away
   </p>
-  
+
   <div style="max-width: 600px; margin: 0 auto;">
 
 ```bash
