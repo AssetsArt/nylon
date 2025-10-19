@@ -59,18 +59,17 @@ features:
   font-weight: 700;
 }
 
-.install-command {
-  background: #1e293b;
-  color: #e2e8f0;
-  padding: 20px 32px;
-  border-radius: 12px;
-  font-family: 'Fira Code', monospace;
-  font-size: 16px;
+.install-box div[class*="language-"] {
   margin: 24px 0;
+  background: #1e293b;
 }
 
-.dark .install-command {
+.dark .install-box div[class*="language-"] {
   background: #0f172a;
+}
+
+.install-box .vp-code-group {
+  margin: 24px 0;
 }
 
 .section-title {
@@ -236,9 +235,11 @@ features:
 ## 🚀 Install in One Command
 
 <div class="install-box">
-  <div class="install-command">
-    curl -fsSL https://nylon.sh/install | bash
-  </div>
+
+```bash
+curl -fsSL https://nylon.sh/install | bash
+```
+
   <p style="color: var(--vp-c-text-2); margin-top: 16px;">
     Linux x86_64/aarch64 • Automatic detection • No dependencies
   </p>
@@ -499,8 +500,12 @@ services:
     Install Nylon and start proxying requests right away
   </p>
   
-  <div class="install-command" style="max-width: 600px; margin: 0 auto;">
-    curl -fsSL https://nylon.sh/install | bash
+  <div style="max-width: 600px; margin: 0 auto;">
+
+```bash
+curl -fsSL https://nylon.sh/install | bash
+```
+
   </div>
 
   <div class="cta-buttons">
