@@ -10,17 +10,17 @@ Plugins are Go shared libraries (`.so` files) that implement the Nylon plugin in
 ┌─────────────────────────────────┐
 │         Nylon Core              │
 │                                 │
-│  ┌───────────────────────────┐ │
-│  │     Request Flow          │ │
-│  │                           │ │
-│  │  1. RequestFilter         │ │◄── Plugin intercepts here
-│  │  2. Route Matching        │ │
-│  │  3. Backend Selection     │ │
-│  │  4. ResponseFilter        │ │◄── Plugin intercepts here
-│  │  5. ResponseBodyFilter    │ │◄── Plugin intercepts here
-│  │  6. Logging               │ │◄── Plugin intercepts here
-│  │                           │ │
-│  └───────────────────────────┘ │
+│  ┌───────────────────────────┐  │
+│  │     Request Flow          │  │
+│  │                           │  │
+│  │  1. RequestFilter         │  │◄── Plugin intercepts here
+│  │  2. Route Matching        │  │
+│  │  3. Backend Selection     │  │
+│  │  4. ResponseFilter        │  │◄── Plugin intercepts here
+│  │  5. ResponseBodyFilter    │  │◄── Plugin intercepts here
+│  │  6. Logging               │  │◄── Plugin intercepts here
+│  │                           │  │
+│  └───────────────────────────┘  │
 └─────────────────────────────────┘
 ```
 
