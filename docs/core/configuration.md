@@ -21,12 +21,10 @@ The main `config.yaml` file controls server behavior:
 # HTTP listening addresses
 http:
   - "0.0.0.0:80"
-  - "[::]:80"
 
 # HTTPS listening addresses  
 https:
   - "0.0.0.0:443"
-  - "[::]:443"
 
 # Prometheus metrics endpoint
 metrics:

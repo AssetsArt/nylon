@@ -24,8 +24,8 @@ export default defineConfig({
           text: 'Introduction',
           items: [
             { text: 'What is Nylon?', link: '/introduction/what-is-nylon' },
-            { text: 'Quick Start', link: '/introduction/quick-start' },
             { text: 'Installation', link: '/introduction/installation' },
+            { text: 'Quick Start', link: '/introduction/quick-start' },
           ]
         },
         {
