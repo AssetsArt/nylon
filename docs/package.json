@@ -1,0 +1,18 @@
+{
+  "name": "nylon-docs",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Documentation for Nylon Reverse Proxy",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "keywords": ["nylon", "proxy", "reverse-proxy", "documentation"],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "vitepress": "^1.0.0",
+    "vue": "^3.4.0"
+  }
+}
