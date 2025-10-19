@@ -14,7 +14,7 @@ Match requests by hostname:
 routes:
   - route:
       type: host
-      value: api.example.com
+      value: api.example.com|api.internal|api.staging
     name: api-route
     paths:
       - path:
@@ -64,7 +64,7 @@ Use `*` to match any path segment:
 ```yaml
 paths:
   # Match /api/users, /api/posts, etc.
-  - path: /api/*
+  - path: /api/{*path}
     service:
       name: api-service
 
@@ -91,7 +91,7 @@ paths:
       name: post-service
 
   # With wildcard: /users/123/anything/else
-  - path: /users/:id/*
+  - path: /users/:id/{*path}
     service:
       name: user-service
 ```
@@ -114,22 +114,22 @@ Rewrite paths before forwarding to backend:
 ```yaml
 paths:
   # Rewrite /old-api/* to /new-api/*
-  - path: /old-api/*
+  - path: /old-api/{*path}
     service:
       name: api-service
-      rewrite: /new-api/*
+      rewrite: /new-api
 
   # Remove prefix: /api/v1/* -> /*
-  - path: /api/v1/*
+  - path: /api/v1/{*path}
     service:
       name: api-service
-      rewrite: /*
+      rewrite: /
 
   # Add prefix: /* -> /backend/*
   - path: /{*path}
     service:
       name: backend
-      rewrite: /backend/*
+      rewrite: /backend
 ```
 
 ## Method Filtering
@@ -168,7 +168,7 @@ routes:
     name: main
     paths:
       # API endpoints
-      - path: /api/*
+      - path: /api/{*path}
         service:
           name: api-service
         middleware:
@@ -176,12 +176,12 @@ routes:
             entry: "check"
 
       # Static files
-      - path: /static/*
+      - path: /static/{*path}
         service:
           name: static-files
 
       # Admin panel
-      - path: /admin/*
+      - path: /admin/{*path}
         service:
           name: admin-service
         middleware:
@@ -237,12 +237,12 @@ routes:
       - group: security
     paths:
       # Public endpoints
-      - path: /public/*
+      - path: /public/{*path}
         service:
           name: public-api
 
       # Authenticated endpoints
-      - path: /v1/*
+      - path: /v1/{*path}
         service:
           name: api-v1
         middleware:
@@ -250,7 +250,7 @@ routes:
             entry: "jwt"
 
       # Admin endpoints
-      - path: /admin/*
+      - path: /admin/{*path}
         service:
           name: admin-api
         methods:
@@ -307,8 +307,7 @@ header_selector: x-nylon-proxy
 paths:
   - path: /api/health      # Exact
   - path: /api/:id         # Parameter
-  - path: /api/*           # Wildcard
-  - path: /{*path}               # Catch-all
+  - path: /{*path}               # Wildcard
 ```
 
 ### 2. Use Middleware for Common Logic
@@ -322,7 +321,7 @@ middleware_groups:
       entry: "limit"
 
 paths:
-  - path: /api/*
+  - path: /api/:id
     service:
       name: api-service
     middleware:
@@ -353,12 +352,12 @@ routes:
 ```yaml
 # Instead of this:
 paths:
-  - path: /users/profile/*
+  - path: /users/profile/{*path}
     service: user-service
 
 # Do this:
 paths:
-  - path: /users/:id/*
+  - path: /users/:id/{*path}
     service: user-service
 ```
 

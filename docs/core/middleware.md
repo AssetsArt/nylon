@@ -121,7 +121,7 @@ Use dynamic values in header modifications:
 | `${param(name[, default])}` | Route parameter | `${param(user_id)}` |
 | `${request(field)}` | Request metadata (`client_ip`, `host`, `method`, `path`, `scheme`, `tls`) | `${request(method)}` |
 | `${env(VAR_NAME)}` | Environment variable | `${env(SERVER_NAME)}` |
-| `${uuid(v4|v7)}` | Generate UUID | `${uuid(v7)}` |
+| `${uuid(v4\|v7)}` | Generate UUID | `${uuid(v7)}` |
 | `${timestamp()}` | Current timestamp (RFC3339) | `${timestamp()}` |
 | `${or(a, b, …)}` | First non-empty value | `${or(env(NAME), 'default')}` |
 | `${eq(a, b[, value])}` | Optional value when `a == b` | `${eq(request(method), 'GET', 'cacheable')}` |
@@ -185,12 +185,12 @@ routes:
     name: api
     paths:
       # Public endpoint
-      - path: /public/*
+      - path: /public/{*path}
         service:
           name: api-service
       
       # Protected endpoint
-      - path: /private/*
+      - path: /private/{*path}
         service:
           name: api-service
         middleware:
@@ -203,7 +203,7 @@ Pass configuration to plugins:
 
 ```yaml
 paths:
-  - path: /admin/*
+  - path: /admin/{*path}
     service:
       name: admin-service
     middleware:
@@ -268,7 +268,7 @@ routes:
     middleware:
       - group: security  # Applied to ALL paths
     paths:
-      - path: /private/*
+      - path: /private/{*path}
         service:
           name: api-service
         middleware:
@@ -408,16 +408,16 @@ middleware:
 ```yaml
 # ✅ Good - Only what's needed
 paths:
-  - path: /public/*
+  - path: /public/{*path}
     middleware: []  # No auth for public
 
-  - path: /private/*
+  - path: /private/{*path}
     middleware:
       - group: auth
 
 # ❌ Bad - Unnecessary middleware
 paths:
-  - path: /public/*
+  - path: /public/{*path}
     middleware:
       - group: auth  # Not needed for public
 ```

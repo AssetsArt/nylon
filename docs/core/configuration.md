@@ -151,7 +151,6 @@ tls:
       - example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 ```
 
 ---
@@ -300,7 +299,6 @@ tls:
       - api.example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 ```
 
 Routes can enforce TLS and optionally redirect HTTP to HTTPS:
@@ -313,7 +311,7 @@ routes:
     name: secure
     tls:
       enabled: true
-      redirect: https://example.com
+      redirect: ${host}
     paths:
       - path:
           - /

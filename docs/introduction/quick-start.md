@@ -110,7 +110,6 @@ tls:
       - example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 
 services:
   - name: backend

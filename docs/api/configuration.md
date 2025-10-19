@@ -120,11 +120,11 @@ middleware_groups:
 routes:
   - route:
       type: host
-      value: example.com
+      value: example.com|example.org
     name: main
     tls:
       enabled: true
-      redirect: https://example.com
+      redirect: ${host}
     middleware:
       - group: security
     paths:
@@ -144,7 +144,6 @@ tls:
       - example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 ```
 
 ### Plugins

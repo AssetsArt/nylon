@@ -25,12 +25,11 @@ tls:
       - www.example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 
 routes:
   - route:
       type: host
-      value: example.com
+      value: example.com|www.example.com
     name: main
     tls:
       enabled: true
@@ -90,7 +89,6 @@ tls:
       - example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 ```
 
 ### Let's Encrypt Staging (Testing)
@@ -103,7 +101,6 @@ tls:
       - example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-staging-v02.api.letsencrypt.org/directory
 ```
 
 **Use staging for testing** to avoid rate limits!
@@ -134,7 +131,6 @@ tls:
       - api.example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 
   # Certificate for admin.example.com
   - type: acme
@@ -143,7 +139,6 @@ tls:
       - admin.example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 ```
 
 ### Wildcard Certificates
@@ -169,7 +164,6 @@ tls:
       - app.example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 ```
 
 ## HTTP to HTTPS Redirect
@@ -180,11 +174,11 @@ Automatically redirect HTTP requests to HTTPS:
 routes:
   - route:
       type: host
-      value: example.com
+      value: example.com|api.example.com|admin.example.com
     name: main
     tls:
       enabled: true
-      redirect: https://example.com  # Redirect HTTP to HTTPS
+      redirect: ${host}  # Redirect HTTP to HTTPS
     paths:
       - path:
           - /
@@ -287,7 +281,6 @@ tls:
       - www.example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 
 services:
   - name: backend
@@ -303,7 +296,7 @@ routes:
     name: main
     tls:
       enabled: true
-      redirect: https://example.com
+      redirect: ${host}
     paths:
       - path:
           - /
@@ -320,13 +313,11 @@ tls:
       - api.example.com
     acme:
       email: api@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 
   - domains:
       - admin.example.com
     acme:
       email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
 
 routes:
   - route:
@@ -461,7 +452,7 @@ chown root:root acme/*.key
 ```yaml
 tls:
   enabled: true
-  redirect: https://example.com  # Force HTTPS
+  redirect: ${host}  # Force HTTPS
 ```
 
 ### 4. Use HSTS Header
