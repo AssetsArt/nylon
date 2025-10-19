@@ -305,18 +305,6 @@ sudo cp target/release/nylon /usr/local/bin/
 sudo nylon service restart
 ```
 
-### With Package Manager
-
-```bash
-# APT
-sudo apt update && sudo apt upgrade nylon
-
-# YUM/DNF
-sudo yum update nylon
-# or
-sudo dnf update nylon
-```
-
 ## Uninstall
 
 ### Remove Binary
