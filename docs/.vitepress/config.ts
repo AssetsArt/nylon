@@ -70,7 +70,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/yourusername/nylon' }
+      { icon: 'github', link: 'https://github.com/AssetsArt/nylon' }
     ],
 
     footer: {

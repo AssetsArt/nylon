@@ -8,7 +8,7 @@ Get up and running with Nylon in minutes.
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/nylon.git
+git clone https://github.com/AssetsArt/nylon.git
 cd nylon
 
 # Build the project
