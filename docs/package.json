@@ -5,8 +5,9 @@
   "description": "Documentation for Nylon Reverse Proxy",
   "scripts": {
     "dev": "vitepress dev",
-    "build": "vitepress build",
-    "preview": "vitepress preview"
+    "build": "npm run copy-install && vitepress build",
+    "preview": "vitepress preview",
+    "copy-install": "cp ../scripts/install.sh public/install"
   },
   "keywords": ["nylon", "proxy", "reverse-proxy", "documentation"],
   "author": "",
