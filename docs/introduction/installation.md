@@ -171,46 +171,6 @@ sudo journalctl -u nylon -f
 curl http://localhost:8088
 ```
 
-## Package Managers
-
-### Homebrew (macOS/Linux)
-
-```bash
-# Coming soon
-brew install nylon
-```
-
-### APT (Debian/Ubuntu)
-
-```bash
-# Add repository
-curl -fsSL https://nylon.sh/gpg | sudo apt-key add -
-echo "deb https://nylon.sh/apt stable main" | sudo tee /etc/apt/sources.list.d/nylon.list
-
-# Install
-sudo apt update
-sudo apt install nylon
-```
-
-### YUM/DNF (RedHat/CentOS/Fedora)
-
-```bash
-# Add repository
-sudo tee /etc/yum.repos.d/nylon.repo <<EOF
-[nylon]
-name=Nylon Repository
-baseurl=https://nylon.sh/yum
-enabled=1
-gpgcheck=1
-gpgkey=https://nylon.sh/gpg
-EOF
-
-# Install
-sudo yum install nylon
-# or
-sudo dnf install nylon
-```
-
 ## Verify Installation
 
 After installation, verify Nylon is working:
