@@ -14,12 +14,12 @@ Built on top of Pingora, the same technology that powers Cloudflare's edge netwo
 
 ### 🔌 Plugin Ecosystem
 
-Extend Nylon's functionality with plugins written in Go:
+Extend Nylon's functionality with plugins:
 - Request/Response filtering
 - Authentication and authorization
 - Custom logging and metrics
 - WebSocket message handling
-- And more...
+- Go SDK ready, more languages coming soon
 
 ### 🎯 Enterprise Features
 
@@ -86,16 +86,14 @@ Proxy WebSocket connections with:
 └─────────────┘  └─────────────┘  └─────────────┘
 ```
 
-## Comparison
+## What Makes Nylon Different?
 
-| Feature | Nylon | Nginx | Traefik | Caddy |
-|---------|-------|-------|---------|-------|
-| Performance | ⚡️ Excellent | ⚡️ Excellent | ⚡️ Good | ⚡️ Good |
-| Plugin System | ✅ Go Plugins | ⚠️ Limited | ✅ Middleware | ✅ Modules |
-| Hot Reload | ✅ Yes | ⚠️ Partial | ✅ Yes | ✅ Yes |
-| Built-in ACME | ✅ Yes | ❌ No | ✅ Yes | ✅ Yes |
-| WebSocket | ✅ Full Support | ✅ Full Support | ✅ Full Support | ✅ Full Support |
-| Configuration | 📝 YAML | 📝 Config File | 📝 YAML/TOML | 📝 Caddyfile |
+- **🦀 Built with Rust on Pingora** - Leverages Cloudflare's battle-tested framework for unmatched performance and reliability
+- **🔌 Flexible Plugin System** - FFI-based architecture supporting multiple languages (Go SDK ready, more coming)
+- **⚡️ True Zero-Downtime** - Hot reload configuration and code without dropping a single connection
+- **🔒 Security First** - Automatic TLS with ACME, built-in security headers, and safe plugin isolation
+- **📊 Observable by Default** - Comprehensive logging, metrics, and health checks out of the box
+- **🎯 Developer Friendly** - Clean YAML config, intuitive APIs, and extensive documentation
 
 ## Next Steps
 

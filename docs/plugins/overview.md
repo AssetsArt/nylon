@@ -1,10 +1,10 @@
 # Plugin Development Overview
 
-Nylon's plugin system allows you to extend its functionality with custom logic written in Go. Plugins can intercept and modify requests, responses, and WebSocket messages.
+Nylon's plugin system allows you to extend its functionality with custom logic. Plugins can intercept and modify requests, responses, and WebSocket messages. Currently, the Go SDK is production-ready, with more language SDKs in development.
 
 ## Plugin Architecture
 
-Plugins are Go shared libraries (`.so` files) that implement the Nylon plugin interface. They run in the same process as Nylon for maximum performance.
+Plugins are shared libraries (`.so` files) that implement the Nylon plugin interface. They run in the same process as Nylon for maximum performance using Foreign Function Interface (FFI).
 
 ```
 ┌─────────────────────────────────┐

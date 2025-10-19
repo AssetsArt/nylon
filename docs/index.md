@@ -23,7 +23,7 @@ features:
   
   - icon: 🔌
     title: Plugin Ecosystem
-    details: Extend with Go plugins. No Lua, no complex DSLs. Just Go.
+    details: Extensible plugin system. Go SDK ready, more languages coming soon.
   
   - icon: 🎯
     title: Smart Routing
@@ -308,7 +308,7 @@ nylon -c config.yaml
 ## Add Superpowers with Plugins
 
 <p class="section-subtitle">
-  Write custom logic in Go. No Lua. No complicated DSLs. Just clean, simple code.
+  Write custom logic with our plugin SDK. Go is ready, more languages coming soon.
 </p>
 
 ```go
@@ -361,18 +361,14 @@ plugins:
 
 ## Why Choose Nylon?
 
-<div class="comparison-table">
+Nylon combines the best of modern proxy technology:
 
-| Feature | Nginx | Envoy | Caddy | **Nylon** |
-|---------|-------|-------|-------|-----------|
-| **Language** | C | C++ | Go | **Rust** ⚡️ |
-| **Plugin Language** | Lua/C | WASM/C++ | Go | **Go** 🎯 |
-| **Performance** | High | High | High | **Very High** (Pingora) 🚀 |
-| **Hot Reload** | ✅ | ✅ | ✅ | **✅** |
-| **Auto HTTPS** | ❌ | ❌ | ✅ | **✅** 🔒 |
-| **Learning Curve** | Medium | Steep | Easy | **Easy** 📖 |
-
-</div>
+- **🚀 Built on Pingora** - Same technology powering Cloudflare's edge network
+- **⚡️ High Performance** - Rust's memory safety without garbage collection overhead
+- **🔌 Extensible** - Plugin system with Go SDK (more languages coming)
+- **🔄 Zero Downtime** - Hot reload configuration without dropping connections
+- **🔒 Auto HTTPS** - Built-in ACME support for Let's Encrypt
+- **📊 Production Ready** - Comprehensive logging, metrics, and health checks
 
 ## Production-Grade Features
 
