@@ -10,7 +10,7 @@ Nylon uses two types of configuration:
 2. **Proxy Configuration** - Services, routes, and plugins
 
 ```bash
-nylon -c config.yaml
+nylon run -c config.yaml
 ```
 
 ## Runtime Configuration
@@ -26,7 +26,7 @@ http:
 https:
   - "0.0.0.0:443"
 
-# Prometheus metrics endpoint
+# Prometheus metrics endpoint (reserved; currently unused)
 metrics:
   - "127.0.0.1:6192"
 
@@ -53,7 +53,7 @@ pingora:
 
 # WebSocket adapter (optional)
 websocket:
-  adapter_type: redis  # memory | redis
+  adapter_type: redis  # memory | redis | cluster
   redis:
     host: localhost
     port: 6379
@@ -68,7 +68,7 @@ websocket:
 |--------|------|---------|-------------|
 | `http` | list | `[]` | HTTP listening addresses |
 | `https` | list | `[]` | HTTPS listening addresses |
-| `metrics` | list | `[]` | Metrics endpoint addresses |
+| `metrics` | list | `[]` | Reserved for future Prometheus metrics endpoint |
 | `config_dir` | path | `/etc/nylon/config` | Proxy config directory |
 | `acme` | path | `/etc/nylon/acme` | ACME certificates directory |
 
@@ -157,7 +157,9 @@ routes:
 
 # TLS/Certificate configuration
 tls:
-  - domains:
+  - type: acme
+    provider: letsencrypt
+    domains:
       - example.com
     acme:
       email: admin@example.com
@@ -222,7 +224,7 @@ services:
 
 ### Route Matchers
 
-Routes can match by host or path:
+Routes can match by host or by a configured header value (`header_selector`):
 
 ```yaml
 routes:
@@ -236,10 +238,10 @@ routes:
         service:
           name: api-service
 
-  # Match by path prefix
+  # Match by header value (header_selector must be set, e.g. x-nylon-proxy)
   - route:
-      type: path
-      value: /admin
+      type: header
+      value: admin
     name: admin
     paths:
       - path: /*
@@ -385,12 +387,21 @@ Use template expressions in configuration:
 
 ### Available Functions
 
-- `${header(name)}` - Request header value
-- `${request(client_ip)}` - Client IP address
-- `${uuid(v7)}` - Generate UUID v7
-- `${timestamp()}` - Current timestamp
-- `${env(VAR_NAME)}` - Environment variable
-- `${or(value1, value2)}` - First non-empty value
+- `${header(name)}` – Request header value (case-sensitive)
+- `${query(name[, default])}` – Query parameter with optional default
+- `${cookie(name[, default])}` – Cookie value with optional default
+- `${param(name[, default])}` – Route parameter with optional default
+- `${request(field)}` – Request metadata (`client_ip`, `host`, `method`, `path`, `scheme`, `tls`)
+- `${env(VAR_NAME)}` – Environment variable lookup
+- `${uuid(v4|v7)}` – Generate UUID (versions 4 or 7)
+- `${timestamp()}` – Current time in RFC3339 with millisecond precision
+- `${or(a, b, ... )}` – First non-empty argument
+- `${eq(a, b[, value])}` – Returns `value` (or `a`) when `a == b`
+- `${neq(a, b[, value])}` – Returns `value` (or `a`) when `a != b`
+- `${concat(values...)}` – Concatenate all arguments
+- `${upper(value)}` / `${lower(value)}` – Uppercase / lowercase
+- `${len(value)}` – Length of evaluated string
+- `${if_cond(condition, then, else)}` – Conditional expression
 
 ### Example
 
@@ -413,7 +424,8 @@ middleware:
 
 ```yaml
 tls:
-  - domains:
+  - type: custom
+    domains:
       - example.com
       - www.example.com
     cert: /path/to/cert.pem
@@ -424,7 +436,9 @@ tls:
 
 ```yaml
 tls:
-  - domains:
+  - type: acme
+    provider: letsencrypt
+    domains:
       - example.com
     acme:
       email: admin@example.com

@@ -69,7 +69,7 @@ routes:
 ### 3. Start the Proxy
 
 ```bash
-nylon -c config.yaml
+nylon run -c config.yaml
 ```
 
 ### 4. Test It
@@ -102,7 +102,9 @@ pingora:
 
 ```yaml
 tls:
-  - domains:
+  - type: acme
+    provider: letsencrypt
+    domains:
       - example.com
     acme:
       email: admin@example.com

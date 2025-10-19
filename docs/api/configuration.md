@@ -15,7 +15,7 @@ http:
 https:
   - "0.0.0.0:443"
 
-# Prometheus metrics addresses
+# Prometheus metrics addresses (reserved; currently unused)
 metrics:
   - "127.0.0.1:6192"
 
@@ -42,7 +42,7 @@ pingora:
 
 # WebSocket adapter configuration (optional)
 websocket:
-  adapter_type: redis  # memory | redis
+  adapter_type: redis  # memory | redis | cluster
   redis:
     host: localhost
     port: 6379
@@ -57,7 +57,7 @@ websocket:
 |-------|------|----------|---------|-------------|
 | `http` | `[]string` | No | `[]` | HTTP listening addresses |
 | `https` | `[]string` | No | `[]` | HTTPS listening addresses |
-| `metrics` | `[]string` | No | `[]` | Metrics endpoint addresses |
+| `metrics` | `[]string` | No | `[]` | Reserved for future Prometheus metrics endpoint |
 | `config_dir` | `string` | No | `/etc/nylon/config` | Proxy config directory |
 | `acme` | `string` | No | `/etc/nylon/acme` | ACME certificates directory |
 | `pingora` | `object` | No | See below | Pingora configuration |
@@ -143,7 +143,9 @@ routes:
 
 # TLS configuration
 tls:
-  - domains:
+  - type: acme
+    provider: letsencrypt
+    domains:
       - example.com
     acme:
       email: admin@example.com
@@ -232,8 +234,8 @@ services:
 
 ```yaml
 route:
-  type: host  # host | path
-  value: example.com  # hostname or path prefix
+  type: host  # host | header
+  value: example.com  # hostname or header value (when header_selector is configured)
 ```
 
 #### Path Configuration
@@ -273,13 +275,16 @@ middleware:
 ```yaml
 tls:
   # Manual certificates
-  - domains:
+  - type: custom
+    domains:
       - example.com
     cert: /path/to/cert.pem
     key: /path/to/key.pem
 
   # ACME (Let's Encrypt)
-  - domains:
+  - type: acme
+    provider: letsencrypt
+    domains:
       - api.example.com
     acme:
       email: admin@example.com
@@ -292,12 +297,21 @@ Available template functions:
 
 | Function | Returns | Example |
 |----------|---------|---------|
-| `${header(name)}` | Header value | `${header(user-agent)}` |
-| `${request(client_ip)}` | Client IP | `${request(client_ip)}` |
-| `${uuid(v7)}` | UUID v7 | `${uuid(v7)}` |
-| `${timestamp()}` | Unix timestamp | `${timestamp()}` |
-| `${env(VAR)}` | Environment variable | `${env(SERVER_NAME)}` |
-| `${or(val1, val2)}` | First non-empty | `${or(env(NAME), 'default')}` |
+| `${header(name)}` | Request header | `${header(user-agent)}` |
+| `${query(name[, default])}` | Query parameter | `${query(version, 'v1')}` |
+| `${cookie(name[, default])}` | Cookie value | `${cookie(session_id)}` |
+| `${param(name[, default])}` | Route parameter | `${param(user_id)}` |
+| `${request(field)}` | Request metadata (`client_ip`, `host`, `method`, `path`, `scheme`, `tls`) | `${request(method)}` |
+| `${env(VAR)}` | Environment variable | `${env(SERVICE_NAME)}` |
+| `${uuid(v4|v7)}` | UUID string | `${uuid(v7)}` |
+| `${timestamp()}` | RFC3339 timestamp | `${timestamp()}` |
+| `${or(a, b, …)}` | First non-empty | `${or(env(NAME), 'default')}` |
+| `${eq(a, b[, value])}` | `value` (or `a`) if equal | `${eq(request(method), 'GET', 'cacheable')}` |
+| `${neq(a, b[, value])}` | `value` (or `a`) if not equal | `${neq(request(scheme), 'https', 'insecure')}` |
+| `${concat(values…)}` | Concatenated string | `${concat(header(host), '-', uuid(v4))}` |
+| `${upper(value)}` / `${lower(value)}` | Upper/lowercase | `${upper(param(region))}` |
+| `${len(value)}` | Length of evaluated string | `${len(header(user-agent))}` |
+| `${if_cond(condition, then, else)}` | Conditional evaluation | `${if_cond(request(tls), 'https', 'http')}` |
 
 ## Validation
 
@@ -363,4 +377,3 @@ See [Configuration Guide](/core/configuration) for detailed examples and best pr
 - [Routing](/core/routing) - Route configuration
 - [Load Balancing](/core/load-balancing) - Service configuration
 - [TLS/HTTPS](/core/tls) - TLS configuration
-

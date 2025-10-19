@@ -81,8 +81,7 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 **Methods:**
 - `Request() *Request` - Get request object
 - `Response() *Response` - Get response object
-- `GetPayload() map[string]interface{}` - Get payload
-- `SetPayload(data map[string]interface{})` - Set payload
+- `GetPayload() map[string]interface{}` - Middleware payload from YAML
 - `Next()` - Continue to next phase
 - `End()` - Stop processing and send response
 - `WebSocketUpgrade(callbacks WebSocketCallbacks) error` - Upgrade to WebSocket
@@ -102,10 +101,9 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 ```
 
 **Methods:**
-- `Response() *Response` - Get response object
-- `GetPayload() map[string]interface{}` - Get payload
-- `SetResponseHeader(name, value string)` - Set response header
-- `RemoveResponseHeader(name string)` - Remove response header
+- `Request() *Request` - Inspect original request headers
+- `Response() *Response` - Modify response status/headers
+- `GetPayload() map[string]interface{}` - Middleware payload from YAML
 - `Next()` - Continue
 
 ### PhaseResponseBodyFilter
@@ -169,8 +167,9 @@ phase.Logging(func(ctx *sdk.PhaseLogging) {
 | `Params()` | `map[string]string` | Path parameters |
 | `Host()` | `string` | Hostname |
 | `ClientIP()` | `string` | Client IP address |
-| `Headers()` | `map[string]string` | All headers |
+| `Headers()` | `*Headers` | All headers (`Get`, `GetAll`) |
 | `Header(name string)` | `string` | Single header |
+| `RawBody()` | `[]byte` | Request body |
 | `Bytes()` | `int64` | Request body size |
 | `Timestamp()` | `int64` | Request timestamp (ms) |
 
@@ -186,7 +185,7 @@ query := req.Query()         // "id=123"
 params := req.Params()       // map["id": "123"]
 host := req.Host()           // "example.com"
 clientIP := req.ClientIP()   // "192.168.1.1"
-headers := req.Headers()     // map[string]string
+headers := req.Headers().GetAll()
 auth := req.Header("Authorization")
 bytes := req.Bytes()         // 1024
 timestamp := req.Timestamp() // 1704067200000
@@ -207,11 +206,11 @@ timestamp := req.Timestamp() // 1704067200000
 | `BodyText(text string)` | `*Response` | Set text body |
 | `BodyJSON(data interface{})` | `*Response` | Set JSON body |
 | `ReadBody()` | `[]byte` | Read body (ResponseBodyFilter only) |
+| `Redirect(url string, code ...uint16)` | `*Response` | Set redirect |
 | `Bytes()` | `int64` | Response body size |
 | `Duration()` | `int64` | Request duration (ms) |
 | `Error()` | `string` | Error message (if any) |
-| `Stream()` | `*StreamWriter, error` | Create stream writer |
-| `End()` | - | End response |
+| `Stream()` | `(*ResponseStream, error)` | Create streaming writer |
 
 ### Example
 
@@ -490,4 +489,3 @@ func init() {
 - [Request Handling](/plugins/request) - Request handling guide
 - [Response Handling](/plugins/response) - Response handling guide
 - [WebSocket Support](/plugins/websocket) - WebSocket guide
-

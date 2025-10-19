@@ -133,29 +133,21 @@ plugin.AddPhaseHandler("cors", func(phase *sdk.PhaseHandler) {
 ```go
 plugin.AddPhaseHandler("request-id", func(phase *sdk.PhaseHandler) {
 	phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
-		req := ctx.Request()
 		res := ctx.Response()
 		
 		// Generate request ID
 		requestID := uuid.New().String()
 		
-		// Add to request headers (for backend)
+		// Add to outbound response so clients can correlate
 		res.SetHeader("X-Request-ID", requestID)
+		res.SetHeader("X-Correlation-ID", requestID)
+
+		log.Printf("[request-id] %s %s -> %s",
+			ctx.Request().Method(),
+			ctx.Request().Path(),
+			requestID,
+		)
 		
-		// Store for logging
-		ctx.SetPayload(map[string]interface{}{
-			"request_id": requestID,
-		})
-		
-		ctx.Next()
-	})
-	
-	phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
-		// Add to response headers
-		payload := ctx.GetPayload()
-		if requestID, ok := payload["request_id"].(string); ok {
-			ctx.SetResponseHeader("X-Request-ID", requestID)
-		}
 		ctx.Next()
 	})
 })
@@ -415,7 +407,7 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 
 // ✅ In ResponseFilter for client
 phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
-    ctx.SetResponseHeader("X-Custom", "value")
+    ctx.Response().SetHeader("X-Custom", "value")
     ctx.Next()
 })
 ```
@@ -438,4 +430,3 @@ if req.Method() == "OPTIONS" {
 - [Middleware](/core/middleware) - Middleware configuration
 - [Response Handling](/plugins/response) - Response modification
 - [Configuration](/core/configuration) - Header configuration
-

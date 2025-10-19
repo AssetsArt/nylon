@@ -1,5 +1,17 @@
 package sdk
 
+func (p *PhaseResponseFilter) Response() *Response {
+	return &Response{
+		ctx: p.ctx,
+	}
+}
+
+func (p *PhaseResponseFilter) Request() *Request {
+	return &Request{
+		ctx: p.ctx,
+	}
+}
+
 func (p *PhaseResponseFilter) SetResponseHeader(key, value string) {
 	httpCtx := Response{
 		ctx: p.ctx,

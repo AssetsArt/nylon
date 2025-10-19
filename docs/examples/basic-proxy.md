@@ -43,7 +43,7 @@ routes:
 ## Running
 
 ```bash
-nylon -c config.yaml
+nylon run -c config.yaml
 ```
 
 ## Testing
