@@ -138,7 +138,9 @@ routes:
     middleware:
       - group: security
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: backend
 
@@ -220,7 +222,9 @@ routes:
       value: api.example.com|api.internal
     name: api
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: api-service
 
@@ -229,7 +233,9 @@ routes:
       value: tenant-admin          # requires header_selector
     name: admin
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: admin-service
 ```
@@ -309,7 +315,9 @@ routes:
       enabled: true
       redirect: https://example.com
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: backend
 ```

@@ -553,7 +553,9 @@ routes:
         service:
           name: websocket
       
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: static
 ```

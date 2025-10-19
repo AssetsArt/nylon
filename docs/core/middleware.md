@@ -48,7 +48,9 @@ routes:
       - group: security
       - group: auth
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: api-service
 ```

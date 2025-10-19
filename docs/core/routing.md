@@ -17,7 +17,9 @@ routes:
       value: api.example.com
     name: api-route
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: api-service
 
@@ -26,7 +28,9 @@ routes:
       value: admin.example.com
     name: admin-route
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: admin-service
 ```
@@ -44,7 +48,9 @@ routes:
       value: tenant-admin
     name: admin-route
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: admin-service
 ```
@@ -63,7 +69,7 @@ paths:
       name: api-service
 
   # Match all paths
-  - path: /*
+  - path: /{*path}
     service:
       name: default-service
 ```
@@ -120,7 +126,7 @@ paths:
       rewrite: /*
 
   # Add prefix: /* -> /backend/*
-  - path: /*
+  - path: /{*path}
     service:
       name: backend
       rewrite: /backend/*
@@ -183,7 +189,9 @@ routes:
             entry: "admin-check"
 
       # Default fallback
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: default-service
 ```
@@ -209,7 +217,7 @@ paths:
       name: api-service
 
   # Wildcard - matched last
-  - path: /*
+  - path: /{*path}
     service:
       name: default-service
 ```
@@ -260,7 +268,9 @@ routes:
     tls:
       enabled: true
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: cdn
 
@@ -270,7 +280,9 @@ routes:
       value: "*"
     name: default
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: default-backend
 ```
@@ -296,7 +308,7 @@ paths:
   - path: /api/health      # Exact
   - path: /api/:id         # Parameter
   - path: /api/*           # Wildcard
-  - path: /*               # Catch-all
+  - path: /{*path}               # Catch-all
 ```
 
 ### 2. Use Middleware for Common Logic

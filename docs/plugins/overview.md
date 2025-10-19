@@ -246,7 +246,9 @@ routes:
       value: example.com
     name: main
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: backend
         middleware:

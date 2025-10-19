@@ -280,7 +280,9 @@ routes:
       value: api.example.com
     name: api
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: api-us  # Default
         middleware:

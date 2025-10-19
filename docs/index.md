@@ -254,7 +254,9 @@ routes:
       type: host
       value: localhost
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: backend
 ```

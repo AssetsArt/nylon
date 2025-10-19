@@ -355,7 +355,9 @@ routes:
     middleware:
       - group: web
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: api-service
 ```

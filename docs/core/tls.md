@@ -35,7 +35,9 @@ routes:
     tls:
       enabled: true
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: backend
 ```
@@ -184,7 +186,9 @@ routes:
       enabled: true
       redirect: https://example.com  # Redirect HTTP to HTTPS
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: backend
 ```
@@ -301,7 +305,9 @@ routes:
       enabled: true
       redirect: https://example.com
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: backend
 ```
@@ -330,7 +336,9 @@ routes:
     tls:
       enabled: true
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: api-service
 
@@ -341,7 +349,9 @@ routes:
     tls:
       enabled: true
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: admin-service
 ```
@@ -358,7 +368,9 @@ routes:
     tls:
       enabled: true
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: secure-service
 
@@ -368,7 +380,9 @@ routes:
       value: internal.example.com
     name: internal
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: internal-service
 ```

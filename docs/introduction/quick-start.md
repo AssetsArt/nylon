@@ -61,7 +61,9 @@ routes:
       value: localhost
     name: default
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: backend
 ```
@@ -126,7 +128,9 @@ routes:
     tls:
       enabled: true
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: backend
 ```
@@ -217,7 +221,9 @@ routes:
       value: localhost
     name: protected
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: protected-api
         middleware:

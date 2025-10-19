@@ -35,7 +35,9 @@ routes:
       value: localhost
     name: default
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: backend
 ```
@@ -163,7 +165,9 @@ routes:
       value: app1.example.com
     name: app1
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: app1-service
 
@@ -172,7 +176,9 @@ routes:
       value: app2.example.com
     name: app2
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: app2-service
 ```

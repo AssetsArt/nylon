@@ -128,7 +128,9 @@ routes:
     middleware:
       - group: security
     paths:
-      - path: /*
+      - path:
+          - /
+          - /{*path}
         service:
           name: backend
         methods:
