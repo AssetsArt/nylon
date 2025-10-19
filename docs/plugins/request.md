@@ -137,10 +137,10 @@ apiKey := req.Header("X-API-Key")
 
 if apiKey == "" {
     res := ctx.Response()
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
     res.SetStatus(401)
     res.BodyText("Missing API key")
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
     ctx.End()
     return
 }
@@ -180,20 +180,20 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     apiKey := req.Header("X-API-Key")
     if apiKey == "" {
         res := ctx.Response()
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
         res.SetStatus(401)
         res.BodyText("Missing API key")
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
         ctx.End()
         return
     }
     
     if !validateAPIKey(apiKey) {
         res := ctx.Response()
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
         res.SetStatus(401)
         res.BodyText("Invalid API key")
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
         ctx.End()
         return
     }
@@ -220,10 +220,10 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     
     if count > 100 {
         res := ctx.Response()
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
         res.SetStatus(429)
         res.BodyText("Too many requests")
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
         ctx.End()
         return
     }
@@ -241,10 +241,10 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     // Only allow GET and POST
     if req.Method() != "GET" && req.Method() != "POST" {
         res := ctx.Response()
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
         res.SetStatus(405)
         res.BodyText("Method not allowed")
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
         ctx.End()
         return
     }
@@ -264,10 +264,10 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
         // Check admin permission
         if !isAdmin(req.Header("Authorization")) {
             res := ctx.Response()
+            res.RemoveHeader("Content-Length")
+            res.SetHeader("Transfer-Encoding", "chunked")
             res.SetStatus(403)
             res.BodyText("Admin access required")
-            ctx.RemoveResponseHeader("Content-Length")
-            ctx.SetResponseHeader("Transfer-Encoding", "chunked")
             ctx.End()
             return
         }
@@ -311,20 +311,20 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     version := params.Get("v")
     if version == "" {
         res := ctx.Response()
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
         res.SetStatus(400)
         res.BodyText("API version required")
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
         ctx.End()
         return
     }
     
     if version != "1" && version != "2" {
         res := ctx.Response()
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
         res.SetStatus(400)
         res.BodyText("Invalid API version")
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
         ctx.End()
         return
     }
@@ -352,10 +352,10 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     
     if !allowedHosts[host] {
         res := ctx.Response()
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
         res.SetStatus(403)
         res.BodyText("Host not allowed")
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
         ctx.End()
         return
     }
@@ -376,10 +376,10 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     for _, blocked := range blockedAgents {
         if strings.Contains(userAgent, blocked) {
             res := ctx.Response()
+            res.RemoveHeader("Content-Length")
+            res.SetHeader("Transfer-Encoding", "chunked")
             res.SetStatus(403)
             res.BodyText("Blocked")
-            ctx.RemoveResponseHeader("Content-Length")
-            ctx.SetResponseHeader("Transfer-Encoding", "chunked")
             ctx.End()
             return
         }
@@ -404,10 +404,10 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     // Validate IDs
     if userID == "" || postID == "" {
         res := ctx.Response()
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
         res.SetStatus(400)
         res.BodyText("Invalid parameters")
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
         ctx.End()
         return
     }
@@ -430,10 +430,10 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     maxSize := int64(10 * 1024 * 1024)
     if req.Bytes() > maxSize {
         res := ctx.Response()
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
         res.SetStatus(413)
         res.BodyText("Request too large")
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
         ctx.End()
         return
     }
@@ -483,10 +483,10 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 // ✅ Good
 if apiKey == "" {
     res := ctx.Response()
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
     res.SetStatus(401)
     res.BodyText("Unauthorized")
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
     ctx.End()
     return
 }
@@ -505,20 +505,20 @@ if apiKey != "" {
 // ✅ Good
 if !authorized {
     res := ctx.Response()
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
     res.SetStatus(403)
     res.BodyText("Forbidden")
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
     ctx.End()
     return
 }
 
 if !validMethod {
     res := ctx.Response()
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
     res.SetStatus(405)
     res.BodyText("Method not allowed")
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
     ctx.End()
     return
 }
@@ -543,10 +543,10 @@ id := params["id"]
 
 if id == "" {
     res := ctx.Response()
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
     res.SetStatus(400)
     res.BodyText("Missing ID")
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
     ctx.End()
     return
 }

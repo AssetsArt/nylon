@@ -117,8 +117,8 @@ plugin.AddPhaseHandler("cors", func(phase *sdk.PhaseHandler) {
 	// Handle preflight
 	if req.Method() == "OPTIONS" {
 		res.SetStatus(204)
-		ctx.RemoveResponseHeader("Content-Length")
-		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		res.RemoveHeader("Content-Length")
+		res.SetHeader("Transfer-Encoding", "chunked")
 		ctx.End()
 		return
 	}
@@ -426,8 +426,8 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 // Always handle preflight
 if req.Method() == "OPTIONS" {
     res.SetStatus(204)
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
     ctx.End()
     return
 }

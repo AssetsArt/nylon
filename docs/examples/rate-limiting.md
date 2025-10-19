@@ -84,8 +84,8 @@ func init() {
 				"error": "Too Many Requests",
 				"message": "Rate limit exceeded. Try again later.",
 			})
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}
@@ -178,8 +178,8 @@ func init() {
 			res.BodyJSON(map[string]interface{}{
 				"error": "Rate limit exceeded",
 			})
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}
@@ -210,8 +210,8 @@ plugin.AddPhaseHandler("user-rate-limit", func(phase *sdk.PhaseHandler) {
 			res := ctx.Response()
 			res.SetStatus(401)
 			res.BodyText("Unauthorized")
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}
@@ -232,8 +232,8 @@ plugin.AddPhaseHandler("user-rate-limit", func(phase *sdk.PhaseHandler) {
 		res.SetHeader("X-RateLimit-Limit", "1000")
 		res.SetHeader("X-RateLimit-Remaining", "0")
 		res.BodyText("Rate limit exceeded")
-		ctx.RemoveResponseHeader("Content-Length")
-		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		res.RemoveHeader("Content-Length")
+		res.SetHeader("Transfer-Encoding", "chunked")
 		ctx.End()
 		return
 	}
@@ -295,8 +295,8 @@ func init() {
 				res := ctx.Response()
 				res.SetStatus(429)
 				res.BodyText("Rate limit exceeded")
-				ctx.RemoveResponseHeader("Content-Length")
-				ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+				res.RemoveHeader("Content-Length")
+				res.SetHeader("Transfer-Encoding", "chunked")
 				ctx.End()
 				return
 			}
@@ -341,8 +341,8 @@ plugin.AddPhaseHandler("rate-limit-headers", func(phase *sdk.PhaseHandler) {
 			"limit": limiter.limit,
 			"window": limiter.window,
 		})
-		ctx.RemoveResponseHeader("Content-Length")
-		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		res.RemoveHeader("Content-Length")
+		res.SetHeader("Transfer-Encoding", "chunked")
 		ctx.End()
 		return
 	}
@@ -446,8 +446,8 @@ res.BodyJSON(map[string]interface{}{
 	"message": "You have exceeded the rate limit of 100 requests per minute",
 	"retry_after": 42,
 })
-ctx.RemoveResponseHeader("Content-Length")
-ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+res.RemoveHeader("Content-Length")
+res.SetHeader("Transfer-Encoding", "chunked")
 ctx.End()
 return
 ```

@@ -67,10 +67,10 @@ phase.ResponseBodyFilter(func(ctx *sdk.PhaseResponseBodyFilter) {
 ```go
 phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
     // Remove Content-Length
-    ctx.RemoveResponseHeader("Content-Length")
+    res.RemoveHeader("Content-Length")
     
     // Use chunked encoding
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    res.SetHeader("Transfer-Encoding", "chunked")
     
     ctx.Next()
 })
@@ -298,8 +298,8 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 ```go
 phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
     // Prepare for body modification
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
     ctx.Next()
 })
 
@@ -465,8 +465,8 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
         res.SetStatus(200)
         res.SetHeader("X-Cache", "HIT")
         res.BodyRaw(cached)
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
         ctx.End()
         return
     }
@@ -492,8 +492,8 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     if err != nil {
         res.SetStatus(500)
         res.BodyText("Stream error")
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
         ctx.End()
         return
     }
@@ -530,8 +530,8 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 ```go
 // ✅ Good
 phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
     ctx.Next()
 })
 

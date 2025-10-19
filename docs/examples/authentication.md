@@ -38,21 +38,27 @@ func init() {
 		apiKey := req.Header("X-API-Key")
 		if apiKey == "" {
 			res := ctx.Response()
-			res.SetStatus(401)
+
+    	res.RemoveHeader("Content-Length")
+    	res.SetHeader("Transfer-Encoding", "chunked")
+
+      res.SetStatus(401)
 			res.SetHeader("WWW-Authenticate", "API-Key")
 			res.BodyText("Missing API key")
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+
 			ctx.End()
 			return
 		}
 		
 		if apiKey != "secret-key-123" {
 			res := ctx.Response()
+
+    	res.RemoveHeader("Content-Length")
+    	res.SetHeader("Transfer-Encoding", "chunked")
+
 			res.SetStatus(401)
 			res.BodyText("Invalid API key")
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+
 			ctx.End()
 			return
 		}
@@ -187,8 +193,8 @@ func init() {
 			res.SetStatus(401)
 			res.SetHeader("WWW-Authenticate", "Bearer")
 			res.BodyText("Missing authorization token")
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}
@@ -198,8 +204,8 @@ func init() {
 			res := ctx.Response()
 			res.SetStatus(401)
 			res.BodyText("Invalid authorization scheme")
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}
@@ -211,8 +217,8 @@ func init() {
 			res := ctx.Response()
 			res.SetStatus(401)
 			res.BodyText("Invalid token")
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}
@@ -258,8 +264,8 @@ func init() {
 			res := ctx.Response()
 			res.SetStatus(401)
 			res.BodyText("Authentication required")
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}
@@ -269,8 +275,8 @@ func init() {
 			res := ctx.Response()
 			res.SetStatus(401)
 			res.BodyText("Invalid authentication")
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}
@@ -281,8 +287,8 @@ func init() {
 			res := ctx.Response()
 			res.SetStatus(403)
 			res.BodyText("Access denied: admin role required")
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}
@@ -367,8 +373,8 @@ func init() {
 			res := ctx.Response()
 			res.SetStatus(403)
 			res.BodyText(fmt.Sprintf("Access denied for IP: %s", clientIP))
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}

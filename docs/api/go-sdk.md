@@ -323,10 +323,13 @@ stream.End()
 err := ctx.WebSocketUpgrade(callbacks)
 if err != nil {
     res := ctx.Response()
+
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
+
     res.SetStatus(400)
     res.BodyText("Upgrade failed")
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+
     ctx.End()
     return
 }
@@ -337,10 +340,13 @@ if err != nil {
 ```go
 if !authorized {
     res := ctx.Response()
+
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
+
     res.SetStatus(403)
     res.BodyText("Forbidden")
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+
     ctx.End()
     return
 }
@@ -373,10 +379,13 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 err := ctx.WebSocketUpgrade(callbacks)
 if err != nil {
     res := ctx.Response()
+
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
+
     res.SetStatus(400)
     res.BodyText("Error")
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+
     ctx.End()
     return
 }
@@ -444,10 +453,13 @@ func init() {
             
             if req.Header("X-API-Key") == "" {
                 res := ctx.Response()
+
+                res.RemoveHeader("Content-Length")
+                res.SetHeader("Transfer-Encoding", "chunked")
+
                 res.SetStatus(401)
                 res.BodyText("Unauthorized")
-                ctx.RemoveResponseHeader("Content-Length")
-                ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+
                 ctx.End()
                 return
             }

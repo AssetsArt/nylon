@@ -257,8 +257,8 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 		res := ctx.Response()
 		res.SetStatus(400)
 		res.BodyText("Invalid JSON")
-		ctx.RemoveResponseHeader("Content-Length")
-		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		res.RemoveHeader("Content-Length")
+		res.SetHeader("Transfer-Encoding", "chunked")
 		ctx.End()
 		return
 	}

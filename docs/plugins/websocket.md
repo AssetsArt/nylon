@@ -207,8 +207,8 @@ plugin.AddPhaseHandler("chat", func(phase *sdk.PhaseHandler) {
             res := ctx.Response()
             res.SetStatus(400)
             res.BodyText("WebSocket upgrade failed")
-            ctx.RemoveResponseHeader("Content-Length")
-            ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+            res.RemoveHeader("Content-Length")
+            res.SetHeader("Transfer-Encoding", "chunked")
             ctx.End()
             return
         }
@@ -340,8 +340,8 @@ plugin.AddPhaseHandler("auth-ws", func(phase *sdk.PhaseHandler) {
             res := ctx.Response()
             res.SetStatus(401)
             res.BodyText("Unauthorized")
-            ctx.RemoveResponseHeader("Content-Length")
-            ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+            res.RemoveHeader("Content-Length")
+            res.SetHeader("Transfer-Encoding", "chunked")
             ctx.End()
             return
         }
@@ -378,8 +378,8 @@ plugin.AddPhaseHandler("rate-limited-ws", func(phase *sdk.PhaseHandler) {
             res := ctx.Response()
             res.SetStatus(429)
             res.BodyText("Too many connections")
-            ctx.RemoveResponseHeader("Content-Length")
-            ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+            res.RemoveHeader("Content-Length")
+            res.SetHeader("Transfer-Encoding", "chunked")
             ctx.End()
             return
         }
@@ -504,8 +504,8 @@ if err != nil {
     res := ctx.Response()
     res.SetStatus(400)
     res.BodyText("Upgrade failed")
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
     ctx.End()
     return
 }

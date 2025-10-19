@@ -214,10 +214,13 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     
     if role != "admin" {
         res := ctx.Response()
+
+        res.RemoveHeader("Content-Length")
+        res.SetHeader("Transfer-Encoding", "chunked")
+
         res.SetStatus(403)
         res.BodyText("Forbidden")
-        ctx.RemoveResponseHeader("Content-Length")
-        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+
         ctx.End()
         return
     }

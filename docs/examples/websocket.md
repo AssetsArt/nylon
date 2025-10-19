@@ -49,8 +49,8 @@ func init() {
 				res := ctx.Response()
 				res.SetStatus(400)
 				res.BodyText("WebSocket upgrade failed")
-				ctx.RemoveResponseHeader("Content-Length")
-				ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+				res.RemoveHeader("Content-Length")
+				res.SetHeader("Transfer-Encoding", "chunked")
 				ctx.End()
 				return
 			}
@@ -268,8 +268,8 @@ plugin.AddPhaseHandler("auth-ws", func(phase *sdk.PhaseHandler) {
 			res := ctx.Response()
 			res.SetStatus(401)
 			res.BodyText("Unauthorized")
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}
@@ -338,8 +338,8 @@ func init() {
 				res := ctx.Response()
 				res.SetStatus(400)
 				res.BodyText("Username required")
-				ctx.RemoveResponseHeader("Content-Length")
-				ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+				res.RemoveHeader("Content-Length")
+				res.SetHeader("Transfer-Encoding", "chunked")
 				ctx.End()
 				return
 			}
@@ -580,8 +580,8 @@ if err != nil {
     res := ctx.Response()
     res.SetStatus(400)
     res.BodyText("Upgrade failed")
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
     ctx.End()
     return
 }
@@ -617,8 +617,8 @@ if !validateToken(token) {
     res := ctx.Response()
     res.SetStatus(401)
     res.BodyText("Unauthorized")
-    ctx.RemoveResponseHeader("Content-Length")
-    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    res.RemoveHeader("Content-Length")
+    res.SetHeader("Transfer-Encoding", "chunked")
     ctx.End()
     return
 }

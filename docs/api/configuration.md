@@ -10,7 +10,6 @@ Main configuration file (`config.yaml`):
 # HTTP listening addresses
 http:
   - "0.0.0.0:80"
-  - "[::]:80"
 
 # HTTPS listening addresses
 https:

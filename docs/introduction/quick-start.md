@@ -171,8 +171,8 @@ func init() {
 			res := ctx.Response()
 			res.SetStatus(401)
 			res.BodyText("Unauthorized")
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			res.RemoveHeader("Content-Length")
+			res.SetHeader("Transfer-Encoding", "chunked")
 			ctx.End()
 			return
 		}
