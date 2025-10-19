@@ -1,43 +1,173 @@
 # Routing
 
-Nylon provides flexible routing based on hostnames and paths with parameter extraction and rewriting capabilities.
+Nylon routes requests by combining host, header, and path rules with optional rewrites and middleware. This guide walks through the most common scenarios—from the basics to more advanced matching—so you can design clear, maintainable route layouts.
 
-## Route Matchers
-
-Routes can match requests based on two criteria:
-
-### Host-Based Routing
-
-Match requests by hostname:
+## Quick Start
 
 ```yaml
 routes:
   - route:
       type: host
-      value: api.example.com|api.internal|api.staging
-    name: api-route
+      value: api.example.com
+    name: api
     paths:
-      - path:
-          - /
-          - /{*path}
+      - path: /v1/{*path}
         service:
-          name: api-service
-
-  - route:
-      type: host
-      value: admin.example.com
-    name: admin-route
-    paths:
-      - path:
-          - /
-          - /{*path}
+          name: api-v1
+      - path: /{*path}
         service:
-          name: admin-service
+          name: fallback
 ```
 
-### Header-Based Routing
+1. Choose a matcher (`host` or `header`) for the route.
+2. Name the route so you can refer to it in logs and dashboards.
+3. Describe one or more `paths` and map each to a backend service.
+4. Optionally attach middleware, TLS, or rewrites per path.
 
-Match requests by header value (requires `header_selector` to be set):
+## Building Blocks
+
+- **Route matcher** (`route.type`, `route.value`): Determines when the route is eligible. You can list multiple hosts separated by `|`.
+- **Path entry** (`paths[].path`): Checked in order to match the request path and HTTP method.
+- **Service block** (`service`): Points to the upstream service and optional rewrite target.
+- **Middleware** (`middleware` or `middleware_groups`): Attach reusable filters or plugin handlers.
+
+## Matching Strategies
+
+### Host-based routing
+
+```yaml
+routes:
+  - route:
+      type: host
+      value: api.example.com|api.internal
+    paths:
+      - path: /{*path}
+        service:
+          name: api-service
+```
+
+Use host matching to separate traffic by domain or subdomain. Wildcard `*` catches any host that did not match previously defined routes.
+
+### Header-based routing
+
+Enable multi-tenant or environment-specific configurations by inspecting a request header. Set a `header_selector` at the top of your config, then bind each header value to a route.
+
+```yaml
+header_selector: x-nylon-environment
+
+routes:
+  - route:
+      type: header
+      value: staging
+    name: staging-app
+    paths:
+      - path: /{*path}
+        service:
+          name: staging-backend
+```
+
+### Method filtering
+
+Restrict a path to specific HTTP methods. Nylon accepts `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, `CONNECT`, and `TRACE`.
+
+```yaml
+paths:
+  - path: /api/users
+    methods:
+      - GET
+      - POST
+    service:
+      name: user-service
+```
+
+## Path Patterns
+
+| Pattern             | Matches                              | Notes                                 |
+| ------------------- | ------------------------------------ | ------------------------------------- |
+| `/status`           | Exact `/status`                      | Fastest match                         |
+| `/users/{id}`       | Any single segment (`/users/42`)     | Captured as `params["id"]`            |
+| `/assets/{*path}`   | All trailing segments                | Catch-all; lowest priority            |
+| `/{*path}`          | Everything                           | Use as a final fallback               |
+
+Extracted parameters are available inside plugins:
+
+```go
+phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
+    if userID, ok := ctx.Request().Params()["id"]; ok {
+        ctx.Logger().Info("routing user", "id", userID)
+    }
+    ctx.Next()
+})
+```
+
+### Multiple paths per route
+
+Organize related paths under the same route and share middleware when needed.
+
+```yaml
+routes:
+  - route:
+      type: host
+      value: app.example.com
+    paths:
+      - path: /api/{*path}
+        service:
+          name: api
+        middleware:
+          - plugin: auth
+            entry: check
+      - path: /static/{*path}
+        service:
+          name: cdn
+      - path:
+          - /
+          - /{*path}
+        service:
+          name: web
+```
+
+## Path Rewrites
+
+Rewrites adjust the upstream request path without changing the path matched by the client.
+
+```yaml
+paths:
+  - path: /old-api/{*path}
+    service:
+      name: new-api
+      rewrite: /v2
+
+  - path: /api/v1/{*path}
+    service:
+      name: api-v1
+      rewrite: /
+```
+
+- When the route matches `/old-api/users`, Nylon proxies to `/v2/users`.
+- Use `/` to strip a prefix entirely.
+
+## How Matching Order Works
+
+Nylon uses [`matchit` v0.8](https://docs.rs/crate/matchit/latest) to score routes:
+
+1. Exact segments (`/health`) take priority.
+2. Named parameters (`/{user}`) run next.
+3. Catch-all parameters (`/{*path}`) match last.
+
+```yaml
+paths:
+  - path: /api/health      # 1 — exact
+  - path: /api/{resource}  # 2 — named parameter
+  - path: /{*path}         # 3 — catch-all fallback
+    service:
+      name: fallback
+```
+
+Order still matters when two paths have the same precedence—define the most specific entries first.
+
+## Dynamic Routing & Segmentation
+
+Combine host, header, and method rules to isolate workloads or tenants.
 
 ```yaml
 header_selector: x-nylon-proxy
@@ -45,188 +175,31 @@ header_selector: x-nylon-proxy
 routes:
   - route:
       type: header
-      value: tenant-admin
-    name: admin-route
+      value: tenant-a
+    name: tenant-a
     paths:
-      - path:
-          - /
-          - /{*path}
-        service:
-          name: admin-service
-```
-
-## Path Patterns
-
-### Wildcard Matching
-
-Use `{*segment}` to match any path segment:
-
-```yaml
-paths:
-  # Match /api/users, /api/posts, etc.
-  - path: /api/{*path}
-    service:
-      name: api-service
-
-  # Match all paths
-  - path: /{*path}
-    service:
-      name: default-service
-```
-
-### Parameter Extraction
-
-Extract path parameters using `{name}` syntax:
-
-```yaml
-paths:
-  # Extract user ID: /users/123 -> params["id"] = "123"
-  - path: /users/{id}
-    service:
-      name: user-service
-
-  # Multiple parameters: /users/123/posts/456
-  - path: /users/{user_id}/posts/{post_id}
-    service:
-      name: post-service
-
-  # With wildcard: /users/123/anything/else
-  - path: /users/{id}/{*path}
-    service:
-      name: user-service
-```
-
-Access parameters in plugins:
-
-```go
-phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
-    params := ctx.Request().Params()
-    userID := params["id"]
-    fmt.Printf("User ID: %s\n", userID)
-    ctx.Next()
-})
-```
-
-## Path Rewriting
-
-Rewrite paths before forwarding to backend:
-
-```yaml
-paths:
-  # Rewrite /old-api/* to /new-api/*
-  - path: /old-api/{*path}
-    service:
-      name: api-service
-      rewrite: /new-api
-
-  # Remove prefix: /api/v1/* -> /*
-  - path: /api/v1/{*path}
-    service:
-      name: api-service
-      rewrite: /
-
-  # Add prefix: /* -> /backend/*
-  - path: /{*path}
-    service:
-      name: backend
-      rewrite: /backend
-```
-
-## Method Filtering
-
-Restrict paths to specific HTTP methods:
-
-```yaml
-paths:
-  # Only GET and POST
-  - path: /api/users
-    service:
-      name: api-service
-    methods:
-      - GET
-      - POST
-
-  # Only DELETE
-  - path: /api/users/{id}
-    service:
-      name: api-service
-    methods:
-      - DELETE
-```
-
-Available methods: `GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`, `CONNECT`, `TRACE`
-
-## Multiple Paths
-
-Define multiple paths for a single route:
-
-```yaml
-routes:
-  - route:
-      type: host
-      value: example.com
-    name: main
-    paths:
-      # API endpoints
-      - path: /api/{*path}
-        service:
-          name: api-service
-        middleware:
-          - plugin: auth
-            entry: "check"
-
-      # Static files
-      - path: /static/{*path}
-        service:
-          name: static-files
-
-      # Admin panel
       - path: /admin/{*path}
         service:
-          name: admin-service
+          name: admin
+        methods:
+          - GET
+          - POST
         middleware:
           - plugin: auth
-            entry: "admin-check"
-
-      # Default fallback
-      - path:
-          - /
-          - /{*path}
+            entry: admin
+      - path: /{*path}
         service:
-          name: default-service
+          name: app
 ```
 
-## Route Priority
+Requests with `x-nylon-proxy: tenant-a` use the above layout, while other values can map to different services or environments.
 
-Route matching is handled by [`matchit` v0.8](https://docs.rs/crate/matchit/latest), which evaluates routes segment by segment using a radix tree. When multiple paths can match the same request, `matchit` applies these priority rules:
-
-- Static segments (for example, `/api/health`) are evaluated before dynamic segments at the same position.
-- Named parameters such as `/{resource}` win over catch-all parameters.
-- Catch-all segments (`/{*path}`) are only considered after no static or named parameter routes match.
+## End-to-end Example
 
 ```yaml
-paths:
-  # Static segment – matched first
-  - path: /api/health
-    service:
-      name: health-service
+header_selector: x-nylon-proxy
 
-  # Named parameter – matched after static routes
-  - path: /api/{resource}
-    service:
-      name: api-service
-
-  # Catch-all – matched last
-  - path: /{*path}
-    service:
-      name: default-service
-```
-
-## Complex Routing Example
-
-```yaml
 routes:
-  # API domain
   - route:
       type: host
       value: api.example.com
@@ -234,39 +207,28 @@ routes:
     tls:
       enabled: true
     middleware:
-      - group: security
+      - group: observability
     paths:
-      # Public endpoints
       - path: /public/{*path}
         service:
           name: public-api
-
-      # Authenticated endpoints
       - path: /v1/{*path}
         service:
           name: api-v1
         middleware:
           - plugin: auth
-            entry: "jwt"
-
-      # Admin endpoints
+            entry: jwt
       - path: /admin/{*path}
-        service:
-          name: admin-api
         methods:
           - GET
           - POST
-        middleware:
-          - plugin: auth
-            entry: "admin"
+        service:
+          name: admin-api
 
-  # Static files domain
   - route:
       type: host
       value: static.example.com
     name: static
-    tls:
-      enabled: true
     paths:
       - path:
           - /
@@ -274,7 +236,6 @@ routes:
         service:
           name: cdn
 
-  # Catch-all
   - route:
       type: host
       value: "*"
@@ -287,82 +248,16 @@ routes:
           name: default-backend
 ```
 
-## Dynamic Routing
-
-Use header selectors to choose different routing configurations:
-
-```yaml
-# In proxy config
-header_selector: x-nylon-proxy
-
-# Multiple proxy configs can exist
-# Request with header "x-nylon-proxy: staging" uses staging config
-```
-
 ## Best Practices
 
-### 1. Order Routes by Specificity
+1. **Lead with specificity**: Put the narrowest path first and reserve catch-all entries for the bottom.
+2. **Group shared behavior**: Use middleware groups to apply authentication, rate limiting, or logging policies consistently.
+3. **Segment by domain**: Split public, admin, API, and static traffic into separate routes for clarity.
+4. **Prefer parameters over wildcards**: Named segments make logs and plugins easier to reason about.
+5. **Document rewrites**: Include comments or naming conventions so teams understand why a rewrite exists.
 
-```yaml
-paths:
-  - path: /api/health      # Exact
-  - path: /api/{id}         # Parameter
-  - path: /{*path}               # Wildcard
-```
+## Next Steps
 
-### 2. Use Middleware for Common Logic
-
-```yaml
-middleware_groups:
-  api:
-    - plugin: auth
-      entry: "check"
-    - plugin: rate-limit
-      entry: "limit"
-
-paths:
-  - path: /api/{id}
-    service:
-      name: api-service
-    middleware:
-      - group: api  # Apply all at once
-```
-
-### 3. Separate by Domain
-
-```yaml
-# api.example.com
-routes:
-  - route:
-      type: host
-      value: api.example.com
-    name: api
-    paths: [...]
-
-# www.example.com
-  - route:
-      type: host
-      value: www.example.com
-    name: www
-    paths: [...]
-```
-
-### 4. Use Path Parameters
-
-```yaml
-# Instead of this:
-paths:
-  - path: /users/profile/{*path}
-    service: user-service
-
-# Do this:
-paths:
-  - path: /users/{id}/{*path}
-    service: user-service
-```
-
-## See Also
-
-- [Configuration](/core/configuration) - Full configuration reference
-- [Middleware](/core/middleware) - Apply logic to routes
-- [Examples](/examples/basic-proxy) - Routing examples
+- [Configuration](/core/configuration) for every available field.
+- [Middleware](/core/middleware) to attach logic to routes.
+- [Examples](/examples/basic-proxy) for complete proxy configurations.
