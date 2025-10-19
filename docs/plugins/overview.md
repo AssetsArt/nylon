@@ -1,6 +1,6 @@
 # Plugin Development Overview
 
-Nylon's plugin system allows you to extend its functionality with custom logic. Plugins can intercept and modify requests, responses, and WebSocket messages. Currently, the Go SDK is production-ready, with more language SDKs in development.
+Nylon's plugin system allows you to extend its functionality with custom logic. Plugins can intercept and modify requests, responses, and WebSocket messages. Currently, the Go SDK is available, with more language SDKs in development.
 
 ## Plugin Architecture
 

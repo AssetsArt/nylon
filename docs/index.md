@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Nylon
-  text: Modern Reverse Proxy
-  tagline: Built with Rust • Extended with Go • Production Ready
+  text: High-Performance Extensible Proxy
+  tagline: Built with Rust • Extended with Plugins
   image:
     src: /logo.svg
     alt: Nylon
@@ -377,11 +377,11 @@ Nylon combines the best of modern proxy technology:
 - **🔌 Extensible** - Plugin system with Go SDK (more languages coming)
 - **🔄 Zero Downtime** - Hot reload configuration without dropping connections
 - **🔒 Auto HTTPS** - Built-in ACME support for Let's Encrypt
-- **📊 Production Ready** - Comprehensive logging, metrics, and health checks
+- **📊 Observability** - Comprehensive logging, metrics, and health checks
 
-## Production-Grade Features
+## Features
 
-<p class="section-subtitle">Everything you need to run in production, out of the box.</p>
+<p class="section-subtitle">Everything you need, out of the box.</p>
 
 <div class="code-grid">
   <div class="code-card">
