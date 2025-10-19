@@ -59,7 +59,7 @@ routes:
 
 ### Wildcard Matching
 
-Use `*` to match any path segment:
+Use `{*segment}` to match any path segment:
 
 ```yaml
 paths:
@@ -76,7 +76,7 @@ paths:
 
 ### Parameter Extraction
 
-Extract path parameters using `:name` syntax:
+Extract path parameters using `{name}` syntax:
 
 ```yaml
 paths:
