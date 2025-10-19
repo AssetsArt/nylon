@@ -74,8 +74,7 @@ import sdk "github.com/AssetsArt/nylon/sdk/go/sdk"
 
 func main() {}
 
-//export NewNylonPlugin
-func NewNylonPlugin() *sdk.NylonPlugin {
+func init() {
 	plugin := sdk.NewNylonPlugin()
 	
 	// Register phase handlers
@@ -104,8 +103,6 @@ func NewNylonPlugin() *sdk.NylonPlugin {
 			ctx.Next()
 		})
 	})
-	
-	return plugin
 }
 ```
 
@@ -209,11 +206,8 @@ import sdk "github.com/AssetsArt/nylon/sdk/go/sdk"
 
 func main() {}
 
-//export NewNylonPlugin
-func NewNylonPlugin() *sdk.NylonPlugin {
+func init() {
 	plugin := sdk.NewNylonPlugin()
-	// Register your handlers here
-	return plugin
 }
 ```
 

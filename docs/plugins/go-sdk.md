@@ -18,8 +18,7 @@ import sdk "github.com/AssetsArt/nylon/sdk/go/sdk"
 
 func main() {}
 
-//export NewNylonPlugin
-func NewNylonPlugin() *sdk.NylonPlugin {
+func init() {
 	plugin := sdk.NewNylonPlugin()
 
 	plugin.AddPhaseHandler("handler", func(phase *sdk.PhaseHandler) {
@@ -28,8 +27,6 @@ func NewNylonPlugin() *sdk.NylonPlugin {
 			ctx.Next()
 		})
 	})
-
-	return plugin
 }
 ```
 
