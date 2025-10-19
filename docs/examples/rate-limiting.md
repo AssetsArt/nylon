@@ -376,7 +376,7 @@ routes:
     middleware:
       - group: api
     paths:
-      - path: /api/*
+      - path: /api/{*path}
         service:
           name: api-service
 ```

@@ -81,17 +81,17 @@ Extract path parameters using `:name` syntax:
 ```yaml
 paths:
   # Extract user ID: /users/123 -> params["id"] = "123"
-  - path: /users/:id
+  - path: /users/{id}
     service:
       name: user-service
 
   # Multiple parameters: /users/123/posts/456
-  - path: /users/:user_id/posts/:post_id
+  - path: /users/{user_id}/posts/{post_id}
     service:
       name: post-service
 
   # With wildcard: /users/123/anything/else
-  - path: /users/:id/{*path}
+  - path: /users/{id}/{*path}
     service:
       name: user-service
 ```
@@ -147,7 +147,7 @@ paths:
       - POST
 
   # Only DELETE
-  - path: /api/users/:id
+  - path: /api/users/{id}
     service:
       name: api-service
     methods:
@@ -198,25 +198,25 @@ routes:
 
 ## Route Priority
 
-Routes are matched in order of specificity:
+Route matching is handled by [`matchit` v0.8](https://docs.rs/crate/matchit/latest), which evaluates routes segment by segment using a radix tree. When multiple paths can match the same request, `matchit` applies these priority rules:
 
-1. **Exact matches** (no wildcards)
-2. **Parameter matches** (`:id`)
-3. **Wildcard matches** (`*`)
+- Static segments (for example, `/api/health`) are evaluated before dynamic segments at the same position.
+- Named parameters such as `/{resource}` win over catch-all parameters.
+- Catch-all segments (`/{*path}`) are only considered after no static or named parameter routes match.
 
 ```yaml
 paths:
-  # Most specific - matched first
+  # Static segment – matched first
   - path: /api/health
     service:
       name: health-service
 
-  # Parameter - matched second
-  - path: /api/:resource
+  # Named parameter – matched after static routes
+  - path: /api/{resource}
     service:
       name: api-service
 
-  # Wildcard - matched last
+  # Catch-all – matched last
   - path: /{*path}
     service:
       name: default-service
@@ -306,7 +306,7 @@ header_selector: x-nylon-proxy
 ```yaml
 paths:
   - path: /api/health      # Exact
-  - path: /api/:id         # Parameter
+  - path: /api/{id}         # Parameter
   - path: /{*path}               # Wildcard
 ```
 
@@ -321,7 +321,7 @@ middleware_groups:
       entry: "limit"
 
 paths:
-  - path: /api/:id
+  - path: /api/{id}
     service:
       name: api-service
     middleware:
@@ -357,7 +357,7 @@ paths:
 
 # Do this:
 paths:
-  - path: /users/:id/{*path}
+  - path: /users/{id}/{*path}
     service: user-service
 ```
 

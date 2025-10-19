@@ -248,10 +248,10 @@ routes:
       value: example.com
     name: app
     paths:
-      - path: /api/*
+      - path: /api/{*path}
         service:
           name: api-service
-          rewrite: /v2/*
+          rewrite: /v2/{*path}
         methods:
           - GET
           - POST
@@ -259,11 +259,11 @@ routes:
           - plugin: auth
             entry: "check"
 
-      - path: /static/*
+      - path: /static/{*path}
         service:
           name: static-files
 
-      - path: /admin/*
+      - path: /admin/{*path}
         service:
           name: admin-service
 ```

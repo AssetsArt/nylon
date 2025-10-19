@@ -92,7 +92,7 @@ id := params.Get("id")
 Get path parameters (from route matching):
 
 ```go
-// Route: /users/:id/posts/:post_id
+// Route: /users/{id}/posts/{post_id}
 params := req.Params()
 
 userID := params["id"]      // "123"
@@ -404,7 +404,7 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 ### Path Parameter Extraction
 
 ```go
-// Route: /users/:id/posts/:post_id
+// Route: /users/{id}/posts/{post_id}
 
 phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     req := ctx.Request()

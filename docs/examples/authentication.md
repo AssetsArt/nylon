@@ -125,7 +125,7 @@ routes:
       value: localhost
     name: protected
     paths:
-      - path: /api/*
+      - path: /api/{*path}
         service:
           name: protected-api
         middleware:
@@ -314,19 +314,19 @@ routes:
     name: protected
     paths:
       # Public endpoints
-      - path: /public/*
+      - path: /public/{*path}
         service:
           name: api
 
       # Authenticated endpoints
-      - path: /api/*
+      - path: /api/{*path}
         service:
           name: api
         middleware:
           - group: authenticated
 
       # Admin endpoints
-      - path: /admin/*
+      - path: /admin/{*path}
         service:
           name: admin-api
         middleware:

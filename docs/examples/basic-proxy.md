@@ -130,11 +130,11 @@ routes:
       value: localhost
     name: default
     paths:
-      - path: /api/*
+      - path: /api/{*path}
         service:
           name: api-service
       
-      - path: /admin/*
+      - path: /admin/{*path}
         service:
           name: admin-service
 ```
