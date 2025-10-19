@@ -1,6 +1,13 @@
 # Plugin Development Overview
 
-Nylon's plugin system allows you to extend its functionality with custom logic. Plugins can intercept and modify requests, responses, and WebSocket messages. Currently, the Go SDK is available, with more language SDKs in development.
+Extend Nylon with custom logic running in the same process. Plugins can participate in every phase of the request lifecycle (request, response headers, response body, logging) and can also handle WebSocket connections.
+
+**At a glance**
+
+- Build shared libraries (`.so`) via the Go SDK (more languages on the roadmap).
+- Register phase handlers to run code before/after routing, modify responses, or stream bodies.
+- Leverage middleware payloads to pass configuration from YAML to your plugin.
+- Use helper APIs to read/modify requests, responses, and WebSocket streams.
 
 ## Plugin Architecture
 
@@ -57,7 +64,7 @@ Execute after the request is complete:
 - Analytics
 - Error tracking
 
-## Basic Plugin Structure
+## Quick start plugin
 
 ```go
 package main
@@ -102,9 +109,11 @@ func NewNylonPlugin() *sdk.NylonPlugin {
 }
 ```
 
-## Request/Response Access
+## Request & response access
 
-### Reading Request Data
+The SDK exposes ergonomic helpers to inspect the inbound request and craft responses without juggling raw pointers.
+
+### Reading request data
 
 ```go
 phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
@@ -138,7 +147,7 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 })
 ```
 
-### Modifying Response
+### Modifying responses
 
 ```go
 phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
@@ -160,7 +169,7 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 })
 ```
 
-### Access Logging Example
+### Access logging example
 
 ```go
 phase.Logging(func(ctx *sdk.PhaseLogging) {
@@ -341,3 +350,4 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 - Learn about [Plugin Phases](/plugins/phases) in detail
 - Explore the [Go SDK API](/plugins/go-sdk)
 - See [Plugin Examples](/examples/authentication)
+- Reuse configuration patterns from [core middleware](/core/middleware)

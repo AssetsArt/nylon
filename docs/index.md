@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: Nylon
-  text: High-Performance Extensible Proxy
-  tagline: Built with Rust • Extended with Plugins
+  text: Modern Edge Proxy for Programmable Infrastructure
+  tagline: Built in Rust • Powered by Pingora • Extensible with Plugins
   image:
     src: /logo.svg
     alt: Nylon
@@ -18,192 +18,119 @@ hero:
 
 features:
   - icon: ⚡️
-    title: Blazing Fast
-    details: Built on Cloudflare Pingora. Handle millions of requests per second with minimal latency.
-  
-  - icon: 🔌
-    title: Plugin Ecosystem
-    details: Extensible plugin system. Go SDK ready, more languages coming soon.
-  
+    title: High-Performance Core
+    details: Pingora’s async engine delivers Cloudflare-grade latency and throughput.
+  - icon: 🧩
+    title: Programmable at Every Phase
+    details: Drop in Go plugins today—Rust/Zig/other FFI bindings on the roadmap.
   - icon: 🎯
-    title: Smart Routing
-    details: Host and path-based routing. Parameters, rewrites, middleware chains.
-  
-  - icon: 🔒
+    title: Declarative Control Plane
+    details: Human-friendly YAML with hot reloads, templating, and routing logic that scales.
+  - icon: 🔐
     title: Automatic TLS
-    details: Let's Encrypt integration. Zero-config HTTPS with automatic renewal.
-  
-  - icon: 🔄
-    title: Load Balancing
-    details: Round robin, weighted, consistent hashing, or random selection.
-  
-  - icon: 📊
-    title: Observability
-    details: Structured request logging and TLS certificate health tracking. Prometheus exporter coming soon.
+    details: Built-in ACME automation, health checks, structured logs, and zero downtime reloads.
 ---
 
 <style scoped>
-.install-box {
-  background: var(--vp-c-bg-soft);
-  border: 2px solid var(--vp-c-brand-1);
-  border-radius: 16px;
-  padding: 48px;
+:root {
+  --ny-card-shadow: 0 18px 32px rgba(15, 23, 42, 0.08);
+}
+
+.page-intro {
   text-align: center;
-  margin: 64px auto;
-  max-width: 800px;
+  max-width: 760px;
+  margin: 0 auto 48px;
+  font-size: 20px;
+  color: var(--vp-c-text-2);
 }
 
-.install-box h2 {
-  font-size: 32px;
-  margin-bottom: 24px;
-  font-weight: 700;
+.quickstart-grid,
+.capabilities-grid,
+.usecases-grid,
+.ops-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  margin: 32px 0 48px;
 }
 
-.install-box div[class*="language-"] {
-  margin: 24px 0;
-  background: #1e293b;
+.card {
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.dark .install-box div[class*="language-"] {
-  background: #0f172a;
+.card:hover {
+  border-color: var(--vp-c-brand-1);
+  transform: translateY(-4px);
+  box-shadow: var(--ny-card-shadow);
 }
 
-.install-box .vp-code-group {
-  margin: 24px 0;
+.card h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
 }
 
 .section-title {
   text-align: center;
-  font-size: 36px;
+  font-size: 32px;
   font-weight: 700;
-  margin: 80px 0 24px 0;
+  margin: 72px 0 12px;
 }
 
 .section-subtitle {
   text-align: center;
   font-size: 18px;
   color: var(--vp-c-text-2);
-  margin-bottom: 48px;
+  margin-bottom: 32px;
 }
 
-.code-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
-  margin: 48px 0;
-}
-
-.code-card {
+.shell-callout {
   background: var(--vp-c-bg-soft);
-  border: 1px solid var(--vp-c-divider);
-  border-radius: 12px;
-  padding: 24px;
-  transition: all 0.3s ease;
-}
-
-.code-card:hover {
-  border-color: var(--vp-c-brand-1);
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
-}
-
-.dark .code-card:hover {
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
-}
-
-.code-card h3 {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 16px;
-}
-
-.comparison-table {
-  margin: 48px auto;
-  max-width: 1000px;
-  overflow-x: auto;
-}
-
-.comparison-table table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.comparison-table th,
-.comparison-table td {
-  padding: 16px;
-  text-align: left;
-  border-bottom: 1px solid var(--vp-c-divider);
-}
-
-.comparison-table th {
-  background: var(--vp-c-bg-soft);
-  font-weight: 600;
-}
-
-.cta-section {
-  text-align: center;
-  padding: 80px 24px;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-  border-radius: 24px;
-  margin: 80px auto;
-  max-width: 1000px;
-}
-
-.cta-section h2 {
-  font-size: 42px;
-  font-weight: 700;
-  margin-bottom: 24px;
-}
-
-.cta-buttons {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-  flex-wrap: wrap;
-  margin-top: 32px;
-}
-
-.cta-button {
-  display: inline-block;
-  padding: 14px 32px;
-  border-radius: 12px;
-  font-size: 16px;
-  font-weight: 600;
-  text-decoration: none;
-  transition: all 0.3s ease;
-}
-
-.cta-button.primary {
-  background: var(--vp-c-brand-1);
-  color: white;
-}
-
-.cta-button.primary:hover {
-  background: var(--vp-c-brand-2);
-  transform: translateY(-2px);
-}
-
-.cta-button.secondary {
-  background: transparent;
-  color: var(--vp-c-brand-1);
+  border-radius: 18px;
   border: 2px solid var(--vp-c-brand-1);
+  padding: 40px;
+  text-align: center;
+  margin: 48px auto 60px;
+  max-width: 780px;
 }
 
-.cta-button.secondary:hover {
-  background: var(--vp-c-brand-1);
-  color: white;
+.shell-callout div[class*="language-"] {
+  background: #111827;
+  margin: 24px 0;
+}
+
+.highlight-points {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 16px;
+}
+
+.highlight-points li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
 }
 
 .phase-flow {
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   justify-content: center;
   gap: 16px;
-  flex-wrap: wrap;
+  padding: 32px 24px;
+  border-radius: 18px;
+  border: 1px solid var(--vp-c-divider);
   background: var(--vp-c-bg-soft);
-  padding: 48px 24px;
-  border-radius: 16px;
-  margin: 32px 0;
+  margin: 24px 0 48px;
 }
 
 .phase-item {
@@ -212,64 +139,108 @@ features:
 }
 
 .phase-icon {
-  font-size: 48px;
+  font-size: 44px;
   margin-bottom: 8px;
 }
 
 .phase-arrow {
   font-size: 24px;
   color: var(--vp-c-brand-1);
+  align-self: center;
+}
+
+.cta-section {
+  text-align: center;
+  padding: 64px 24px;
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(139, 92, 246, 0.12));
+  margin: 72px auto;
+  max-width: 980px;
+}
+
+.cta-buttons {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.cta-button {
+  display: inline-block;
+  padding: 12px 28px;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: transform 0.2s ease, background 0.2s ease, color 0.2s ease;
+}
+
+.cta-button.primary {
+  background: var(--vp-c-brand-1);
+  color: #fff;
+}
+
+.cta-button.primary:hover {
+  transform: translateY(-2px);
+  background: var(--vp-c-brand-2);
+}
+
+.cta-button.secondary {
+  border: 2px solid var(--vp-c-brand-1);
+  color: var(--vp-c-brand-1);
+}
+
+.cta-button.secondary:hover {
+  transform: translateY(-2px);
+  background: var(--vp-c-brand-1);
+  color: #fff;
 }
 
 @media (max-width: 768px) {
-  .code-grid {
-    grid-template-columns: 1fr;
+  .shell-callout {
+    padding: 32px 20px;
   }
-  
+
   .phase-arrow {
     display: none;
   }
 }
 </style>
 
-## 🚀 Install in One Command
+## Quick start
 
-<div class="install-box">
+<div class="shell-callout">
 
 ```bash
 curl -fsSL https://nylon.sh/install | bash
 ```
 
-  <p style="color: var(--vp-c-text-2); margin-top: 16px;">
-    Linux x86_64/aarch64 • Automatic detection • No dependencies
+  <p style="color: var(--vp-c-text-2); margin-top: 8px;">
+    One binary • Linux aarch64 / x86_64 • No external dependencies
   </p>
 </div>
 
-## Start in 60 Seconds
+## Configure in minutes
 
-<p class="section-subtitle">
-  Two files. One command. Your reverse proxy is ready.
-</p>
-
-<div class="code-grid">
-  <div class="code-card">
-    <h3>📝 config.yaml</h3>
+<div class="quickstart-grid">
+  <div class="card">
+    <h3>1. Define runtime</h3>
+    <p>Create <code>config.yaml</code> for listeners, Pingora tuning, and ACME storage.</p>
 
 ```yaml
 http:
   - 0.0.0.0:8080
-
-config_dir: "./config"
-
+config_dir: ./config
 pingora:
+  daemon: false
   threads: 4
-  work_stealing: true
 ```
 
   </div>
-
-  <div class="code-card">
-    <h3>🎯 config/proxy.yaml</h3>
+  <div class="card">
+    <h3>2. Add services & routes</h3>
+    <p>Describe backends, plugins, and routing rules inside <code>config/</code>.</p>
 
 ```yaml
 services:
@@ -278,12 +249,10 @@ services:
     endpoints:
       - ip: 127.0.0.1
         port: 3000
-
 routes:
   - route:
       type: host
       value: localhost
-    name: api
     paths:
       - path: /*
         service:
@@ -291,237 +260,140 @@ routes:
 ```
 
   </div>
-</div>
-
-<div style="text-align: center; margin: 32px 0;">
+  <div class="card">
+    <h3>3. Run it</h3>
+    <p>Bring everything online and hot reload as you iterate.</p>
 
 ```bash
 nylon run -c config.yaml
 ```
 
-<p style="color: var(--vp-c-text-2); margin-top: 16px; font-size: 18px;">
-  ✅ Your proxy is running on <code>http://localhost:8080</code>
-</p>
-
-</div>
-
-## Add Superpowers with Plugins
-
-<p class="section-subtitle">
-  Write custom logic with our plugin SDK. Go is ready, more languages coming soon.
-</p>
-
-```go
-package main
-
-import "C"
-import sdk "github.com/AssetsArt/nylon/sdk/go/sdk"
-
-func main() {}
-
-func init() {
-    plugin := sdk.NewNylonPlugin()
-
-    plugin.AddPhaseHandler("auth", func(phase *sdk.PhaseHandler) {
-        // 🔒 Request Filter - Check authentication
-        phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
-            if ctx.Request().Header("X-API-Key") != "secret" {
-                res := ctx.Response()
-
-                res.RemoveHeader("Content-Length")
-                res.SetHeader("Transfer-Encoding", "chunked")
-
-                res.SetStatus(401)
-                res.BodyText("Unauthorized")
-
-                // end request
-                ctx.End()
-                return
-            }
-            ctx.Next()
-        })
-
-        // 📊 Logging - Track requests
-        phase.Logging(func(ctx *sdk.PhaseLogging) {
-            req, res := ctx.Request(), ctx.Response()
-            println(req.Method(), req.Path(), "->", res.Status(), res.Duration(), "ms")
-            ctx.Next()
-        })
-    })
-}
-```
-
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 32px; max-width: 800px; margin-left: auto; margin-right: auto;">
-
-```bash
-# Build plugin
-go build -buildmode=plugin -o auth.so
-```
-
-```yaml
-# Use in config
-plugins:
-  - name: auth
-    type: ffi
-    file: ./auth.so
-```
-
-</div>
-
-## Why Choose Nylon?
-
-Nylon combines the best of modern proxy technology:
-
-- **🚀 Built on Pingora** - Same technology powering Cloudflare's edge network
-- **⚡️ High Performance** - Rust's memory safety without garbage collection overhead
-- **🔌 Extensible** - Plugin system with Go SDK (more languages coming)
-- **🔄 Zero Downtime** - Hot reload configuration without dropping connections
-- **🔒 Auto HTTPS** - Built-in ACME support for Let's Encrypt
-- **📊 Observability** - Structured logging today, with broader metrics planned
-
-## Features
-
-<p class="section-subtitle">Everything you need, out of the box.</p>
-
-<div class="code-grid">
-  <div class="code-card">
-    <h3>🔄 Load Balancing</h3>
-
-```yaml
-services:
-  - name: api
-    service_type: http
-    algorithm: round_robin
-    endpoints:
-      - ip: 10.0.0.1
-        port: 3000
-      - ip: 10.0.0.2
-        port: 3000
-      - ip: 10.0.0.3
-        port: 3000
-```
-
-  </div>
-
-  <div class="code-card">
-    <h3>💚 Health Checks</h3>
-
-```yaml
-services:
-  - name: api
-    service_type: http
-    endpoints:
-      - ip: 10.0.0.1
-        port: 3000
-    health_check:
-      enabled: true
-      path: /health
-      interval: 5s
-```
-
-  </div>
-
-  <div class="code-card">
-    <h3>🔒 Automatic HTTPS</h3>
-
-```yaml
-tls:
-  - domains:
-      - example.com
-    acme:
-      email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
-```
-
-  </div>
-
-  <div class="code-card">
-    <h3>📁 Static Files</h3>
-
-```yaml
-services:
-  - name: frontend
-    service_type: static
-    static:
-      root: ./public
-      index: index.html
-      spa: true
-```
-
   </div>
 </div>
 
-## Plugin Phases
+## Built for real workloads
 
-<p class="section-subtitle">Hook into any part of the request lifecycle</p>
+<div class="usecases-grid">
+  <div class="card">
+    <h3>API gateways</h3>
+    <p>Inject auth, rate limiting, caching, and observability logic without touching upstream services.</p>
+  </div>
+  <div class="card">
+    <h3>Edge platforms & SaaS</h3>
+    <p>Serve thousands of domains with automated TLS, granular routing, and templated configs.</p>
+  </div>
+  <div class="card">
+    <h3>Real-time applications</h3>
+    <p>Harness WebSocket callbacks, broadcast rooms, and streaming response filters.</p>
+  </div>
+  <div class="card">
+    <h3>Migration buffers</h3>
+    <p>Rewrite payloads, split traffic, and de-risk backend migrations with per-route middleware.</p>
+  </div>
+</div>
+
+## Programmable pipeline
 
 <div class="phase-flow">
   <div class="phase-item">
-    <div class="phase-icon">🌐</div>
-    <strong>Client</strong>
+    <div>Request Filter</div>
   </div>
   <div class="phase-arrow">→</div>
   <div class="phase-item">
-    <div class="phase-icon">🔍</div>
-    <strong>RequestFilter</strong>
-    <div style="font-size: 12px; color: var(--vp-c-text-2);">Auth, Rate Limit</div>
+    <div>Routing</div>
   </div>
   <div class="phase-arrow">→</div>
   <div class="phase-item">
-    <div class="phase-icon">🖥️</div>
-    <strong>Backend</strong>
+    <div>Response Filter</div>
   </div>
   <div class="phase-arrow">→</div>
   <div class="phase-item">
-    <div class="phase-icon">📝</div>
-    <strong>ResponseFilter</strong>
-    <div style="font-size: 12px; color: var(--vp-c-text-2);">Headers</div>
+    <div>Body Filter</div>
   </div>
   <div class="phase-arrow">→</div>
   <div class="phase-item">
-    <div class="phase-icon">✏️</div>
-    <strong>BodyFilter</strong>
-    <div style="font-size: 12px; color: var(--vp-c-text-2);">Transform</div>
-  </div>
-  <div class="phase-arrow">→</div>
-  <div class="phase-item">
-    <div class="phase-icon">📊</div>
-    <strong>Logging</strong>
-    <div style="font-size: 12px; color: var(--vp-c-text-2);">Analytics</div>
+    <div>Logging</div>
   </div>
 </div>
 
-<p style="text-align: center; margin-top: 32px;">
-  <a href="/plugins/phases" style="color: var(--vp-c-brand-1); font-weight: 600; font-size: 18px;">
-    Learn More About Plugin Phases →
-  </a>
-</p>
+```go
+plugin.AddPhaseHandler("authz", func(phase *sdk.PhaseHandler) {
+  phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
+    if ctx.Request().Header("X-API-Key") != ctx.GetPayload()["api_key"] {
+      res := ctx.Response()
+      res.RemoveHeader("Content-Length")
+      res.SetHeader("Transfer-Encoding", "chunked")
+      res.SetStatus(401)
+      res.BodyText("Unauthorized")
+      ctx.End()
+      return
+    }
+    ctx.Next()
+  })
 
-## Ready to Get Started?
+  phase.Logging(func(ctx *sdk.PhaseLogging) {
+    req, res := ctx.Request(), ctx.Response()
+    log.Printf("%s %s -> %d (%dms)", req.Method(), req.Path(), res.Status(), res.Duration())
+    ctx.Next()
+  })
+})
+```
 
-<div class="cta-section">
-  <h2>Build Your Proxy in Minutes</h2>
-  <p style="font-size: 20px; color: var(--vp-c-text-2); margin-bottom: 32px;">
-    Install Nylon and start proxying requests right away
-  </p>
-  
-  <div style="max-width: 600px; margin: 0 auto;">
+> Go SDK is available today. Additional language SDKs (Rust, Zig, …) are in active development.
+
+## Operational muscle
+
+<div class="ops-grid">
+  <div class="card">
+    <h3>Hot reloads & zero downtime</h3>
 
 ```bash
-curl -fsSL https://nylon.sh/install | bash
+# Update configs without dropping connections
+nylon service reload
 ```
 
   </div>
+  <div class="card">
+    <h3>Automated certificates</h3>
 
+```yaml
+tls:
+  - type: acme
+    provider: letsencrypt
+    domains:
+      - api.example.com
+      - app.example.com
+    acme:
+      email: ops@example.com
+```
+
+  </div>
+  <div class="card">
+    <h3>Template everything</h3>
+
+```yaml
+middleware:
+  - plugin: RequestHeaderModifier
+    payload:
+      set:
+        - name: x-request-id
+          value: "${uuid(v7)}"
+        - name: x-forwarded-for
+          value: "${request(client_ip)}"
+```
+
+  </div>
+</div>
+
+## Ready to build?
+
+<div class="cta-section">
+  <h2>Ship faster with Nylon</h2>
+  <p style="font-size: 18px; color: var(--vp-c-text-2);">
+    The programmable proxy your edge, SaaS, and real-time workloads deserve.
+  </p>
   <div class="cta-buttons">
-    <a href="/introduction/installation" class="cta-button primary">
-      📥 Installation Guide
-    </a>
-    <a href="/introduction/quick-start" class="cta-button secondary">
-      🚀 Quick Start
-    </a>
-    <a href="/examples/basic-proxy" class="cta-button secondary">
-      📖 Examples
-    </a>
+    <a class="cta-button primary" href="/introduction/quick-start">Launch Quick Start</a>
+    <a class="cta-button secondary" href="https://github.com/AssetsArt/nylon">Star on GitHub</a>
   </div>
 </div>
