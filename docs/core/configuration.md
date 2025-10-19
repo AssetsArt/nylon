@@ -1,42 +1,41 @@
 # Configuration
 
-Complete configuration reference for Nylon.
+Nylon’s configuration is split into two cooperating layers:
 
-## Configuration Files
+| Layer | Location | Purpose |
+|-------|----------|---------|
+| **Runtime** | `config.yaml` | Process-wide options: listeners, ACME folders, Pingora runtime, WebSocket adapter. |
+| **Proxy** | Every file inside `config_dir` | Declarative routing surface: services, routes, middleware, plugins, TLS entries. |
 
-Nylon uses two types of configuration:
-
-1. **Runtime Configuration** - Server and runtime settings
-2. **Proxy Configuration** - Services, routes, and plugins
+Run Nylon with both layers in place:
 
 ```bash
 nylon run -c config.yaml
 ```
 
+> **Tip:** Keep `config.yaml` minimal and organise proxy files under `config/` (for example `services.yaml`, `routes.yaml`, `tls.yaml`) to keep reviews focused.
+
+---
+
 ## Runtime Configuration
 
-The main `config.yaml` file controls server behavior:
+`config.yaml` sets up listeners, directories, and Pingora behaviour.
 
 ```yaml
-# HTTP listening addresses
+# Listeners
 http:
-  - "0.0.0.0:80"
-
-# HTTPS listening addresses  
+  - 0.0.0.0:80
 https:
-  - "0.0.0.0:443"
+  - 0.0.0.0:443
 
-# Prometheus metrics endpoint (reserved; currently unused)
+# Reserved for a future Prometheus exporter
 metrics:
-  - "127.0.0.1:6192"
+  - 127.0.0.1:6192
 
-# Directory containing proxy configurations
+# Directory layout
 config_dir: "/etc/nylon/config"
-
-# Directory for ACME certificates
 acme: "/etc/nylon/acme"
 
-# Pingora runtime settings
 pingora:
   daemon: false
   threads: 4
@@ -53,7 +52,7 @@ pingora:
 
 # WebSocket adapter (optional)
 websocket:
-  adapter_type: redis  # memory | redis | cluster
+  adapter_type: redis    # memory | redis | cluster
   redis:
     host: localhost
     port: 6379
@@ -62,52 +61,47 @@ websocket:
     key_prefix: "nylon:ws"
 ```
 
-### Runtime Options
+### Runtime fields at a glance
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `http` | list | `[]` | HTTP listening addresses |
-| `https` | list | `[]` | HTTPS listening addresses |
-| `metrics` | list | `[]` | Reserved for future Prometheus metrics endpoint |
-| `config_dir` | path | `/etc/nylon/config` | Proxy config directory |
-| `acme` | path | `/etc/nylon/acme` | ACME certificates directory |
+| Field | Default | Notes |
+|-------|---------|-------|
+| `http` | `[]` | Bind addresses for HTTP listeners (`host:port`). |
+| `https` | `[]` | HTTPS listeners; requires TLS configuration in proxy layer. |
+| `metrics` | `[]` | Reserved for future use. |
+| `config_dir` | `/etc/nylon/config` | Folder holding proxy configuration files. |
+| `acme` | `/etc/nylon/acme` | ACME account + certificate storage. |
+| `websocket.adapter_type` | `redis` | Choose `memory`, `redis`, or `cluster`. |
 
-### Pingora Options
+#### Pingora settings
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `daemon` | bool | `false` | Run as daemon |
-| `threads` | int | CPU cores - 2 | Number of worker threads |
-| `work_stealing` | bool | `false` | Enable work stealing |
-| `grace_period_seconds` | int | `60` | Grace period for shutdown |
-| `graceful_shutdown_timeout_seconds` | int | `10` | Max wait before forced shutdown |
-| `upstream_keepalive_pool_size` | int | - | Upstream connection pool size |
-| `error_log` | path | - | Error log file path |
-| `pid_file` | path | - | PID file path |
-| `upgrade_sock` | path | - | Unix socket for upgrades |
-| `user` | string | - | User to drop privileges to |
-| `group` | string | - | Group to drop privileges to |
-| `ca_file` | path | - | CA certificates file |
+| Field | Default | Purpose |
+|-------|---------|---------|
+| `daemon` | `false` | Detach process (Linux). |
+| `threads` | auto | Worker threads (CPU cores minus 1–2). |
+| `work_stealing` | `false` | Share load between workers. |
+| `grace_period_seconds` | `60` | Wait before shutting down active connections. |
+| `graceful_shutdown_timeout_seconds` | `10` | Hard stop after this timeout. |
+| `upstream_keepalive_pool_size` | `null` | Cap upstream keepalive pool. |
+| `error_log`, `pid_file`, `upgrade_sock` | `null` | Optional observability and upgrade plumbing. |
+| `user`, `group` | `null` | Drop privileges after binding privileged ports. |
+| `ca_file` | `null` | Custom CA bundle for upstream TLS. |
+
+---
 
 ## Proxy Configuration
 
-Files in `config_dir` define services and routes:
-
-### Basic Structure
+Every YAML file within `config_dir` is parsed and merged. A typical layout:
 
 ```yaml
-# Optional: Header to select proxy config
-header_selector: x-nylon-proxy
+header_selector: x-nylon-proxy  # Optional: switch configs via header
 
-# Plugin definitions
 plugins:
   - name: my-plugin
     type: ffi
-    file: /path/to/plugin.so
+    file: /opt/nylon/plugins/my-plugin.so
     config:
-      key: value
+      debug: true
 
-# Service definitions
 services:
   - name: backend
     service_type: http
@@ -118,12 +112,11 @@ services:
     health_check:
       enabled: true
       path: /health
-      interval: 3s
+      interval: 5s
       timeout: 1s
       healthy_threshold: 2
       unhealthy_threshold: 2
 
-# Middleware groups
 middleware_groups:
   security:
     - plugin: RequestHeaderModifier
@@ -135,27 +128,20 @@ middleware_groups:
       payload:
         set:
           - name: x-server
-            value: "nylon"
+            value: "${or(env(SERVICE_NAME), 'nylon')}"
 
-# Route definitions  
 routes:
   - route:
       type: host
       value: example.com
     name: main
-    tls:
-      enabled: true
     middleware:
       - group: security
     paths:
       - path: /*
         service:
           name: backend
-        methods:
-          - GET
-          - POST
 
-# TLS/Certificate configuration
 tls:
   - type: acme
     provider: letsencrypt
@@ -166,24 +152,25 @@ tls:
       directory_url: https://acme-v02.api.letsencrypt.org/directory
 ```
 
+---
+
 ## Services
 
-### HTTP Service
+Services describe what to do once a route has matched.
 
-Forward requests to HTTP backends:
+### HTTP service – proxy to upstream servers
 
 ```yaml
 services:
   - name: api-service
     service_type: http
-    algorithm: round_robin  # round_robin | weighted | consistent | random
+    algorithm: round_robin      # round_robin | weighted | consistent | random
     endpoints:
       - ip: 10.0.0.1
         port: 3000
-        weight: 5  # for weighted algorithm
+        weight: 5               # used by weighted algorithm
       - ip: 10.0.0.2
         port: 3000
-        weight: 3
     health_check:
       enabled: true
       path: /health
@@ -193,9 +180,7 @@ services:
       unhealthy_threshold: 3
 ```
 
-### Plugin Service
-
-Handle requests with plugins:
+### Plugin service – delegate to an FFI plugin
 
 ```yaml
 services:
@@ -204,11 +189,11 @@ services:
     plugin:
       name: my-plugin
       entry: "ws"
+      payload:
+        api_key: "${env(WS_API_KEY)}"
 ```
 
-### Static Service
-
-Serve static files:
+### Static service – serve files directly
 
 ```yaml
 services:
@@ -217,31 +202,31 @@ services:
     static:
       root: /var/www/html
       index: index.html
-      spa: true  # SPA mode: serve index.html on 404
+      spa: true        # Serve index.html on 404 (SPA mode)
 ```
+
+---
 
 ## Routes
 
-### Route Matchers
+Routes are evaluated in two stages: route matcher (host/header) and path patterns (MatchIt). Once a path matches, Nylon links to the configured service and middleware.
 
-Routes can match by host or by a configured header value (`header_selector`):
+### Route matchers
 
 ```yaml
 routes:
-  # Match by hostname
   - route:
       type: host
-      value: api.example.com
+      value: api.example.com|api.internal
     name: api
     paths:
       - path: /*
         service:
           name: api-service
 
-  # Match by header value (header_selector must be set, e.g. x-nylon-proxy)
   - route:
       type: header
-      value: admin
+      value: tenant-admin          # requires header_selector
     name: admin
     paths:
       - path: /*
@@ -249,161 +234,113 @@ routes:
           name: admin-service
 ```
 
-### Path Configuration
+### Path patterns, rewrites, and methods
 
 ```yaml
-paths:
-  # Simple path
-  - path: /api/*
-    service:
-      name: api-service
-    methods:
-      - GET
-      - POST
-    middleware:
-      - plugin: auth
-        entry: "check"
-
-  # Path with rewrite
-  - path: /old-api/*
-    service:
-      name: api-service
-      rewrite: /new-api/*
-
-  # Path with parameters
-  - path: /users/:id/*
-    service:
-      name: user-service
-```
-
-### TLS Configuration
-
-```yaml
-routes:
-  - route:
-      type: host
-      value: secure.example.com
-    name: secure
-    tls:
-      enabled: true
-      redirect: https://secure.example.com  # Optional redirect
-    paths:
-      - path: /*
-        service:
-          name: backend
-```
-
-## Plugins
-
-### Plugin Definition
-
-```yaml
-plugins:
-  - name: auth-plugin
-    type: ffi
-    file: /path/to/auth.so
-    config:
-      secret: "my-secret"
-      timeout: 30
-```
-
-### Using Plugins in Routes
-
-```yaml
-# As middleware
-paths:
-  - path: /*
-    service:
-      name: backend
-    middleware:
-      - plugin: auth-plugin
-        entry: "auth"
-        payload:
-          role: "admin"
-```
-
-### Built-in Plugins
-
-Nylon includes built-in middleware plugins:
-
-**RequestHeaderModifier:**
-```yaml
-middleware:
-  - plugin: RequestHeaderModifier
-    payload:
-      set:
-        - name: x-custom
-          value: "${header(user-agent)}"
-      remove:
-        - x-internal
-```
-
-**ResponseHeaderModifier:**
-```yaml
-middleware:
-  - plugin: ResponseHeaderModifier
-    payload:
-      set:
-        - name: cache-control
-          value: "no-cache"
-      remove:
-        - server
-```
-
-## Middleware Groups
-
-Reusable middleware sets:
-
-```yaml
-middleware_groups:
-  security:
-    - plugin: RequestHeaderModifier
-      payload:
-        set:
-          - name: x-request-id
-            value: "${uuid(v7)}"
-    - plugin: ResponseHeaderModifier
-      payload:
-        set:
-          - name: x-frame-options
-            value: "DENY"
-
 routes:
   - route:
       type: host
       value: example.com
-    name: main
-    middleware:
-      - group: security  # Apply group
+    name: app
+    paths:
+      - path: /api/*
+        service:
+          name: api-service
+          rewrite: /v2/*
+        methods:
+          - GET
+          - POST
+        middleware:
+          - plugin: auth
+            entry: "check"
+
+      - path: /static/*
+        service:
+          name: static-files
+
+      - path: /admin/*
+        service:
+          name: admin-service
+```
+
+> **Order matters:** Nylon registers all HTTP methods for each pattern unless you specify `methods`. More specific paths take precedence.
+
+---
+
+## TLS / HTTPS
+
+### Manual certificates
+
+```yaml
+tls:
+  - type: custom
+    domains:
+      - example.com
+      - www.example.com
+    cert: /etc/ssl/example.com.crt
+    key: /etc/ssl/example.com.key
+    chain:
+      - /etc/ssl/example.com.chain.pem
+```
+
+### ACME (Let's Encrypt and friends)
+
+```yaml
+tls:
+  - type: acme
+    provider: letsencrypt
+    domains:
+      - example.com
+      - api.example.com
+    acme:
+      email: admin@example.com
+      directory_url: https://acme-v02.api.letsencrypt.org/directory
+```
+
+Routes can enforce TLS and optionally redirect HTTP to HTTPS:
+
+```yaml
+routes:
+  - route:
+      type: host
+      value: example.com
+    name: secure
+    tls:
+      enabled: true
+      redirect: https://example.com
     paths:
       - path: /*
         service:
           name: backend
 ```
 
+---
+
 ## Template Expressions
 
-Use template expressions in configuration:
+Use expressions anywhere you need dynamic values (middleware payloads, plugin configs, static service metadata).
 
-### Available Functions
+### Function catalogue
 
-- `${header(name)}` – Request header value (case-sensitive)
-- `${query(name[, default])}` – Query parameter with optional default
-- `${cookie(name[, default])}` – Cookie value with optional default
-- `${param(name[, default])}` – Route parameter with optional default
-- `${request(field)}` – Request metadata (`client_ip`, `host`, `method`, `path`, `scheme`, `tls`)
-- `${env(VAR_NAME)}` – Environment variable lookup
-- `${uuid(v4|v7)}` – Generate UUID (versions 4 or 7)
-- `${timestamp()}` – Current time in RFC3339 with millisecond precision
-- `${or(a, b, ... )}` – First non-empty argument
-- `${eq(a, b[, value])}` – Returns `value` (or `a`) when `a == b`
-- `${neq(a, b[, value])}` – Returns `value` (or `a`) when `a != b`
-- `${concat(values...)}` – Concatenate all arguments
-- `${upper(value)}` / `${lower(value)}` – Uppercase / lowercase
-- `${len(value)}` – Length of evaluated string
-- `${if_cond(condition, then, else)}` – Conditional expression
+| Function | Description | Example |
+|----------|-------------|---------|
+| `${header(name)}` | Request header value (case-sensitive). | `${header(user-agent)}` |
+| `${query(name[, default])}` | Query parameter with optional default. | `${query(version, 'v1')}` |
+| `${cookie(name[, default])}` | Cookie lookup. | `${cookie(session_id)}` |
+| `${param(name[, default])}` | Route/path parameter. | `${param(user_id)}` |
+| `${request(field)}` | Request metadata (`client_ip`, `host`, `method`, `path`, `scheme`, `tls`). | `${request(method)}` |
+| `${env(VAR)}` | Environment variable. | `${env(SERVICE_NAME)}` |
+| `${uuid(v4|v7)}` | Generate UUID. | `${uuid(v7)}` |
+| `${timestamp()}` | RFC3339 timestamp with millisecond precision. | `${timestamp()}` |
+| `${or(a, b, …)}` | First non-empty argument. | `${or(env(NAME), 'default')}` |
+| `${eq(a, b[, value])}` | Return `value` (or `a`) if equal; empty otherwise. | `${eq(request(method), 'GET', 'cacheable')}` |
+| `${neq(a, b[, value])}` | Return `value` (or `a`) if not equal. | `${neq(request(scheme), 'https', 'insecure')}` |
+| `${concat(values…)}` | Concatenate arguments. | `${concat(header(host), '-', uuid(v4))}` |
+| `${upper(value)}` / `${lower(value)}` | Case conversion. | `${upper(param(region))}` |
+| `${len(value)}` | Length of evaluated string. | `${len(header(user-agent))}` |
+| `${if_cond(condition, then, else)}` | Branch by non-empty string. | `${if_cond(request(tls), 'https', 'http')}` |
 
-### Example
+### Example usage
 
 ```yaml
 middleware:
@@ -414,92 +351,16 @@ middleware:
           value: "${uuid(v7)}"
         - name: x-forwarded-for
           value: "${request(client_ip)}"
-        - name: x-server
-          value: "${or(env(SERVER_NAME), 'nylon')}"
+        - name: x-original-host
+          value: "${header(host)}"
+        - name: x-env
+          value: "${or(env(ENVIRONMENT), 'local')}"
 ```
 
-## TLS/HTTPS
+---
 
-### Manual Certificates
+## See also
 
-```yaml
-tls:
-  - type: custom
-    domains:
-      - example.com
-      - www.example.com
-    cert: /path/to/cert.pem
-    key: /path/to/key.pem
-```
-
-### ACME/Let's Encrypt
-
-```yaml
-tls:
-  - type: acme
-    provider: letsencrypt
-    domains:
-      - example.com
-    acme:
-      email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
-```
-
-## Health Checks
-
-```yaml
-services:
-  - name: backend
-    service_type: http
-    algorithm: round_robin
-    endpoints:
-      - ip: 127.0.0.1
-        port: 3000
-    health_check:
-      enabled: true
-      path: /health
-      interval: 5s
-      timeout: 2s
-      healthy_threshold: 2
-      unhealthy_threshold: 3
-```
-
-## WebSocket
-
-### Redis Adapter
-
-```yaml
-websocket:
-  adapter_type: redis
-  redis:
-    host: localhost
-    port: 6379
-    password: null
-    db: 0
-    key_prefix: "nylon:ws"
-```
-
-### Memory Adapter
-
-```yaml
-websocket:
-  adapter_type: memory
-```
-
-## Hot Reload
-
-Nylon supports hot-reloading of proxy configurations:
-
-```bash
-# Send SIGHUP to reload
-kill -HUP $(cat /var/run/nylon.pid)
-
-# Or use systemd
-systemctl reload nylon
-```
-
-Runtime config changes require a restart.
-
-## Examples
-
-See [Examples](/examples/basic-proxy) for complete configuration examples.
+- [Routing](/core/routing) – Path patterns, matching order, TLS redirects.
+- [Middleware](/core/middleware) – Header modifiers and middleware groups.
+- [TLS](/core/tls) – Certificate management and renewal pipeline.

@@ -1,31 +1,23 @@
 # Configuration Schema
 
-Complete reference for Nylon configuration files.
+Exhaustive field reference for both runtime and proxy configuration files. See also the [conceptual guide](/core/configuration) for workflows and examples.
 
-## Runtime Configuration
+---
 
-Main configuration file (`config.yaml`):
+## Runtime configuration (`config.yaml`)
 
 ```yaml
-# HTTP listening addresses
 http:
-  - "0.0.0.0:80"
-
-# HTTPS listening addresses
+  - 0.0.0.0:80
 https:
-  - "0.0.0.0:443"
+  - 0.0.0.0:443
 
-# Prometheus metrics addresses (reserved; currently unused)
 metrics:
-  - "127.0.0.1:6192"
+  - 127.0.0.1:6192
 
-# Directory containing proxy configurations
 config_dir: "/etc/nylon/config"
-
-# Directory for ACME certificates
 acme: "/etc/nylon/acme"
 
-# Pingora runtime configuration
 pingora:
   daemon: false
   threads: 4
@@ -40,7 +32,6 @@ pingora:
   group: "nobody"
   ca_file: "/etc/ssl/certs/ca-certificates.crt"
 
-# WebSocket adapter configuration (optional)
 websocket:
   adapter_type: redis  # memory | redis | cluster
   redis:
@@ -51,52 +42,58 @@ websocket:
     key_prefix: "nylon:ws"
 ```
 
-### Runtime Schema
+### Field reference
 
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `http` | `[]string` | No | `[]` | HTTP listening addresses |
-| `https` | `[]string` | No | `[]` | HTTPS listening addresses |
-| `metrics` | `[]string` | No | `[]` | Reserved for future Prometheus metrics endpoint |
-| `config_dir` | `string` | No | `/etc/nylon/config` | Proxy config directory |
-| `acme` | `string` | No | `/etc/nylon/acme` | ACME certificates directory |
-| `pingora` | `object` | No | See below | Pingora configuration |
-| `websocket` | `object` | No | `null` | WebSocket adapter config |
+| Field | Type | Required | Default | Notes |
+|-------|------|----------|---------|-------|
+| `http` | `[]string` | No | `[]` | HTTP listener addresses (`host:port`). |
+| `https` | `[]string` | No | `[]` | HTTPS listeners (requires TLS in proxy config). |
+| `metrics` | `[]string` | No | `[]` | Reserved for future Prometheus exporter. |
+| `config_dir` | `string` | No | `/etc/nylon/config` | Root directory for proxy YAML files. |
+| `acme` | `string` | No | `/etc/nylon/acme` | ACME storage (certificates + account). |
+| `pingora` | `object` | No | `{}` | Pingora runtime configuration (see below). |
+| `websocket` | `object` | No | `null` | WebSocket adapter. Required for `redis`/`cluster`. |
 
-### Pingora Configuration
+#### `pingora` object
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `daemon` | `bool` | `false` | Run as daemon |
-| `threads` | `int` | CPU cores - 2 | Worker threads |
-| `work_stealing` | `bool` | `false` | Enable work stealing |
-| `grace_period_seconds` | `int` | `60` | Grace period for shutdown |
-| `graceful_shutdown_timeout_seconds` | `int` | `10` | Max shutdown wait time |
-| `upstream_keepalive_pool_size` | `int` | `null` | Upstream connection pool |
-| `error_log` | `string` | `null` | Error log file path |
-| `pid_file` | `string` | `null` | PID file path |
-| `upgrade_sock` | `string` | `null` | Upgrade socket path |
-| `user` | `string` | `null` | User to drop privileges |
-| `group` | `string` | `null` | Group to drop privileges |
-| `ca_file` | `string` | `null` | CA certificates file |
+| `daemon` | `bool` | `false` | Start as daemon (Linux). |
+| `threads` | `int` | CPU cores - 2 | Worker threads (clamped to ≥1). |
+| `work_stealing` | `bool` | `false` | Enable work stealing across threads. |
+| `grace_period_seconds` | `int` | `60` | Grace period before shutdown. |
+| `graceful_shutdown_timeout_seconds` | `int` | `10` | Hard shutdown deadline. |
+| `upstream_keepalive_pool_size` | `int` | `null` | Cap for upstream keepalive pool. |
+| `error_log` | `string` | `null` | Pingora error log path. |
+| `pid_file` | `string` | `null` | PID file path. |
+| `upgrade_sock` | `string` | `null` | Domain socket for zero-downtime upgrades. |
+| `user` / `group` | `string` | `null` | Drop privileges after binding ports. |
+| `ca_file` | `string` | `null` | Custom CA bundle for upstream TLS. |
 
-## Proxy Configuration
+#### `websocket` object (optional)
 
-Proxy configuration files in `config_dir`:
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `adapter_type` | `string` | No | `memory`, `redis`, or `cluster` (default `redis`). |
+| `redis` | `object` | For redis/cluster | Connection details: `host`, `port`, `password`, `db`, `key_prefix`. |
+| `cluster` | `object` | For cluster | Seed `nodes` and optional `key_prefix`. |
+
+---
+
+## Proxy configuration (`config_dir`)
+
+Every YAML file within `config_dir` is merged. Example scaffold:
 
 ```yaml
-# Header selector for multi-config support
 header_selector: x-nylon-proxy
 
-# Plugin definitions
 plugins:
   - name: auth
     type: ffi
-    file: /path/to/auth.so
+    file: /opt/nylon/plugins/auth.so
     config:
-      key: value
+      issuer: https://auth.example.com
 
-# Service definitions
 services:
   - name: backend
     service_type: http
@@ -104,7 +101,6 @@ services:
     endpoints:
       - ip: 10.0.0.1
         port: 3000
-        weight: 1
     health_check:
       enabled: true
       path: /health
@@ -113,7 +109,6 @@ services:
       healthy_threshold: 2
       unhealthy_threshold: 3
 
-# Middleware groups
 middleware_groups:
   security:
     - plugin: RequestHeaderModifier
@@ -122,7 +117,6 @@ middleware_groups:
           - name: x-request-id
             value: "${uuid(v7)}"
 
-# Route definitions
 routes:
   - route:
       type: host
@@ -141,7 +135,6 @@ routes:
           - GET
           - POST
 
-# TLS configuration
 tls:
   - type: acme
     provider: letsencrypt
@@ -152,228 +145,122 @@ tls:
       directory_url: https://acme-v02.api.letsencrypt.org/directory
 ```
 
-### Plugin Schema
+### Plugins
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | `string` | Yes | Plugin name |
-| `type` | `string` | Yes | Plugin type (always `ffi`) |
-| `file` | `string` | Yes | Path to plugin .so file |
-| `config` | `object` | No | Plugin configuration |
+| `name` | `string` | Yes | Plugin identifier (unique). |
+| `type` | `string` | Yes | Currently only `ffi`. |
+| `file` | `string` | Yes | Shared library path. |
+| `config` | `object` | No | Arbitrary configuration passed to plugin. |
 
-### Service Schema
+### Services
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | `string` | Yes | Service name |
-| `service_type` | `string` | Yes | `http`, `plugin`, or `static` |
-| `algorithm` | `string` | No | Load balancing algorithm |
-| `endpoints` | `[]object` | For http | Backend endpoints |
-| `health_check` | `object` | No | Health check configuration |
-| `plugin` | `object` | For plugin | Plugin configuration |
-| `static` | `object` | For static | Static file configuration |
+| Field | Type | Required | Applies to |
+|-------|------|----------|-----------|
+| `name` | `string` | Yes | All services. |
+| `service_type` | `string` | Yes | `http`, `plugin`, or `static`. |
+| `algorithm` | `string` | No | HTTP services (`round_robin`, `weighted`, `consistent`, `random`). |
+| `endpoints` | `[]object` | For http | Each endpoint requires `ip`, `port`, optional `weight`. |
+| `health_check` | `object` | For http | See table below. |
+| `plugin` | `object` | For plugin | Plugin invocation (`name`, `entry`, optional `payload`). |
+| `static` | `object` | For static | `root`, `index`, optional `spa`. |
 
-#### HTTP Service
-
-```yaml
-services:
-  - name: api
-    service_type: http
-    algorithm: round_robin  # round_robin | weighted | consistent | random
-    endpoints:
-      - ip: 10.0.0.1
-        port: 3000
-        weight: 5  # for weighted algorithm
-```
-
-#### Plugin Service
-
-```yaml
-services:
-  - name: custom
-    service_type: plugin
-    plugin:
-      name: my-plugin
-      entry: "handler"
-```
-
-#### Static Service
-
-```yaml
-services:
-  - name: frontend
-    service_type: static
-    static:
-      root: /var/www/html
-      index: index.html
-      spa: true
-```
-
-### Health Check Schema
+#### Health check object
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `enabled` | `bool` | `false` | Enable health checks |
-| `path` | `string` | `/` | Health check path |
-| `interval` | `duration` | `10s` | Check interval |
-| `timeout` | `duration` | `5s` | Request timeout |
-| `healthy_threshold` | `int` | `2` | Successes to mark healthy |
-| `unhealthy_threshold` | `int` | `3` | Failures to mark unhealthy |
+| `enabled` | `bool` | `false` | Enable active health checks. |
+| `path` | `string` | `/` | Probe path. |
+| `interval` | `string` | `10s` | Frequency (must end with `s`). |
+| `timeout` | `string` | `5s` | Probe timeout (must end with `s`). |
+| `healthy_threshold` | `int` | `2` | Successes before healthy. |
+| `unhealthy_threshold` | `int` | `3` | Failures before unhealthy. |
 
-### Route Schema
+### Middleware groups
+
+Dictionary of reusable middleware chains:
+
+```yaml
+middleware_groups:
+  security:
+    - plugin: ResponseHeaderModifier
+      payload:
+        set:
+          - name: x-frame-options
+            value: "DENY"
+```
+
+Each entry mirrors route-level middleware (`group` or explicit `plugin`/`entry`/`payload`).
+
+### Routes
+
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `route` | `object` | Yes | Matcher definition. `type` = `host` or `header` (requires `header_selector`). `value` supports `a|b`. |
+| `name` | `string` | Yes | Unique route name. |
+| `tls` | `object` | No | `enabled`, optional `redirect`. |
+| `middleware` | `[]object` | No | Route-level middleware entries. |
+| `paths` | `[]object` | Yes | Path matchers (see below). |
+
+#### Path object
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `route` | `object` | Yes | Route matcher |
-| `name` | `string` | Yes | Route name |
-| `tls` | `object` | No | TLS configuration |
-| `middleware` | `[]object` | No | Middleware list |
-| `paths` | `[]object` | Yes | Path configurations |
+| `path` | `string` or `[]string` | Yes | Pattern(s) for MatchIt router. Supports `*` and `{param}`. |
+| `service` | `object` | Yes | `name` (service), optional `rewrite`. |
+| `methods` | `[]string` | No | Limit to specific HTTP methods. |
+| `middleware` | `[]object` | No | Path-specific middleware. |
 
-#### Route Matcher
+### Middleware entry
 
-```yaml
-route:
-  type: host  # host | header
-  value: example.com  # hostname or header value (when header_selector is configured)
-```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `group` | `string` | Either | Reference a middleware group. |
+| `plugin` | `string` | Either | Plugin name to execute. |
+| `entry` | `string` | If plugin | Handler exported by plugin. |
+| `payload` | `object` | No | Arbitrary JSON passed to handler. |
 
-#### Path Configuration
+### TLS entries
 
-```yaml
-paths:
-  - path: /api/*  # Path pattern
-    service:
-      name: api-service
-      rewrite: /v2/*  # optional rewrite
-    methods:
-      - GET
-      - POST
-    middleware:
-      - plugin: auth
-        entry: "check"
-        payload:
-          key: value
-```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `string` | Yes | `custom` or `acme`. |
+| `domains` | `[]string` | Yes | SAN list / hostnames. Must be unique across entries. |
+| `cert` / `key` | `string` | For custom | PEM files for certificate and private key. |
+| `chain` | `[]string` | No | Additional chain PEMs. |
+| `provider` | `string` | For acme | ACME provider (e.g. `letsencrypt`). |
+| `acme` | `object` | For acme | `email`, optional `directory_url`, `staging`, `eab_kid`, `eab_hmac_key`. |
 
-### Middleware Schema
+---
 
-```yaml
-middleware:
-  # Reference middleware group
-  - group: security
+## Template expressions
 
-  # Use plugin directly
-  - plugin: auth
-    entry: "check"
-    payload:
-      key: value
-```
+Expressions can appear inside payloads to reference request context.
 
-### TLS Schema
+| Function | Description | Example |
+|----------|-------------|---------|
+| `${header(name)}` | Request header (case-sensitive). | `${header(user-agent)}` |
+| `${query(name[, default])}` | Query string value. | `${query(version, 'v1')}` |
+| `${cookie(name[, default])}` | Cookie lookup. | `${cookie(session_id)}` |
+| `${param(name[, default])}` | Route/path parameter. | `${param(account_id)}` |
+| `${request(field)}` | Request metadata (`client_ip`, `host`, `method`, `path`, `scheme`, `tls`). | `${request(method)}` |
+| `${env(VAR)}` | Environment variable. | `${env(SERVICE_NAME)}` |
+| `${uuid(v4\|v7)}` | Generate UUID string. | `${uuid(v7)}` |
+| `${timestamp()}` | RFC3339 timestamp with millisecond precision. | `${timestamp()}` |
+| `${or(a, b, …)}` | First non-empty argument. | `${or(env(NAME), 'default')}` |
+| `${eq(a, b[, value])}` | Returns `value` (or `a`) if `a == b`. | `${eq(request(method), 'GET', 'cacheable')}` |
+| `${neq(a, b[, value])}` | Returns `value` (or `a`) if `a != b`. | `${neq(request(scheme), 'https', 'insecure')}` |
+| `${concat(values…)}` | Concatenate arguments. | `${concat(header(host), '-', uuid(v4))}` |
+| `${upper(value)}` / `${lower(value)}` | Case conversion. | `${upper(param(region))}` |
+| `${len(value)}` | String length. | `${len(header(user-agent))}` |
+| `${if_cond(condition, then, else)}` | Conditional evaluation (truthy when non-empty). | `${if_cond(request(tls), 'https', 'http')}` |
 
-```yaml
-tls:
-  # Manual certificates
-  - type: custom
-    domains:
-      - example.com
-    cert: /path/to/cert.pem
-    key: /path/to/key.pem
+---
 
-  # ACME (Let's Encrypt)
-  - type: acme
-    provider: letsencrypt
-    domains:
-      - api.example.com
-    acme:
-      email: admin@example.com
-      directory_url: https://acme-v02.api.letsencrypt.org/directory
-```
+## Related documentation
 
-## Template Expressions
-
-Available template functions:
-
-| Function | Returns | Example |
-|----------|---------|---------|
-| `${header(name)}` | Request header | `${header(user-agent)}` |
-| `${query(name[, default])}` | Query parameter | `${query(version, 'v1')}` |
-| `${cookie(name[, default])}` | Cookie value | `${cookie(session_id)}` |
-| `${param(name[, default])}` | Route parameter | `${param(user_id)}` |
-| `${request(field)}` | Request metadata (`client_ip`, `host`, `method`, `path`, `scheme`, `tls`) | `${request(method)}` |
-| `${env(VAR)}` | Environment variable | `${env(SERVICE_NAME)}` |
-| `${uuid(v4\|v7)}` | UUID string | `${uuid(v7)}` |
-| `${timestamp()}` | RFC3339 timestamp | `${timestamp()}` |
-| `${or(a, b, …)}` | First non-empty | `${or(env(NAME), 'default')}` |
-| `${eq(a, b[, value])}` | `value` (or `a`) if equal | `${eq(request(method), 'GET', 'cacheable')}` |
-| `${neq(a, b[, value])}` | `value` (or `a`) if not equal | `${neq(request(scheme), 'https', 'insecure')}` |
-| `${concat(values…)}` | Concatenated string | `${concat(header(host), '-', uuid(v4))}` |
-| `${upper(value)}` / `${lower(value)}` | Upper/lowercase | `${upper(param(region))}` |
-| `${len(value)}` | Length of evaluated string | `${len(header(user-agent))}` |
-| `${if_cond(condition, then, else)}` | Conditional evaluation | `${if_cond(request(tls), 'https', 'http')}` |
-
-## Validation
-
-Nylon validates configuration on startup and reload. Common errors:
-
-### Missing Required Fields
-
-```yaml
-# ❌ Error: service name required
-services:
-  - service_type: http
-```
-
-```yaml
-# ✅ Correct
-services:
-  - name: backend
-    service_type: http
-```
-
-### Invalid Service Type
-
-```yaml
-# ❌ Error: invalid service type
-services:
-  - name: backend
-    service_type: invalid
-```
-
-```yaml
-# ✅ Correct: http, plugin, or static
-services:
-  - name: backend
-    service_type: http
-```
-
-### Missing Endpoints
-
-```yaml
-# ❌ Error: http service requires endpoints
-services:
-  - name: backend
-    service_type: http
-```
-
-```yaml
-# ✅ Correct
-services:
-  - name: backend
-    service_type: http
-    endpoints:
-      - ip: 127.0.0.1
-        port: 3000
-```
-
-## Examples
-
-See [Configuration Guide](/core/configuration) for detailed examples and best practices.
-
-## See Also
-
-- [Configuration Guide](/core/configuration) - Detailed configuration guide
-- [Routing](/core/routing) - Route configuration
-- [Load Balancing](/core/load-balancing) - Service configuration
-- [TLS/HTTPS](/core/tls) - TLS configuration
+- [Core configuration](/core/configuration) – narrative guide and best practices. |
+- [Routing reference](/core/routing) – path syntax, ordering, TLS redirects. |
+- [Middleware guide](/core/middleware) – built-in modifiers and reusable groups. |
+- [TLS guide](/core/tls) – ACME lifecycle and manual certificate handling. |

@@ -2,6 +2,13 @@
 
 Understanding the different phases of request processing and when to use each one.
 
+| Phase | When it runs | Common uses |
+|-------|--------------|-------------|
+| **RequestFilter** | Before routing/backends | AuthN/Z, validation, rewrites, early responses. |
+| **ResponseFilter** | After upstream headers, before body | Header tweaks, status overrides, caching decisions. |
+| **ResponseBodyFilter** | While streaming body chunks | Transformations, compression, redaction. |
+| **Logging** | After request finishes | Metrics, structured logging, cleanup. |
+
 ## Request Lifecycle
 
 ```
@@ -501,3 +508,11 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 	ctx.Next()
 })
 ```
+
+---
+
+**Next steps**
+
+- [Go SDK reference](/plugins/go-sdk) – browse the complete helper API.
+- [Request handling guide](/plugins/request) – focus on inbound request helpers.
+- [Authentication example](/examples/authentication) – see multiple phases working together.

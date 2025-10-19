@@ -1,6 +1,18 @@
-# Request Handling
+# Request handling
 
-Learn how to handle HTTP requests in your Go plugins.
+Learn how to interact with inbound HTTP requests inside your Go plugins. Combine this reference with the lifecycle information in [Plugin Phases](/plugins/phases) to pick the best hook.
+
+| Helper | Description |
+|--------|-------------|
+| `req.Method()` | HTTP method (`GET`, `POST`, …). |
+| `req.Path()` / `req.URL()` | Request path / full URL. |
+| `req.Query()` | Raw query string. |
+| `req.Params()` | Route parameters (`map[string]string`). |
+| `req.Header(name)` | Single header lookup. |
+| `req.Headers()` | All headers via `.Get()` / `.GetAll()`. |
+| `req.RawBody()` | Request body (lazy read). |
+| `req.Host()` / `req.ClientIP()` | Host header and client IP. |
+| `req.Bytes()` / `req.Timestamp()` | Body size and request timestamp. |
 
 ## Request Object
 
