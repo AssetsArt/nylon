@@ -1,14 +1,65 @@
-<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="128" height="128" rx="24" fill="url(#gradient)"/>
-  <path d="M32 88V40L64 24L96 40V88L64 104L32 88Z" stroke="white" stroke-width="4" fill="none"/>
-  <path d="M32 52L64 68L96 52" stroke="white" stroke-width="4"/>
-  <path d="M64 68V104" stroke="white" stroke-width="4"/>
-  <circle cx="64" cy="36" r="4" fill="white"/>
-  <defs>
-    <linearGradient id="gradient" x1="0" y1="0" x2="128" y2="128">
-      <stop offset="0%" stop-color="#646cff"/>
-      <stop offset="100%" stop-color="#8890ff"/>
-    </linearGradient>
-  </defs>
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="200" height="200" fill="#0F172A" rx="20"/>
+  
+  <!-- Nylon fiber concept: Interconnected hexagonal mesh representing polymer chains -->
+  
+  <!-- Top layer - lighter shade (closest) -->
+  <g opacity="0.9">
+    <!-- Top row hexagons -->
+    <path d="M60 50 L75 42 L90 50 L90 66 L75 74 L60 66 Z" 
+          fill="none" stroke="#60A5FA" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M110 50 L125 42 L140 50 L140 66 L125 74 L110 66 Z" 
+          fill="none" stroke="#60A5FA" stroke-width="2.5" stroke-linejoin="round"/>
+    
+    <!-- Connection lines between hexagons -->
+    <line x1="90" y1="58" x2="110" y2="58" stroke="#60A5FA" stroke-width="2" opacity="0.6"/>
+  </g>
+  
+  <!-- Middle layer - medium shade -->
+  <g opacity="0.8">
+    <!-- Middle row hexagons -->
+    <path d="M35 90 L50 82 L65 90 L65 106 L50 114 L35 106 Z" 
+          fill="none" stroke="#3B82F6" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M85 90 L100 82 L115 90 L115 106 L100 114 L85 106 Z" 
+          fill="none" stroke="#3B82F6" stroke-width="3" stroke-linejoin="round"/>
+    <path d="M135 90 L150 82 L165 90 L165 106 L150 114 L135 106 Z" 
+          fill="none" stroke="#3B82F6" stroke-width="3" stroke-linejoin="round"/>
+    
+    <!-- Connection lines -->
+    <line x1="65" y1="98" x2="85" y2="98" stroke="#3B82F6" stroke-width="2.5" opacity="0.7"/>
+    <line x1="115" y1="98" x2="135" y2="98" stroke="#3B82F6" stroke-width="2.5" opacity="0.7"/>
+    
+    <!-- Vertical connections to top layer -->
+    <line x1="75" y1="74" x2="50" y2="82" stroke="#3B82F6" stroke-width="2" opacity="0.5"/>
+    <line x1="125" y1="74" x2="150" y2="82" stroke="#3B82F6" stroke-width="2" opacity="0.5"/>
+  </g>
+  
+  <!-- Bottom layer - darkest shade (farthest) -->
+  <g opacity="0.7">
+    <!-- Bottom row hexagons -->
+    <path d="M60 130 L75 122 L90 130 L90 146 L75 154 L60 146 Z" 
+          fill="none" stroke="#2563EB" stroke-width="3.5" stroke-linejoin="round"/>
+    <path d="M110 130 L125 122 L140 130 L140 146 L125 154 L110 146 Z" 
+          fill="none" stroke="#2563EB" stroke-width="3.5" stroke-linejoin="round"/>
+    
+    <!-- Connection lines -->
+    <line x1="90" y1="138" x2="110" y2="138" stroke="#2563EB" stroke-width="3" opacity="0.7"/>
+    
+    <!-- Vertical connections to middle layer -->
+    <line x1="50" y1="114" x2="75" y2="122" stroke="#2563EB" stroke-width="2.5" opacity="0.5"/>
+    <line x1="100" y1="114" x2="125" y2="122" stroke="#2563EB" stroke-width="2.5" opacity="0.5"/>
+    <line x1="150" y1="114" x2="125" y2="122" stroke="#2563EB" stroke-width="2.5" opacity="0.5"/>
+  </g>
+  
+  <!-- Central glow effect representing data flow -->
+  <circle cx="100" cy="98" r="12" fill="#3B82F6" opacity="0.3"/>
+  <circle cx="100" cy="98" r="8" fill="#60A5FA" opacity="0.5"/>
+  <circle cx="100" cy="98" r="4" fill="#93C5FD" opacity="0.8"/>
+  
+  <!-- Accent lines showing connection flow -->
+  <path d="M 50 98 Q 75 98 100 98 Q 125 98 150 98" 
+        fill="none" stroke="#60A5FA" stroke-width="1.5" opacity="0.4" stroke-dasharray="4 4">
+    <animate attributeName="stroke-dashoffset" from="0" to="8" dur="1s" repeatCount="indefinite"/>
+  </path>
 </svg>
-
