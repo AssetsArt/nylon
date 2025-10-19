@@ -326,7 +326,12 @@ func init() {
         // 🔒 Request Filter - Check authentication
         phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
             if ctx.Request().Header("X-API-Key") != "secret" {
-                ctx.Response().SetStatus(401).BodyText("Unauthorized")
+                res := ctx.Response()
+                res.SetStatus(401)
+                res.BodyText("Unauthorized")
+                ctx.RemoveResponseHeader("Content-Length")
+                ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+                ctx.End()
                 return
             }
             ctx.Next()

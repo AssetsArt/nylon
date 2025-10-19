@@ -114,11 +114,14 @@ plugin.AddPhaseHandler("cors", func(phase *sdk.PhaseHandler) {
 			res.SetHeader("Access-Control-Max-Age", "3600")
 		}
 		
-		// Handle preflight
-		if req.Method() == "OPTIONS" {
-			res.SetStatus(204)
-			return
-		}
+	// Handle preflight
+	if req.Method() == "OPTIONS" {
+		res.SetStatus(204)
+		ctx.RemoveResponseHeader("Content-Length")
+		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		ctx.End()
+		return
+	}
 		
 		ctx.Next()
 	})
@@ -423,6 +426,9 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 // Always handle preflight
 if req.Method() == "OPTIONS" {
     res.SetStatus(204)
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
     return
 }
 ```

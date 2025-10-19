@@ -218,10 +218,10 @@ timestamp := req.Timestamp() // 1704067200000
 ```go
 res := ctx.Response()
 
-// Set status and headers
-res.SetStatus(200).
-    SetHeader("Content-Type", "application/json").
-    SetHeader("X-Server", "Nylon")
+// Set status and headers (must call separately)
+res.SetStatus(200)
+res.SetHeader("Content-Type", "application/json")
+res.SetHeader("X-Server", "Nylon")
 
 // Remove header
 res.RemoveHeader("Server")
@@ -322,7 +322,12 @@ stream.End()
 ```go
 err := ctx.WebSocketUpgrade(callbacks)
 if err != nil {
-    ctx.Response().SetStatus(400).BodyText("Upgrade failed")
+    res := ctx.Response()
+    res.SetStatus(400)
+    res.BodyText("Upgrade failed")
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
     return
 }
 ```
@@ -331,8 +336,13 @@ if err != nil {
 
 ```go
 if !authorized {
-    ctx.Response().SetStatus(403).BodyText("Forbidden")
-    return  // Don't call Next()
+    res := ctx.Response()
+    res.SetStatus(403)
+    res.BodyText("Forbidden")
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
+    return
 }
 
 ctx.Next()
@@ -362,25 +372,29 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 // ✅ Good
 err := ctx.WebSocketUpgrade(callbacks)
 if err != nil {
-    ctx.Response().SetStatus(400).BodyText("Error")
+    res := ctx.Response()
+    res.SetStatus(400)
+    res.BodyText("Error")
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
+    return
 }
 
 // ❌ Bad
 ctx.WebSocketUpgrade(callbacks)  // Ignores error
 ```
 
-### 3. Use Method Chaining
+### 3. Call Methods Separately
 
 ```go
-// ✅ Good - chainable
-res.SetStatus(200).
-    SetHeader("Content-Type", "application/json").
-    BodyJSON(data)
-
-// ✅ Also good
+// ✅ Correct - call methods separately
 res.SetStatus(200)
 res.SetHeader("Content-Type", "application/json")
 res.BodyJSON(data)
+
+// ❌ Wrong - method chaining not supported
+// res.SetStatus(200).SetHeader("Content-Type", "application/json").BodyJSON(data)
 ```
 
 ### 4. Clean Up Resources
@@ -429,7 +443,12 @@ func init() {
             req := ctx.Request()
             
             if req.Header("X-API-Key") == "" {
-                ctx.Response().SetStatus(401).BodyText("Unauthorized")
+                res := ctx.Response()
+                res.SetStatus(401)
+                res.BodyText("Unauthorized")
+                ctx.RemoveResponseHeader("Content-Length")
+                ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+                ctx.End()
                 return
             }
             

@@ -136,7 +136,12 @@ auth := req.Header("Authorization")
 apiKey := req.Header("X-API-Key")
 
 if apiKey == "" {
-    ctx.Response().SetStatus(401).BodyText("Missing API key")
+    res := ctx.Response()
+    res.SetStatus(401)
+    res.BodyText("Missing API key")
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
     return
 }
 ```
@@ -174,12 +179,22 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     // Check API key
     apiKey := req.Header("X-API-Key")
     if apiKey == "" {
-        ctx.Response().SetStatus(401).BodyText("Missing API key")
+        res := ctx.Response()
+        res.SetStatus(401)
+        res.BodyText("Missing API key")
+        ctx.RemoveResponseHeader("Content-Length")
+        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        ctx.End()
         return
     }
     
     if !validateAPIKey(apiKey) {
-        ctx.Response().SetStatus(401).BodyText("Invalid API key")
+        res := ctx.Response()
+        res.SetStatus(401)
+        res.BodyText("Invalid API key")
+        ctx.RemoveResponseHeader("Content-Length")
+        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        ctx.End()
         return
     }
     
@@ -204,7 +219,12 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     mu.Unlock()
     
     if count > 100 {
-        ctx.Response().SetStatus(429).BodyText("Too many requests")
+        res := ctx.Response()
+        res.SetStatus(429)
+        res.BodyText("Too many requests")
+        ctx.RemoveResponseHeader("Content-Length")
+        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        ctx.End()
         return
     }
     
@@ -220,7 +240,12 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     
     // Only allow GET and POST
     if req.Method() != "GET" && req.Method() != "POST" {
-        ctx.Response().SetStatus(405).BodyText("Method not allowed")
+        res := ctx.Response()
+        res.SetStatus(405)
+        res.BodyText("Method not allowed")
+        ctx.RemoveResponseHeader("Content-Length")
+        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        ctx.End()
         return
     }
     
@@ -238,7 +263,12 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     if strings.HasPrefix(path, "/admin/") {
         // Check admin permission
         if !isAdmin(req.Header("Authorization")) {
-            ctx.Response().SetStatus(403).BodyText("Admin access required")
+            res := ctx.Response()
+            res.SetStatus(403)
+            res.BodyText("Admin access required")
+            ctx.RemoveResponseHeader("Content-Length")
+            ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+            ctx.End()
             return
         }
     }
@@ -280,12 +310,22 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     // Require API version
     version := params.Get("v")
     if version == "" {
-        ctx.Response().SetStatus(400).BodyText("API version required")
+        res := ctx.Response()
+        res.SetStatus(400)
+        res.BodyText("API version required")
+        ctx.RemoveResponseHeader("Content-Length")
+        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        ctx.End()
         return
     }
     
     if version != "1" && version != "2" {
-        ctx.Response().SetStatus(400).BodyText("Invalid API version")
+        res := ctx.Response()
+        res.SetStatus(400)
+        res.BodyText("Invalid API version")
+        ctx.RemoveResponseHeader("Content-Length")
+        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        ctx.End()
         return
     }
     
@@ -311,7 +351,12 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     }
     
     if !allowedHosts[host] {
-        ctx.Response().SetStatus(403).BodyText("Host not allowed")
+        res := ctx.Response()
+        res.SetStatus(403)
+        res.BodyText("Host not allowed")
+        ctx.RemoveResponseHeader("Content-Length")
+        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        ctx.End()
         return
     }
     
@@ -330,7 +375,12 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     
     for _, blocked := range blockedAgents {
         if strings.Contains(userAgent, blocked) {
-            ctx.Response().SetStatus(403).BodyText("Blocked")
+            res := ctx.Response()
+            res.SetStatus(403)
+            res.BodyText("Blocked")
+            ctx.RemoveResponseHeader("Content-Length")
+            ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+            ctx.End()
             return
         }
     }
@@ -353,7 +403,12 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     
     // Validate IDs
     if userID == "" || postID == "" {
-        ctx.Response().SetStatus(400).BodyText("Invalid parameters")
+        res := ctx.Response()
+        res.SetStatus(400)
+        res.BodyText("Invalid parameters")
+        ctx.RemoveResponseHeader("Content-Length")
+        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        ctx.End()
         return
     }
     
@@ -374,7 +429,12 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     // Limit to 10MB
     maxSize := int64(10 * 1024 * 1024)
     if req.Bytes() > maxSize {
-        ctx.Response().SetStatus(413).BodyText("Request too large")
+        res := ctx.Response()
+        res.SetStatus(413)
+        res.BodyText("Request too large")
+        ctx.RemoveResponseHeader("Content-Length")
+        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        ctx.End()
         return
     }
     
@@ -422,8 +482,13 @@ phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
 ```go
 // ✅ Good
 if apiKey == "" {
-    ctx.Response().SetStatus(401).BodyText("Unauthorized")
-    return  // Stop processing
+    res := ctx.Response()
+    res.SetStatus(401)
+    res.BodyText("Unauthorized")
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
+    return
 }
 ctx.Next()
 
@@ -439,12 +504,22 @@ if apiKey != "" {
 ```go
 // ✅ Good
 if !authorized {
-    ctx.Response().SetStatus(403).BodyText("Forbidden")
+    res := ctx.Response()
+    res.SetStatus(403)
+    res.BodyText("Forbidden")
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
     return
 }
 
 if !validMethod {
-    ctx.Response().SetStatus(405).BodyText("Method not allowed")
+    res := ctx.Response()
+    res.SetStatus(405)
+    res.BodyText("Method not allowed")
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
     return
 }
 
@@ -467,7 +542,12 @@ params := req.Params()
 id := params["id"]
 
 if id == "" {
-    ctx.Response().SetStatus(400).BodyText("Missing ID")
+    res := ctx.Response()
+    res.SetStatus(400)
+    res.BodyText("Missing ID")
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
     return
 }
 ```

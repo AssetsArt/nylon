@@ -46,7 +46,13 @@ func init() {
 			})
 			
 			if err != nil {
-				ctx.Response().SetStatus(400).BodyText("WebSocket upgrade failed")
+				res := ctx.Response()
+				res.SetStatus(400)
+				res.BodyText("WebSocket upgrade failed")
+				ctx.RemoveResponseHeader("Content-Length")
+				ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+				ctx.End()
+				return
 			}
 		})
 	})
@@ -259,7 +265,12 @@ plugin.AddPhaseHandler("auth-ws", func(phase *sdk.PhaseHandler) {
 		token := params.Get("token")
 		
 		if !validateToken(token) {
-			ctx.Response().SetStatus(401).BodyText("Unauthorized")
+			res := ctx.Response()
+			res.SetStatus(401)
+			res.BodyText("Unauthorized")
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
 			return
 		}
 		
@@ -324,7 +335,12 @@ func init() {
 			username := params.Get("username")
 			
 			if username == "" {
-				ctx.Response().SetStatus(400).BodyText("Username required")
+				res := ctx.Response()
+				res.SetStatus(400)
+				res.BodyText("Username required")
+				ctx.RemoveResponseHeader("Content-Length")
+				ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+				ctx.End()
 				return
 			}
 			
@@ -561,7 +577,13 @@ OnMessageText: func(ws *sdk.WebSocketConn, msg string) {
 ```go
 err := ctx.WebSocketUpgrade(callbacks)
 if err != nil {
-    ctx.Response().SetStatus(400).BodyText("Upgrade failed")
+    res := ctx.Response()
+    res.SetStatus(400)
+    res.BodyText("Upgrade failed")
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
+    return
 }
 ```
 
@@ -592,7 +614,12 @@ for _, conn := range allConnections {
 // Check token before upgrade
 token := params.Get("token")
 if !validateToken(token) {
-    ctx.Response().SetStatus(401).BodyText("Unauthorized")
+    res := ctx.Response()
+    res.SetStatus(401)
+    res.BodyText("Unauthorized")
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
     return
 }
 ```

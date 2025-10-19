@@ -76,6 +76,9 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 	res.SetStatus(200)
 	res.SetHeader("X-Custom", "value")
 	res.BodyText("Early response")
+	ctx.RemoveResponseHeader("Content-Length")
+	ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+	ctx.End()
 	
 	// Store data for later phases
 	ctx.SetPayload(map[string]interface{}{
@@ -99,7 +102,10 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 		res := ctx.Response()
 		res.SetStatus(401)
 		res.BodyText("Missing authorization token")
-		return // Stop here, don't forward to backend
+		ctx.RemoveResponseHeader("Content-Length")
+		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		ctx.End()
+		return
 	}
 	
 	// Validate token (pseudo-code)
@@ -108,6 +114,9 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 		res := ctx.Response()
 		res.SetStatus(401)
 		res.BodyText("Invalid token")
+		ctx.RemoveResponseHeader("Content-Length")
+		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		ctx.End()
 		return
 	}
 	
@@ -131,6 +140,9 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 		res.SetStatus(429)
 		res.SetHeader("Retry-After", "1")
 		res.BodyText("Rate limit exceeded")
+		ctx.RemoveResponseHeader("Content-Length")
+		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		ctx.End()
 		return
 	}
 	
@@ -446,7 +458,10 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 	res := ctx.Response()
 	res.SetStatus(401)
 	res.BodyText("Unauthorized")
-	return // ✅ Stop here
+	ctx.RemoveResponseHeader("Content-Length")
+	ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+	ctx.End()
+	return
 })
 ```
 
@@ -462,7 +477,10 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 		res := ctx.Response()
 		res.SetStatus(400)
 		res.BodyText("Invalid JSON: " + err.Error())
-		return // Stop with error response
+		ctx.RemoveResponseHeader("Content-Length")
+		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		ctx.End()
+		return
 	}
 	
 	ctx.Next()
@@ -485,7 +503,12 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 	token := req.Header("Authorization")
 	if token == "" {
 		// Fast validation
+		res := ctx.Response()
 		res.SetStatus(401)
+		res.BodyText("Unauthorized")
+		ctx.RemoveResponseHeader("Content-Length")
+		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		ctx.End()
 		return
 	}
 	ctx.Next()

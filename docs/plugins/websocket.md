@@ -204,7 +204,13 @@ plugin.AddPhaseHandler("chat", func(phase *sdk.PhaseHandler) {
         })
         
         if err != nil {
-            ctx.Response().SetStatus(400).BodyText("WebSocket upgrade failed")
+            res := ctx.Response()
+            res.SetStatus(400)
+            res.BodyText("WebSocket upgrade failed")
+            ctx.RemoveResponseHeader("Content-Length")
+            ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+            ctx.End()
+            return
         }
     })
 })
@@ -331,7 +337,12 @@ plugin.AddPhaseHandler("auth-ws", func(phase *sdk.PhaseHandler) {
         token := params.Get("token")
         
         if !validateToken(token) {
-            ctx.Response().SetStatus(401).BodyText("Unauthorized")
+            res := ctx.Response()
+            res.SetStatus(401)
+            res.BodyText("Unauthorized")
+            ctx.RemoveResponseHeader("Content-Length")
+            ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+            ctx.End()
             return
         }
         
@@ -364,7 +375,12 @@ plugin.AddPhaseHandler("rate-limited-ws", func(phase *sdk.PhaseHandler) {
         count := connections[clientIP]
         if count >= 5 {
             mu.Unlock()
-            ctx.Response().SetStatus(429).BodyText("Too many connections")
+            res := ctx.Response()
+            res.SetStatus(429)
+            res.BodyText("Too many connections")
+            ctx.RemoveResponseHeader("Content-Length")
+            ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+            ctx.End()
             return
         }
         connections[clientIP]++
@@ -485,7 +501,13 @@ websocket:
 ```go
 err := ctx.WebSocketUpgrade(callbacks)
 if err != nil {
-    ctx.Response().SetStatus(400).BodyText("Upgrade failed")
+    res := ctx.Response()
+    res.SetStatus(400)
+    res.BodyText("Upgrade failed")
+    ctx.RemoveResponseHeader("Content-Length")
+    ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+    ctx.End()
+    return
 }
 ```
 

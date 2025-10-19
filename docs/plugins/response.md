@@ -465,7 +465,10 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
         res.SetStatus(200)
         res.SetHeader("X-Cache", "HIT")
         res.BodyRaw(cached)
-        return  // Don't call Next() - skip backend
+        ctx.RemoveResponseHeader("Content-Length")
+        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        ctx.End()
+        return
     }
     
     res.SetHeader("X-Cache", "MISS")
@@ -487,7 +490,11 @@ phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
     
     stream, err := res.Stream()
     if err != nil {
-        res.SetStatus(500).BodyText("Stream error")
+        res.SetStatus(500)
+        res.BodyText("Stream error")
+        ctx.RemoveResponseHeader("Content-Length")
+        ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+        ctx.End()
         return
     }
     

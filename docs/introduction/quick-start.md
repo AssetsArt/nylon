@@ -165,14 +165,17 @@ func init() {
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 			req := ctx.Request()
 			
-			// Simple API key authentication
-			apiKey := req.Header("X-API-Key")
-			if apiKey != "secret-key" {
-				res := ctx.Response()
-				res.SetStatus(401)
-				res.BodyText("Unauthorized")
-				return // Stop here
-			}
+		// Simple API key authentication
+		apiKey := req.Header("X-API-Key")
+		if apiKey != "secret-key" {
+			res := ctx.Response()
+			res.SetStatus(401)
+			res.BodyText("Unauthorized")
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
 			
 			ctx.Next() // Continue
 		})

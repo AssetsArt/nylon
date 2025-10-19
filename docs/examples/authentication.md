@@ -34,22 +34,28 @@ func init() {
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 			req := ctx.Request()
 			
-			// Check API key
-			apiKey := req.Header("X-API-Key")
-			if apiKey == "" {
-				res := ctx.Response()
-				res.SetStatus(401)
-				res.SetHeader("WWW-Authenticate", "API-Key")
-				res.BodyText("Missing API key")
-				return
-			}
-			
-			if apiKey != "secret-key-123" {
-				res := ctx.Response()
-				res.SetStatus(401)
-				res.BodyText("Invalid API key")
-				return
-			}
+		// Check API key
+		apiKey := req.Header("X-API-Key")
+		if apiKey == "" {
+			res := ctx.Response()
+			res.SetStatus(401)
+			res.SetHeader("WWW-Authenticate", "API-Key")
+			res.BodyText("Missing API key")
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
+		
+		if apiKey != "secret-key-123" {
+			res := ctx.Response()
+			res.SetStatus(401)
+			res.BodyText("Invalid API key")
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
 			
 			// Store auth info for logging
 			ctx.SetPayload(map[string]interface{}{
@@ -174,33 +180,42 @@ func init() {
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 			req := ctx.Request()
 			
-			// Get Authorization header
-			auth := req.Header("Authorization")
-			if auth == "" {
-				res := ctx.Response()
-				res.SetStatus(401)
-				res.SetHeader("WWW-Authenticate", "Bearer")
-				res.BodyText("Missing authorization token")
-				return
-			}
-			
-			// Check Bearer scheme
-			if !strings.HasPrefix(auth, "Bearer ") {
-				res := ctx.Response()
-				res.SetStatus(401)
-				res.BodyText("Invalid authorization scheme")
-				return
-			}
-			
-			token := strings.TrimPrefix(auth, "Bearer ")
-			
-			// Validate JWT (simplified - use a real JWT library)
-			if token == "" {
-				res := ctx.Response()
-				res.SetStatus(401)
-				res.BodyText("Invalid token")
-				return
-			}
+		// Get Authorization header
+		auth := req.Header("Authorization")
+		if auth == "" {
+			res := ctx.Response()
+			res.SetStatus(401)
+			res.SetHeader("WWW-Authenticate", "Bearer")
+			res.BodyText("Missing authorization token")
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
+		
+		// Check Bearer scheme
+		if !strings.HasPrefix(auth, "Bearer ") {
+			res := ctx.Response()
+			res.SetStatus(401)
+			res.BodyText("Invalid authorization scheme")
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
+		
+		token := strings.TrimPrefix(auth, "Bearer ")
+		
+		// Validate JWT (simplified - use a real JWT library)
+		if token == "" {
+			res := ctx.Response()
+			res.SetStatus(401)
+			res.BodyText("Invalid token")
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
 			
 			// TODO: Actually validate JWT signature
 			// For demo, just extract claims
@@ -237,31 +252,40 @@ func init() {
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
 			req := ctx.Request()
 			
-			// Get required role from payload (set by previous middleware)
-			payload := ctx.GetPayload()
-			if payload == nil {
-				res := ctx.Response()
-				res.SetStatus(401)
-				res.BodyText("Authentication required")
-				return
-			}
-			
-			userRole, ok := payload["role"].(string)
-			if !ok {
-				res := ctx.Response()
-				res.SetStatus(401)
-				res.BodyText("Invalid authentication")
-				return
-			}
-			
-			// Check if path requires admin
-			path := req.Path()
-			if strings.HasPrefix(path, "/admin") && userRole != "admin" {
-				res := ctx.Response()
-				res.SetStatus(403)
-				res.BodyText("Access denied: admin role required")
-				return
-			}
+		// Get required role from payload (set by previous middleware)
+		payload := ctx.GetPayload()
+		if payload == nil {
+			res := ctx.Response()
+			res.SetStatus(401)
+			res.BodyText("Authentication required")
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
+		
+		userRole, ok := payload["role"].(string)
+		if !ok {
+			res := ctx.Response()
+			res.SetStatus(401)
+			res.BodyText("Invalid authentication")
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
+		
+		// Check if path requires admin
+		path := req.Path()
+		if strings.HasPrefix(path, "/admin") && userRole != "admin" {
+			res := ctx.Response()
+			res.SetStatus(403)
+			res.BodyText("Access denied: admin role required")
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
 			
 			fmt.Printf("[RBAC] Access granted: %s with role %s\n", 
 				req.ClientIP(), userRole)
@@ -336,15 +360,18 @@ func init() {
 
 	plugin.AddPhaseHandler("ipfilter", func(phase *sdk.PhaseHandler) {
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
-			req := ctx.Request()
-			clientIP := req.ClientIP()
-			
-			if !allowedIPs[clientIP] {
-				res := ctx.Response()
-				res.SetStatus(403)
-				res.BodyText(fmt.Sprintf("Access denied for IP: %s", clientIP))
-				return
-			}
+		req := ctx.Request()
+		clientIP := req.ClientIP()
+		
+		if !allowedIPs[clientIP] {
+			res := ctx.Response()
+			res.SetStatus(403)
+			res.BodyText(fmt.Sprintf("Access denied for IP: %s", clientIP))
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
 			
 			ctx.Next()
 		})

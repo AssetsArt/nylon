@@ -76,16 +76,19 @@ func init() {
 			req := ctx.Request()
 			clientIP := req.ClientIP()
 			
-			if !limiter.Allow(clientIP) {
-				res := ctx.Response()
-				res.SetStatus(429)
-				res.SetHeader("Retry-After", "60")
-				res.BodyJSON(map[string]interface{}{
-					"error": "Too Many Requests",
-					"message": "Rate limit exceeded. Try again later.",
-				})
-				return
-			}
+		if !limiter.Allow(clientIP) {
+			res := ctx.Response()
+			res.SetStatus(429)
+			res.SetHeader("Retry-After", "60")
+			res.BodyJSON(map[string]interface{}{
+				"error": "Too Many Requests",
+				"message": "Rate limit exceeded. Try again later.",
+			})
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
 			
 			ctx.Next()
 		})
@@ -169,14 +172,17 @@ func init() {
 			}
 			mu.Unlock()
 			
-			if !bucket.Allow() {
-				res := ctx.Response()
-				res.SetStatus(429)
-				res.BodyJSON(map[string]interface{}{
-					"error": "Rate limit exceeded",
-				})
-				return
-			}
+		if !bucket.Allow() {
+			res := ctx.Response()
+			res.SetStatus(429)
+			res.BodyJSON(map[string]interface{}{
+				"error": "Rate limit exceeded",
+			})
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
+			return
+		}
 			
 			ctx.Next()
 		})
@@ -201,7 +207,12 @@ plugin.AddPhaseHandler("user-rate-limit", func(phase *sdk.PhaseHandler) {
 		userID := validateAndGetUserID(token)
 		
 		if userID == "" {
-			ctx.Response().SetStatus(401).BodyText("Unauthorized")
+			res := ctx.Response()
+			res.SetStatus(401)
+			res.BodyText("Unauthorized")
+			ctx.RemoveResponseHeader("Content-Length")
+			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+			ctx.End()
 			return
 		}
 		
@@ -215,14 +226,17 @@ plugin.AddPhaseHandler("user-rate-limit", func(phase *sdk.PhaseHandler) {
 		}
 		mu.Unlock()
 		
-		if !limiter.Allow(userID) {
-			res := ctx.Response()
-			res.SetStatus(429)
-			res.SetHeader("X-RateLimit-Limit", "1000")
-			res.SetHeader("X-RateLimit-Remaining", "0")
-			res.BodyText("Rate limit exceeded")
-			return
-		}
+	if !limiter.Allow(userID) {
+		res := ctx.Response()
+		res.SetStatus(429)
+		res.SetHeader("X-RateLimit-Limit", "1000")
+		res.SetHeader("X-RateLimit-Remaining", "0")
+		res.BodyText("Rate limit exceeded")
+		ctx.RemoveResponseHeader("Content-Length")
+		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		ctx.End()
+		return
+	}
 		
 		ctx.Next()
 	})
@@ -278,7 +292,12 @@ func init() {
 			key := clientIP + ":" + path
 			
 			if !limiter.Allow(key) {
-				ctx.Response().SetStatus(429).BodyText("Rate limit exceeded")
+				res := ctx.Response()
+				res.SetStatus(429)
+				res.BodyText("Rate limit exceeded")
+				ctx.RemoveResponseHeader("Content-Length")
+				ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+				ctx.End()
 				return
 			}
 			
@@ -314,16 +333,19 @@ plugin.AddPhaseHandler("rate-limit-headers", func(phase *sdk.PhaseHandler) {
 		res.SetHeader("X-RateLimit-Remaining", fmt.Sprintf("%d", remaining))
 		res.SetHeader("X-RateLimit-Reset", fmt.Sprintf("%d", time.Now().Unix()+limiter.window))
 		
-		if !allowed {
-			res.SetStatus(429)
-			res.SetHeader("Retry-After", fmt.Sprintf("%d", limiter.window))
-			res.BodyJSON(map[string]interface{}{
-				"error": "Rate limit exceeded",
-				"limit": limiter.limit,
-				"window": limiter.window,
-			})
-			return
-		}
+	if !allowed {
+		res.SetStatus(429)
+		res.SetHeader("Retry-After", fmt.Sprintf("%d", limiter.window))
+		res.BodyJSON(map[string]interface{}{
+			"error": "Rate limit exceeded",
+			"limit": limiter.limit,
+			"window": limiter.window,
+		})
+		ctx.RemoveResponseHeader("Content-Length")
+		ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+		ctx.End()
+		return
+	}
 		
 		ctx.Next()
 	})
@@ -417,12 +439,17 @@ func NewRedisRateLimiter(client *redis.Client, limit int, window int64) *RedisRa
 ### 5. Return Helpful Error Messages
 
 ```go
+res := ctx.Response()
 res.SetStatus(429)
 res.BodyJSON(map[string]interface{}{
 	"error": "Rate limit exceeded",
 	"message": "You have exceeded the rate limit of 100 requests per minute",
 	"retry_after": 42,
 })
+ctx.RemoveResponseHeader("Content-Length")
+ctx.SetResponseHeader("Transfer-Encoding", "chunked")
+ctx.End()
+return
 ```
 
 ## See Also
