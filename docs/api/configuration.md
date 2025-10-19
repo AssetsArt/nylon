@@ -303,7 +303,7 @@ Available template functions:
 | `${param(name[, default])}` | Route parameter | `${param(user_id)}` |
 | `${request(field)}` | Request metadata (`client_ip`, `host`, `method`, `path`, `scheme`, `tls`) | `${request(method)}` |
 | `${env(VAR)}` | Environment variable | `${env(SERVICE_NAME)}` |
-| `${uuid(v4|v7)}` | UUID string | `${uuid(v7)}` |
+| `${uuid(v4\|v7)}` | UUID string | `${uuid(v7)}` |
 | `${timestamp()}` | RFC3339 timestamp | `${timestamp()}` |
 | `${or(a, b, …)}` | First non-empty | `${or(env(NAME), 'default')}` |
 | `${eq(a, b[, value])}` | `value` (or `a`) if equal | `${eq(request(method), 'GET', 'cacheable')}` |
