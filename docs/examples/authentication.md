@@ -83,7 +83,7 @@ func init() {
 ### Build Plugin
 
 ```bash
-go build -buildmode=plugin -o auth.so auth.go
+go build -buildmode=c-shared -o auth.so
 ```
 
 ### Configuration

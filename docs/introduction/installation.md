@@ -212,7 +212,7 @@ func init() {
 
 Build plugin:
 ```bash
-go build -buildmode=plugin -o myplugin.so plugin.go
+go build -buildmode=c-shared -o myplugin.so
 ```
 
 ## Troubleshooting

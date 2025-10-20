@@ -61,7 +61,7 @@ func init() {
 
 **Build:**
 ```bash
-go build -buildmode=plugin -o echo.so plugin.go
+go build -buildmode=c-shared -o echo.so
 ```
 
 **Configuration:**

@@ -191,7 +191,7 @@ func init() {
 ### 2. Build Plugin
 
 ```bash
-go build -buildmode=plugin -o auth.so plugin.go
+go build -buildmode=c-shared -o auth.so
 ```
 
 ### 3. Configure Nylon

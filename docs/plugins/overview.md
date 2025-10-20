@@ -214,7 +214,7 @@ func init() {
 ### 2. Build as Shared Library
 
 ```bash
-go build -buildmode=plugin -o myplugin.so plugin.go
+go build -buildmode=c-shared -o myplugin.so
 ```
 
 ### 3. Configure in Nylon
