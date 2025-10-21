@@ -3,9 +3,7 @@ use base64::Engine;
 use bytes::Bytes;
 use http::{HeaderMap, HeaderValue};
 use nylon_error::NylonError;
-use nylon_sdk::fbs::plugin_generated::nylon_plugin::{
-    HeaderKeyValue, HeaderKeyValueArgs, NylonHttpHeaders, NylonHttpHeadersArgs,
-};
+use nylon_sdk::fbs::plugin_generated::nylon_plugin::HeaderKeyValue;
 use nylon_types::plugins::PluginPhase;
 use nylon_types::websocket::WebSocketMessage;
 use nylon_types::{
@@ -597,38 +595,22 @@ impl SessionHandler {
         session_stream: &SessionStream,
         session: &mut Session,
     ) -> Result<(), NylonError> {
-        let mut fbs = flatbuffers::FlatBufferBuilder::new();
         let headers: &HeaderMap<HeaderValue> = match session.as_http2() {
             Some(h2) => &h2.req_header().headers,
             None => &session.req_header().headers,
         };
 
-        let headers_vec = headers
+        // Convert to Vec for caching
+        let headers_vec: Vec<(String, String)> = headers
             .iter()
-            .map(|(k, v)| {
-                let key = fbs.create_string(k.as_str());
-                let value = fbs.create_string(v.to_str().unwrap_or_default());
-                HeaderKeyValue::create(
-                    &mut fbs,
-                    &HeaderKeyValueArgs {
-                        key: Some(key),
-                        value: Some(value),
-                    },
-                )
-            })
-            .collect::<Vec<_>>();
+            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or_default().to_string()))
+            .collect();
 
-        let headers_vec = fbs.create_vector(&headers_vec);
-        let headers = NylonHttpHeaders::create(
-            &mut fbs,
-            &NylonHttpHeadersArgs {
-                headers: Some(headers_vec),
-            },
-        );
-        fbs.finish(headers, None);
-        let headers = fbs.finished_data();
+        // Use cached FlatBuffer serialization
+        let serialized = crate::cache::build_headers_flatbuffer(&headers_vec);
+        
         session_stream
-            .event_stream(PluginPhase::Zero, methods::READ_REQUEST_HEADERS, headers)
+            .event_stream(PluginPhase::Zero, methods::READ_REQUEST_HEADERS, &serialized)
             .await
     }
 
@@ -874,10 +856,6 @@ impl SessionHandler {
         session_stream: &SessionStream,
         ctx: &NylonContext,
     ) -> Result<(), NylonError> {
-        // Build flatbuffers for response headers from context
-        let mut builder = flatbuffers::FlatBufferBuilder::new();
-        let mut headers_vec = vec![];
-
         // Get response headers from context
         let headers_map = ctx
             .add_response_header
@@ -885,34 +863,20 @@ impl SessionHandler {
             .map(|h| h.clone())
             .unwrap_or_default();
 
-        for (key, value) in headers_map.iter() {
-            let key_str = builder.create_string(key);
-            let value_str = builder.create_string(value);
+        // Convert to Vec for caching
+        let headers_vec: Vec<(String, String)> = headers_map
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
 
-            let header = HeaderKeyValue::create(
-                &mut builder,
-                &HeaderKeyValueArgs {
-                    key: Some(key_str),
-                    value: Some(value_str),
-                },
-            );
-            headers_vec.push(header);
-        }
-
-        let headers_offset = builder.create_vector(&headers_vec);
-        let http_headers = NylonHttpHeaders::create(
-            &mut builder,
-            &NylonHttpHeadersArgs {
-                headers: Some(headers_offset),
-            },
-        );
-        builder.finish(http_headers, None);
+        // Use cached FlatBuffer serialization
+        let serialized = crate::cache::build_headers_flatbuffer(&headers_vec);
 
         session_stream
             .event_stream(
                 PluginPhase::Zero,
                 methods::READ_RESPONSE_HEADERS,
-                builder.finished_data(),
+                &serialized,
             )
             .await
     }

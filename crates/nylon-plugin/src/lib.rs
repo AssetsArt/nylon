@@ -1,6 +1,7 @@
 #![allow(clippy::type_complexity)]
 #![allow(clippy::too_many_arguments)]
 
+pub mod cache;
 pub mod constants;
 pub mod loaders;
 mod native;

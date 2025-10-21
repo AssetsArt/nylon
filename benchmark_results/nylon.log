@@ -1,0 +1,6 @@
+[2m2025-10-21T14:35:48.011434Z[0m [32m INFO[0m [2mnylon[0m[2m:[0m Starting Nylon proxy server...
+error: unexpected argument '--config' found
+
+Usage: nylon <COMMAND>
+
+For more information, try '--help'.

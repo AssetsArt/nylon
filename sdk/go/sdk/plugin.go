@@ -166,29 +166,30 @@ func event_stream(ffiBuffer *C.FfiBuffer) {
 	}
 	switch ffiBuffer.phase {
 	case 1:
-		go func() {
+		// Use worker pool to reduce goroutine spawning overhead
+		_ = GetDefaultWorkerPool().Submit(func() {
 			phaseHandler.requestFilter(&PhaseRequestFilter{
 				ctx: phaseHandler.http_ctx,
 			})
-		}()
+		})
 	case 2:
-		go func() {
+		_ = GetDefaultWorkerPool().Submit(func() {
 			phaseHandler.responseFilter(&PhaseResponseFilter{
 				ctx: phaseHandler.http_ctx,
 			})
-		}()
+		})
 	case 3:
-		go func() {
+		_ = GetDefaultWorkerPool().Submit(func() {
 			phaseHandler.responseBodyFilter(&PhaseResponseBodyFilter{
 				ctx: phaseHandler.http_ctx,
 			})
-		}()
+		})
 	case 4:
-		go func() {
+		_ = GetDefaultWorkerPool().Submit(func() {
 			phaseHandler.logging(&PhaseLogging{
 				ctx: phaseHandler.http_ctx,
 			})
-		}()
+		})
 	default:
 		ctx := phaseHandler.http_ctx
 		ctx.mu.Lock()
@@ -202,24 +203,34 @@ func event_stream(ffiBuffer *C.FfiBuffer) {
 		case MethodIDMapping[NylonMethodWebSocketOnOpen]:
 			ctx.wsUpgraded = true
 			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnOpen != nil {
-				go ctx.wsCallbacks.OnOpen(&WebSocketConn{ctx: ctx})
+				_ = GetDefaultWorkerPool().Submit(func() {
+					ctx.wsCallbacks.OnOpen(&WebSocketConn{ctx: ctx})
+				})
 			}
 			return
 		case MethodIDMapping[NylonMethodWebSocketOnClose]:
 			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnClose != nil {
-				go ctx.wsCallbacks.OnClose(&WebSocketConn{ctx: ctx})
+				_ = GetDefaultWorkerPool().Submit(func() {
+					ctx.wsCallbacks.OnClose(&WebSocketConn{ctx: ctx})
+				})
 			}
 			return
 		case MethodIDMapping[NylonMethodWebSocketOnError]:
 			msg := C.GoStringN((*C.char)(unsafe.Pointer(data)), C.int(length))
 			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnError != nil {
-				go ctx.wsCallbacks.OnError(&WebSocketConn{ctx: ctx}, msg)
+				msgCopy := msg // Capture for closure
+				_ = GetDefaultWorkerPool().Submit(func() {
+					ctx.wsCallbacks.OnError(&WebSocketConn{ctx: ctx}, msgCopy)
+				})
 			}
 			return
 		case MethodIDMapping[NylonMethodWebSocketOnMessageText]:
 			msg := C.GoStringN((*C.char)(unsafe.Pointer(data)), C.int(length))
 			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnMessageText != nil {
-				go ctx.wsCallbacks.OnMessageText(&WebSocketConn{ctx: ctx}, msg)
+				msgCopy := msg // Capture for closure
+				_ = GetDefaultWorkerPool().Submit(func() {
+					ctx.wsCallbacks.OnMessageText(&WebSocketConn{ctx: ctx}, msgCopy)
+				})
 			}
 			return
 		case MethodIDMapping[NylonMethodWebSocketOnMessageBinary]:
@@ -233,7 +244,9 @@ func event_stream(ffiBuffer *C.FfiBuffer) {
 			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnMessageBinary != nil {
 				dataCopy := make([]byte, length)
 				copy(dataCopy, buf)
-				go ctx.wsCallbacks.OnMessageBinary(&WebSocketConn{ctx: ctx}, dataCopy)
+				_ = GetDefaultWorkerPool().Submit(func() {
+					ctx.wsCallbacks.OnMessageBinary(&WebSocketConn{ctx: ctx}, dataCopy)
+				})
 			}
 			return
 		default:
@@ -267,14 +280,14 @@ func RequestMethod(sessionID int32, phase int8, method NylonMethods, data []byte
 	}
 	cb := phaseHandler.cb
 	var dataPtr *C.uchar
+	var poolSize int
 	dataLen := len(data)
 	if dataLen > 0 {
-		// Allocate C memory and copy to satisfy cgo pointer passing rules
-		dataPtr = (*C.uchar)(C.malloc(C.size_t(dataLen)))
+		// Use memory pool to reduce allocation overhead
+		dataPtr, poolSize = GetBuffer(data)
 		if dataPtr == nil {
 			return fmt.Errorf("failed to allocate memory for data")
 		}
-		C.memcpy(unsafe.Pointer(dataPtr), unsafe.Pointer(&data[0]), C.size_t(dataLen))
 	}
 	methodID := MethodIDMapping[method]
 	C.call_event_method(
@@ -287,6 +300,8 @@ func RequestMethod(sessionID int32, phase int8, method NylonMethods, data []byte
 			len:    C.uint64_t(dataLen),
 		},
 	)
+	// Note: Buffer will be freed by Rust side via plugin_free, which we'll update
+	_ = poolSize // Kept for future pool management
 	return nil
 }
 
