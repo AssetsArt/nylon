@@ -166,29 +166,21 @@ func event_stream(ffiBuffer *C.FfiBuffer) {
 	}
 	switch ffiBuffer.phase {
 	case 1:
-		// Use worker pool to reduce goroutine spawning overhead
-		_ = GetDefaultWorkerPool().Submit(func() {
-			phaseHandler.requestFilter(&PhaseRequestFilter{
-				ctx: phaseHandler.http_ctx,
-			})
+		// Direct goroutine - more efficient at high concurrency than worker pool
+		go phaseHandler.requestFilter(&PhaseRequestFilter{
+			ctx: phaseHandler.http_ctx,
 		})
 	case 2:
-		_ = GetDefaultWorkerPool().Submit(func() {
-			phaseHandler.responseFilter(&PhaseResponseFilter{
-				ctx: phaseHandler.http_ctx,
-			})
+		go phaseHandler.responseFilter(&PhaseResponseFilter{
+			ctx: phaseHandler.http_ctx,
 		})
 	case 3:
-		_ = GetDefaultWorkerPool().Submit(func() {
-			phaseHandler.responseBodyFilter(&PhaseResponseBodyFilter{
-				ctx: phaseHandler.http_ctx,
-			})
+		go phaseHandler.responseBodyFilter(&PhaseResponseBodyFilter{
+			ctx: phaseHandler.http_ctx,
 		})
 	case 4:
-		_ = GetDefaultWorkerPool().Submit(func() {
-			phaseHandler.logging(&PhaseLogging{
-				ctx: phaseHandler.http_ctx,
-			})
+		go phaseHandler.logging(&PhaseLogging{
+			ctx: phaseHandler.http_ctx,
 		})
 	default:
 		ctx := phaseHandler.http_ctx
@@ -203,34 +195,24 @@ func event_stream(ffiBuffer *C.FfiBuffer) {
 		case MethodIDMapping[NylonMethodWebSocketOnOpen]:
 			ctx.wsUpgraded = true
 			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnOpen != nil {
-				_ = GetDefaultWorkerPool().Submit(func() {
-					ctx.wsCallbacks.OnOpen(&WebSocketConn{ctx: ctx})
-				})
+				go ctx.wsCallbacks.OnOpen(&WebSocketConn{ctx: ctx})
 			}
 			return
 		case MethodIDMapping[NylonMethodWebSocketOnClose]:
 			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnClose != nil {
-				_ = GetDefaultWorkerPool().Submit(func() {
-					ctx.wsCallbacks.OnClose(&WebSocketConn{ctx: ctx})
-				})
+				go ctx.wsCallbacks.OnClose(&WebSocketConn{ctx: ctx})
 			}
 			return
 		case MethodIDMapping[NylonMethodWebSocketOnError]:
 			msg := C.GoStringN((*C.char)(unsafe.Pointer(data)), C.int(length))
 			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnError != nil {
-				msgCopy := msg // Capture for closure
-				_ = GetDefaultWorkerPool().Submit(func() {
-					ctx.wsCallbacks.OnError(&WebSocketConn{ctx: ctx}, msgCopy)
-				})
+				go ctx.wsCallbacks.OnError(&WebSocketConn{ctx: ctx}, msg)
 			}
 			return
 		case MethodIDMapping[NylonMethodWebSocketOnMessageText]:
 			msg := C.GoStringN((*C.char)(unsafe.Pointer(data)), C.int(length))
 			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnMessageText != nil {
-				msgCopy := msg // Capture for closure
-				_ = GetDefaultWorkerPool().Submit(func() {
-					ctx.wsCallbacks.OnMessageText(&WebSocketConn{ctx: ctx}, msgCopy)
-				})
+				go ctx.wsCallbacks.OnMessageText(&WebSocketConn{ctx: ctx}, msg)
 			}
 			return
 		case MethodIDMapping[NylonMethodWebSocketOnMessageBinary]:
@@ -244,9 +226,7 @@ func event_stream(ffiBuffer *C.FfiBuffer) {
 			if ctx.wsCallbacks != nil && ctx.wsCallbacks.OnMessageBinary != nil {
 				dataCopy := make([]byte, length)
 				copy(dataCopy, buf)
-				_ = GetDefaultWorkerPool().Submit(func() {
-					ctx.wsCallbacks.OnMessageBinary(&WebSocketConn{ctx: ctx}, dataCopy)
-				})
+				go ctx.wsCallbacks.OnMessageBinary(&WebSocketConn{ctx: ctx}, dataCopy)
 			}
 			return
 		default:
