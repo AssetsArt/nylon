@@ -1,4 +1,3 @@
-
 # https://github.com/ibraheemdev/matchit
 
 # host & path routing
@@ -8,8 +7,8 @@ routes:
       type: host
       value: localhost # localhost|api.localhost
     name: app-route
-    middleware:
-      - group: auth
+    # middleware:
+    #   - group: auth
     paths:
       - path:
           - /static
@@ -35,7 +34,7 @@ routes:
       - path:
           - /
           - /{*path}
-        middleware:
-          - group: security
+        # middleware:
+        #   - group: security
         service:
           name: app-service

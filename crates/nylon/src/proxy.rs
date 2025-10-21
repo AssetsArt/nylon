@@ -592,5 +592,12 @@ impl ProxyHttp for NylonRuntime {
         for stream in streams {
             let _ = stream.close().await;
         }
+
+        if let Ok(mut sessions) = ctx.session_stream.write() {
+            sessions.clear();
+        }
+        if let Ok(mut ids) = ctx.session_ids.write() {
+            ids.clear();
+        }
     }
 }

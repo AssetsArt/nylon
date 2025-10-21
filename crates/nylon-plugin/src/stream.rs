@@ -1,16 +1,14 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 use async_trait::async_trait;
+use dashmap::DashMap;
 use nylon_error::NylonError;
 use nylon_types::plugins::{FfiBuffer, FfiPlugin, PluginPhase, SessionStream};
 use nylon_types::websocket::WebSocketMessage;
 use once_cell::sync::Lazy;
-use std::{
-    collections::HashMap,
-    sync::{
-        Arc, RwLock,
-        atomic::{AtomicU32, Ordering},
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicU32, Ordering},
 };
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::UnboundedReceiver as UnboundedWsReceiver;
@@ -20,17 +18,14 @@ use tracing::{debug, trace};
 // Active sessions
 type SessionSender = mpsc::UnboundedSender<(u32, Vec<u8>)>;
 
-static ACTIVE_SESSIONS: Lazy<RwLock<HashMap<u32, SessionSender>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
+static ACTIVE_SESSIONS: Lazy<DashMap<u32, SessionSender>> = Lazy::new(DashMap::new);
 static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
-// static SESSION_RX: Lazy<Arc<Mutex<HashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>>>> =
-//     Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
-static SESSION_RX: Lazy<Mutex<HashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static SESSION_RX: Lazy<DashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>> =
+    Lazy::new(DashMap::new);
 
 // WS message receivers per session for cluster/local adapter dispatch
-static SESSION_WS_RX: Lazy<Mutex<HashMap<u32, Arc<Mutex<UnboundedWsReceiver<WebSocketMessage>>>>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static SESSION_WS_RX: Lazy<DashMap<u32, Arc<Mutex<UnboundedWsReceiver<WebSocketMessage>>>>> =
+    Lazy::new(DashMap::new);
 
 #[unsafe(no_mangle)]
 pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
@@ -45,13 +40,10 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
         "handle_ffi_event: session_id={}, method={}",
         session_id, method
     );
-    // Clone sender first to minimize time under the read lock
-    let sender_opt = ACTIVE_SESSIONS
-        .read()
-        .ok()
-        .and_then(|sessions| sessions.get(&session_id).cloned());
-
-    if let Some(sender) = sender_opt {
+    // Clone sender first to minimize guard lifetime
+    if let Some(sender_entry) = ACTIVE_SESSIONS.get(&session_id) {
+        let sender = sender_entry.value().clone();
+        drop(sender_entry);
         if ptr.is_null() {
             trace!("handle_ffi_event: null payload");
             // println!("handle_ffi_event: null payload");
@@ -103,13 +95,7 @@ impl PluginSessionStream for SessionStream {
 
     async fn open(&self, entry: &str) -> Result<u32, NylonError> {
         let (tx, rx) = mpsc::unbounded_channel();
-
-        {
-            let mut sessions = ACTIVE_SESSIONS.write().map_err(|e| {
-                NylonError::ConfigError(format!("Failed to lock ACTIVE_SESSIONS: {:?}", e))
-            })?;
-            sessions.insert(self.session_id, tx);
-        }
+        ACTIVE_SESSIONS.insert(self.session_id, tx);
 
         unsafe {
             let ok = (*self.plugin.register_session)(
@@ -119,22 +105,13 @@ impl PluginSessionStream for SessionStream {
                 handle_ffi_event,
             );
             if !ok {
-                if let Ok(mut sessions) = ACTIVE_SESSIONS.write() {
-                    sessions.remove(&self.session_id);
-                }
+                ACTIVE_SESSIONS.remove(&self.session_id);
                 return Err(NylonError::ConfigError(
                     "Failed to register session".to_string(),
                 ));
             }
         }
-        {
-            // let mut sessions = SESSION_RX.lock().await;
-            // sessions.insert(self.session_id, Arc::new(Mutex::new(rx)));
-            {
-                let mut sessions = SESSION_RX.lock().await;
-                sessions.insert(self.session_id, Arc::new(Mutex::new(rx)));
-            }
-        }
+        SESSION_RX.insert(self.session_id, Arc::new(Mutex::new(rx)));
         Ok(self.session_id)
     }
 
@@ -167,52 +144,34 @@ pub async fn close_session(plugin: Arc<FfiPlugin>, session_id: u32) -> Result<()
     unsafe {
         (*plugin.close_session)(session_id);
     }
-    if let Ok(mut sessions) = ACTIVE_SESSIONS.write() {
-        sessions.remove(&session_id);
-    }
+    ACTIVE_SESSIONS.remove(&session_id);
+    SESSION_RX.remove(&session_id);
+    SESSION_WS_RX.remove(&session_id);
     Ok(())
 }
 
 pub fn get_rx(
     session_id: u32,
 ) -> Result<Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>, NylonError> {
-    let sessions = SESSION_RX.try_lock();
-    // sessions
-    //     .get(&session_id)
-    //     .cloned()
-    //     .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))
-    //     .map(|arc| arc.clone())
-    match sessions {
-        Ok(sessions) => sessions
-            .get(&session_id)
-            .cloned()
-            .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id))),
-        Err(_) => Err(NylonError::ConfigError(
-            "Failed to lock SESSION_RX".to_string(),
-        )),
-    }
+    SESSION_RX
+        .get(&session_id)
+        .map(|entry| Arc::clone(entry.value()))
+        .ok_or_else(|| NylonError::ConfigError(format!("Session {} not found", session_id)))
 }
 
 pub async fn set_ws_rx(
     session_id: u32,
     rx: UnboundedWsReceiver<WebSocketMessage>,
 ) -> Result<(), NylonError> {
-    let mut sessions = SESSION_WS_RX.lock().await;
-    sessions.insert(session_id, Arc::new(Mutex::new(rx)));
+    SESSION_WS_RX.insert(session_id, Arc::new(Mutex::new(rx)));
     Ok(())
 }
 
 pub fn get_ws_rx(
     session_id: u32,
 ) -> Result<Arc<Mutex<UnboundedWsReceiver<WebSocketMessage>>>, NylonError> {
-    let sessions = SESSION_WS_RX.try_lock();
-    match sessions {
-        Ok(sessions) => sessions
-            .get(&session_id)
-            .cloned()
-            .ok_or_else(|| NylonError::ConfigError(format!("WS Session {} not found", session_id))),
-        Err(_) => Err(NylonError::ConfigError(
-            "Failed to lock SESSION_WS_RX".to_string(),
-        )),
-    }
+    SESSION_WS_RX
+        .get(&session_id)
+        .map(|entry| Arc::clone(entry.value()))
+        .ok_or_else(|| NylonError::ConfigError(format!("WS Session {} not found", session_id)))
 }

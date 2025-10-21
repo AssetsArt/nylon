@@ -153,20 +153,20 @@ func init() {
 	})
 
 	plugin.AddPhaseHandler("myapp", func(phase *sdk.PhaseHandler) {
-		fmt.Println("Start MyApp[Go] sessionID", phase.SessionId)
+		// fmt.Println("Start MyApp[Go] sessionID", phase.SessionId)
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
-			fmt.Println("MyApp[Go] RequestFilter sessionID", phase.SessionId)
+			// fmt.Println("MyApp[Go] RequestFilter sessionID", phase.SessionId)
 
 			req := ctx.Request()
 
 			// Test new methods
-			fmt.Println("MyApp[Go] URL:", req.URL())
-			fmt.Println("MyApp[Go] Path:", req.Path())
-			fmt.Println("MyApp[Go] Query:", req.Query())
-			fmt.Println("MyApp[Go] Params:", req.Params())
-			fmt.Println("MyApp[Go] Host:", req.Host())
-			fmt.Println("MyApp[Go] ClientIP:", req.ClientIP())
-			fmt.Println("MyApp[Go] Headers:", req.Headers())
+			// fmt.Println("MyApp[Go] URL:", req.URL())
+			// fmt.Println("MyApp[Go] Path:", req.Path())
+			// fmt.Println("MyApp[Go] Query:", req.Query())
+			// fmt.Println("MyApp[Go] Params:", req.Params())
+			// fmt.Println("MyApp[Go] Host:", req.Host())
+			// fmt.Println("MyApp[Go] ClientIP:", req.ClientIP())
+			// fmt.Println("MyApp[Go] Headers:", req.Headers())
 
 			res := ctx.Response()
 			// set status and headers

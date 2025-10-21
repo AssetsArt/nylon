@@ -239,6 +239,7 @@ func event_stream(ffiBuffer *C.FfiBuffer) {
 		default:
 			// For non-WebSocket events, check length and handle normally
 			if length == 0 {
+				ctx.dataMap[method] = []byte{}
 				ctx.cond.Broadcast()
 				return
 			}
@@ -291,16 +292,12 @@ func RequestMethod(sessionID int32, phase int8, method NylonMethods, data []byte
 }
 
 func (ctx *NylonHttpPluginCtx) GetPayload() map[string]any {
-	ctx.mu.Lock()
-	defer ctx.mu.Unlock()
-	go RequestMethod(ctx.sessionID, 0, NylonMethodGetPayload, nil)
-	ctx.cond.Wait()
-	payload, exists := ctx.dataMap[MethodIDMapping[NylonMethodGetPayload]]
-	if !exists {
+	data := ctx.requestAndWait(NylonMethodGetPayload, nil)
+	if len(data) == 0 {
 		return nil
 	}
 	var payloadMap map[string]any
-	json.Unmarshal(payload, &payloadMap)
+	json.Unmarshal(data, &payloadMap)
 	return payloadMap
 }
 
