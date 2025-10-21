@@ -39,6 +39,7 @@ mime_guess = "2.0"
 rcgen = "0.14"
 fastrand = "2.1"
 service-manager = "0.8"
+libc = "0.2"
 
 [profile.release]
 overflow-checks = true

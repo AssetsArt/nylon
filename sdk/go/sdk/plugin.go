@@ -275,7 +275,6 @@ func RequestMethod(sessionID int32, phase int8, method NylonMethods, data []byte
 			return fmt.Errorf("failed to allocate memory for data")
 		}
 		C.memcpy(unsafe.Pointer(dataPtr), unsafe.Pointer(&data[0]), C.size_t(dataLen))
-		defer C.free(unsafe.Pointer(dataPtr))
 	}
 	methodID := MethodIDMapping[method]
 	C.call_event_method(

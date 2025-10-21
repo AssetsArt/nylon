@@ -2,6 +2,7 @@
 
 use async_trait::async_trait;
 use dashmap::DashMap;
+use libc::{c_void, free};
 use nylon_error::NylonError;
 use nylon_types::plugins::{FfiBuffer, FfiPlugin, PluginPhase, SessionStream};
 use nylon_types::websocket::WebSocketMessage;
@@ -18,7 +19,13 @@ use tracing::{debug, trace};
 // Active sessions
 type SessionSender = mpsc::UnboundedSender<(u32, Vec<u8>)>;
 
-static ACTIVE_SESSIONS: Lazy<DashMap<u32, SessionSender>> = Lazy::new(DashMap::new);
+#[derive(Clone)]
+struct SessionResources {
+    sender: SessionSender,
+    plugin: Arc<FfiPlugin>,
+}
+
+static ACTIVE_SESSIONS: Lazy<DashMap<u32, SessionResources>> = Lazy::new(DashMap::new);
 static NEXT_SESSION_ID: AtomicU32 = AtomicU32::new(1);
 static SESSION_RX: Lazy<DashMap<u32, Arc<Mutex<UnboundedReceiver<(u32, Vec<u8>)>>>>> =
     Lazy::new(DashMap::new);
@@ -42,12 +49,12 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
     );
     // Clone sender first to minimize guard lifetime
     if let Some(sender_entry) = ACTIVE_SESSIONS.get(&session_id) {
-        let sender = sender_entry.value().clone();
+        let resources = sender_entry.value().clone();
         drop(sender_entry);
         if ptr.is_null() {
             trace!("handle_ffi_event: null payload");
             // println!("handle_ffi_event: null payload");
-            let _ = sender.send((method, Vec::new()));
+            let _ = resources.sender.send((method, Vec::new()));
             return;
         }
 
@@ -59,12 +66,18 @@ pub extern "C" fn handle_ffi_event(data: *const FfiBuffer) {
             // println!("handle_ffi_event: buf={:?}", buf);
             // println!("handle_ffi_event: buf len={}", buf.len());
             // println!("handle_ffi_event: buf as string={}", String::from_utf8_lossy(&buf));
-            if let Err(_e) = sender.send((method, buf)) {
+            if let Err(_e) = resources.sender.send((method, buf)) {
                 debug!("send error: {:?}", session_id);
             }
+            (*resources.plugin.plugin_free)(ptr as *mut u8);
         }
     } else {
         trace!("handle_ffi_event: no active session for sid={}", session_id);
+        if !ptr.is_null() {
+            unsafe {
+                free(ptr as *mut c_void);
+            }
+        }
     }
 }
 
@@ -95,7 +108,13 @@ impl PluginSessionStream for SessionStream {
 
     async fn open(&self, entry: &str) -> Result<u32, NylonError> {
         let (tx, rx) = mpsc::unbounded_channel();
-        ACTIVE_SESSIONS.insert(self.session_id, tx);
+        ACTIVE_SESSIONS.insert(
+            self.session_id,
+            SessionResources {
+                sender: tx.clone(),
+                plugin: self.plugin.clone(),
+            },
+        );
 
         unsafe {
             let ok = (*self.plugin.register_session)(

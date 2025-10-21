@@ -23,3 +23,4 @@ http = { workspace = true }
 sha1 = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
+libc = { workspace = true }

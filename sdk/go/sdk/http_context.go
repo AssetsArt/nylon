@@ -14,22 +14,23 @@ func (ctx *NylonHttpPluginCtx) requestAndWait(method NylonMethods, payload []byt
 
 	ctx.mu.Lock()
 	delete(ctx.dataMap, methodID)
-	go func() {
-		if err := RequestMethod(ctx.sessionID, 0, method, payload); err != nil {
-			ctx.mu.Lock()
-			ctx.dataMap[methodID] = nil
-			ctx.cond.Broadcast()
-			ctx.mu.Unlock()
-		}
-	}()
-	defer ctx.mu.Unlock()
+	ctx.mu.Unlock()
 
+	if err := RequestMethod(ctx.sessionID, 0, method, payload); err != nil {
+		ctx.mu.Lock()
+		ctx.dataMap[methodID] = nil
+		ctx.cond.Broadcast()
+		ctx.mu.Unlock()
+	}
+
+	ctx.mu.Lock()
+	defer ctx.mu.Unlock()
 	for {
-		ctx.cond.Wait()
 		if data, ok := ctx.dataMap[methodID]; ok {
 			delete(ctx.dataMap, methodID)
 			return data
 		}
+		ctx.cond.Wait()
 	}
 }
 
