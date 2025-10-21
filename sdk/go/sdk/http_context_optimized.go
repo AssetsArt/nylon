@@ -9,8 +9,6 @@ import (
 type OptimizedHttpPluginCtx struct {
 	sessionID   int32
 	responseMap map[uint32]chan []byte // method -> response channel
-	wsUpgraded  bool
-	wsCallbacks *WebSocketCallbacks
 }
 
 // NewOptimizedHttpPluginCtx creates a new optimized context

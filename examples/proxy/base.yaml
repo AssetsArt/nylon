@@ -15,8 +15,8 @@ services:
     endpoints:
       - ip: 127.0.0.1
         port: 3001
-      - ip: 127.0.0.1
-        port: 3002
+      # - ip: 127.0.0.1
+      #   port: 3002
     health_check:
       enabled: false
       path: /health
