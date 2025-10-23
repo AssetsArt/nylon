@@ -1,5 +1,5 @@
 use crate::{
-    plugins::PluginItem,
+    plugins::{MessagingConfig, PluginItem},
     route::{MiddlewareItem, RouteConfig},
     services::ServiceItem,
     tls::TlsConfig,
@@ -14,5 +14,6 @@ pub struct ProxyConfig {
     pub header_selector: Option<String>,
     pub routes: Option<Vec<RouteConfig>>,
     pub plugins: Option<Vec<PluginItem>>,
+    pub messaging: Option<Vec<MessagingConfig>>,
     pub middleware_groups: Option<HashMap<String, Vec<MiddlewareItem>>>,
 }

@@ -603,14 +603,23 @@ impl SessionHandler {
         // Convert to Vec for caching
         let headers_vec: Vec<(String, String)> = headers
             .iter()
-            .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or_default().to_string()))
+            .map(|(k, v)| {
+                (
+                    k.as_str().to_string(),
+                    v.to_str().unwrap_or_default().to_string(),
+                )
+            })
             .collect();
 
         // Use cached FlatBuffer serialization
         let serialized = crate::cache::build_headers_flatbuffer(&headers_vec);
-        
+
         session_stream
-            .event_stream(PluginPhase::Zero, methods::READ_REQUEST_HEADERS, &serialized)
+            .event_stream(
+                PluginPhase::Zero,
+                methods::READ_REQUEST_HEADERS,
+                &serialized,
+            )
             .await
     }
 

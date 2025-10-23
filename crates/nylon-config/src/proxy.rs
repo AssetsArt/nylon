@@ -4,10 +4,12 @@ use crate::{
     utils::read_dir_recursive,
 };
 use async_trait::async_trait;
+use dashmap::DashMap;
 use nylon_error::NylonError;
 use nylon_plugin::loaders;
 use nylon_store as store;
 use nylon_types::{
+    plugins::{MessagingConfig, PluginType},
     proxy::ProxyConfig,
     route::RouteConfig,
     services::{ServiceItem, ServiceType},
@@ -79,6 +81,13 @@ impl ProxyConfigExt for ProxyConfig {
                 self.plugins = Some(new_plugins);
             }
         }
+        if let Some(new_messaging) = other.messaging {
+            if let Some(messaging) = self.messaging.as_mut() {
+                messaging.extend(new_messaging);
+            } else {
+                self.messaging = Some(new_messaging);
+            }
+        }
         if let Some(new_middleware_groups) = other.middleware_groups {
             if let Some(middleware_groups) = self.middleware_groups.as_mut() {
                 middleware_groups.extend(new_middleware_groups);
@@ -129,6 +138,23 @@ impl ProxyConfigExt for ProxyConfig {
                     "Plugin name {} is not unique",
                     plugin.name
                 )));
+            }
+        }
+        if let Some(messaging) = &self.messaging {
+            let mut seen = std::collections::HashSet::new();
+            for config in messaging {
+                if !seen.insert(config.name.clone()) {
+                    return Err(NylonError::ConfigError(format!(
+                        "Messaging config name {} is not unique",
+                        config.name
+                    )));
+                }
+                if config.servers.is_empty() {
+                    return Err(NylonError::ConfigError(format!(
+                        "Messaging config {} must specify at least one server",
+                        config.name
+                    )));
+                }
             }
         }
         // check if middleware groups are unique
@@ -193,6 +219,55 @@ impl ProxyConfigExt for ProxyConfig {
                 }
             }
         }
+        if let Some(plugins) = &self.plugins {
+            for plugin in plugins {
+                match plugin.plugin_type {
+                    PluginType::Ffi => {
+                        if plugin.file.as_ref().map(|f| f.is_empty()).unwrap_or(true) {
+                            return Err(NylonError::ConfigError(format!(
+                                "FFI plugin {} requires a 'file' path",
+                                plugin.name
+                            )));
+                        }
+                    }
+                    PluginType::Messaging => {
+                        let Some(messaging_name) = plugin
+                            .messaging
+                            .as_ref()
+                            .map(|s| s.trim())
+                            .filter(|s| !s.is_empty())
+                        else {
+                            return Err(NylonError::ConfigError(format!(
+                                "Messaging plugin {} must set 'messaging' reference",
+                                plugin.name
+                            )));
+                        };
+
+                        if let Some(messaging_configs) = &self.messaging {
+                            if !messaging_configs
+                                .iter()
+                                .any(|cfg| cfg.name == messaging_name)
+                            {
+                                return Err(NylonError::ConfigError(format!(
+                                    "Messaging config '{}' referenced by plugin {} not found",
+                                    messaging_name, plugin.name
+                                )));
+                            }
+                        } else {
+                            return Err(NylonError::ConfigError(format!(
+                                "Messaging plugin {} references '{}' but no messaging configs defined",
+                                plugin.name, messaging_name
+                            )));
+                        }
+                    }
+                    PluginType::Wasm => {
+                        return Err(NylonError::ConfigError(
+                            "WASM plugins are not supported yet".to_string(),
+                        ));
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -233,6 +308,15 @@ impl ProxyConfigExt for ProxyConfig {
                 .clone()
                 .unwrap_or(store::DEFAULT_HEADER_SELECTOR.to_string()),
         );
+
+        // store messaging configs for runtime lookup
+        let messaging_store: DashMap<String, MessagingConfig> = DashMap::new();
+        if let Some(configs) = &self.messaging {
+            for config in configs {
+                messaging_store.insert(config.name.clone(), config.clone());
+            }
+        }
+        store::insert(store::KEY_MESSAGING_CONFIG, messaging_store);
 
         // register plugins
         for plugin in self.plugins.iter().flatten() {

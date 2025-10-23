@@ -8,6 +8,7 @@ nylon-types = { path = "../nylon-types" }
 nylon-error = { path = "../nylon-error" }
 nylon-store = { path = "../nylon-store" }
 nylon-sdk = { path = "../../sdk/rust" }
+nylon-messaging = { path = "../nylon-messaging" }
 serde_json = { workspace = true }
 serde = { workspace = true }
 pingora = { workspace = true }

@@ -4,6 +4,7 @@
 pub mod cache;
 pub mod constants;
 pub mod loaders;
+pub mod messaging;
 mod native;
 pub mod plugin_manager;
 pub mod session_handler;
@@ -12,17 +13,17 @@ pub mod types;
 
 use crate::constants::methods;
 use crate::{
-    plugin_manager::PluginManager,
+    plugin_manager::{PluginHandle, PluginManager},
     session_handler::SessionHandler,
     stream::{PluginSessionStream, get_rx},
     types::{BuiltinPlugin, MiddlewareContext, PluginResult},
 };
 use bytes::Bytes;
 use nylon_error::NylonError;
-use nylon_types::plugins::PluginPhase;
+use nylon_types::plugins::{FfiPlugin, PluginPhase};
 use nylon_types::{context::NylonContext, plugins::SessionStream, template::Expr};
 use pingora::proxy::{ProxyHttp, Session};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 use tokio::time::{self, Duration};
 
 /// Execute a session stream for a plugin
@@ -41,7 +42,57 @@ where
     T: ProxyHttp + Send + Sync,
     <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
 {
-    let plugin = PluginManager::get_plugin(plugin_name)?;
+    let handle = PluginManager::get_plugin(plugin_name)?;
+    match handle {
+        PluginHandle::Ffi(plugin) => {
+            run_ffi_session(
+                proxy,
+                plugin_name,
+                phase,
+                entry,
+                ctx,
+                session,
+                payload,
+                payload_ast,
+                response_body,
+                plugin,
+            )
+            .await
+        }
+        PluginHandle::Messaging(plugin) => {
+            messaging::execute_session(
+                proxy,
+                plugin_name,
+                phase,
+                entry,
+                ctx,
+                session,
+                payload,
+                payload_ast,
+                response_body,
+                plugin,
+            )
+            .await
+        }
+    }
+}
+
+async fn run_ffi_session<T>(
+    proxy: &T,
+    plugin_name: &str,
+    phase: PluginPhase,
+    entry: &str,
+    ctx: &mut NylonContext,
+    session: &mut Session,
+    payload: &Option<serde_json::Value>,
+    payload_ast: &Option<HashMap<String, Vec<Expr>>>,
+    response_body: &Option<Bytes>,
+    plugin: Arc<FfiPlugin>,
+) -> Result<PluginResult, NylonError>
+where
+    T: ProxyHttp + Send + Sync,
+    <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
+{
     let key = format!("{}-{}", plugin_name, entry);
     let mut session_id = {
         let map = ctx
@@ -60,7 +111,7 @@ where
             session_stream = ss.clone();
         } else {
             drop(map);
-            let ss = SessionStream::new(plugin, session_id);
+            let ss = SessionStream::new(plugin.clone(), session_id);
             let mut w = ctx
                 .session_stream
                 .write()

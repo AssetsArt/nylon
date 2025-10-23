@@ -1,14 +1,31 @@
-use crate::constants::ffi_symbols;
+use crate::{constants::ffi_symbols, messaging};
 use dashmap::DashMap;
 use libloading::{Library, Symbol};
 use nylon_types::plugins::{
     FfiCloseSessionFn, FfiEventStreamFn, FfiInitializeFn, FfiPlugin, FfiPluginFreeFn,
-    FfiRegisterSessionFn, FfiShutdownFn, PluginItem,
+    FfiRegisterSessionFn, FfiShutdownFn, PluginItem, PluginType,
 };
 use std::sync::Arc;
 
 pub fn load(plugin: &PluginItem) {
-    let file = plugin.file.clone();
+    match plugin.plugin_type {
+        PluginType::Ffi => load_ffi_plugin(plugin),
+        PluginType::Messaging => {
+            if let Err(err) = messaging::register_plugin(plugin) {
+                tracing::error!(plugin = %plugin.name, error = %err, "failed to register messaging plugin");
+            }
+        }
+        PluginType::Wasm => {
+            tracing::warn!(plugin = %plugin.name, "WASM plugins not implemented");
+        }
+    }
+}
+
+fn load_ffi_plugin(plugin: &PluginItem) {
+    let Some(file) = plugin.file.clone() else {
+        tracing::error!(plugin = %plugin.name, "FFI plugin missing 'file' field");
+        return;
+    };
     let lib_store =
         match nylon_store::get::<DashMap<String, Arc<Library>>>(nylon_store::KEY_LIBRARY_FILE) {
             Some(lib) => lib,

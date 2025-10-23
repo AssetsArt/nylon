@@ -1,10 +1,16 @@
-use crate::{constants::builtin_plugins, types::BuiltinPlugin};
+use crate::{constants::builtin_plugins, messaging::MessagingPlugin, types::BuiltinPlugin};
 use dashmap::DashMap;
 use nylon_error::NylonError;
 use nylon_types::plugins::FfiPlugin;
 use std::sync::Arc;
 
 pub struct PluginManager;
+
+pub enum PluginHandle {
+    Ffi(Arc<FfiPlugin>),
+    Messaging(Arc<MessagingPlugin>),
+}
+
 impl PluginManager {
     pub fn try_builtin(name: &str) -> Option<BuiltinPlugin> {
         // tracing::debug!("Trying builtin plugin: {}", name);
@@ -25,21 +31,27 @@ impl PluginManager {
         matches!(name, builtin_plugins::RESPONSE_HEADER_MODIFIER)
     }
 
-    pub fn get_plugin(name: &str) -> Result<Arc<FfiPlugin>, NylonError> {
-        let Some(plugins) =
+    pub fn get_plugin(name: &str) -> Result<PluginHandle, NylonError> {
+        if let Some(plugins) =
             &nylon_store::get::<DashMap<String, Arc<FfiPlugin>>>(nylon_store::KEY_PLUGINS)
-        else {
-            return Err(NylonError::ConfigError("Plugins not found".to_string()));
-        };
+        {
+            if let Some(plugin) = plugins.get(name) {
+                return Ok(PluginHandle::Ffi(plugin.clone()));
+            }
+        }
 
-        let Some(plugin) = plugins.get(name) else {
-            return Err(NylonError::ConfigError(format!(
-                "Plugin '{}' not found",
-                name
-            )));
-        };
+        if let Some(plugins) = &nylon_store::get::<DashMap<String, Arc<MessagingPlugin>>>(
+            nylon_store::KEY_MESSAGING_PLUGINS,
+        ) {
+            if let Some(plugin) = plugins.get(name) {
+                return Ok(PluginHandle::Messaging(plugin.clone()));
+            }
+        }
 
-        Ok(plugin.clone())
+        Err(NylonError::ConfigError(format!(
+            "Plugin '{}' not found",
+            name
+        )))
     }
 
     //     /// Get or create a session stream for a plugin
