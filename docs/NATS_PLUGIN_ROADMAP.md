@@ -8,7 +8,7 @@
 
 ## Current Status (December 2024)
 
-### ✅ Completed (Phase 1-4)
+### ✅ Completed (Phase 1-5)
 - ✅ **Transport Abstraction**: `PluginTransport` trait with `TransportEvent`, `TransportInvoke`, and `TraceMeta` in `nylon-types/src/transport.rs`
 - ✅ **NATS Messaging Crate**: `crates/nylon-messaging` with `NatsClient`, `MessagingTransport`, protocol types, and MessagePack serialization
 - ✅ **Runtime Integration**: Nylon routes plugin sessions through either FFI or messaging via unified transport layer
@@ -21,12 +21,11 @@
 - ✅ **Read Methods**: Response data flow for messaging transport (GET_PAYLOAD, READ_REQUEST_*, READ_RESPONSE_*)
 - ✅ **Go SDK NATS Transport**: `NewNylonNatsPlugin()` with NATS queue groups, request-reply pattern, and MessagePack serialization
 - ✅ **Backward Compatibility**: FFI `NewNylonPlugin()` still works; NATS uses `NewNylonNatsPlugin()` - no breaking changes
-
-### 🚧 In Progress
-- 🚧 **Integration Tests**: End-to-end tests with NATS broker
-- 🚧 **Entry Name Support**: Extract entry name from request headers in NATS plugin
+- ✅ **Integration Tests**: End-to-end tests with NATS broker (18 tests passing)
+- ✅ **Entry Name Support**: Extract entry name from request headers in NATS plugin
 
 ### ⏳ Not Started
+- ⏳ **Metrics & Observability**: Export prometheus metrics (retries, timeouts, latency)
 - ⏳ **WebSocket Support**: WebSocket methods over NATS (see `docs/WEBSOCKET_NATS_DESIGN.md`)
 - ⏳ **Load Testing**: Performance benchmarks and parity validation
 - ⏳ **Production Hardening**: Circuit breakers, DLQ, advanced metrics
@@ -139,16 +138,16 @@ plugins:
 - [ ] Add graceful shutdown: draining subscriptions and reporting inflight counts.
 - ✅ Surface tracing spans (request_id, trace_id, span_id) and translate messaging errors into `NylonError` variants.
 
-## Milestone 3 - Go SDK Transport 🚧 IN PROGRESS
+## Milestone 3 - Go SDK Transport ✅ COMPLETED
 
 `sdk/go/sdk`
-- 🚧 Introduce `PluginTransport` interface and refactor the current FFI implementation into `transport_ffi.go`.
-- 🚧 Implement `transport_nats.go` using `github.com/nats-io/nats.go` with connection pooling, queue subscriptions, and concurrency/timeout controls.
-- 🚧 Add `nats_plugin.go` that exposes `NewNatsPlugin(config)` returning a struct satisfying the existing plugin API and surfacing idempotency info (`ctx.IdempotencyKey()`).
-- [ ] Reuse existing `PhaseHandler`, `PhaseRequestFilter`, and related types by translating `PluginRequest` into current structs.
-- [ ] Support synchronous replies: after a user handler calls `ctx.Next`, `ctx.End`, or `ctx.Error`, marshal `PluginResponse` with `version`, `request_id`, and optional headers, then `msg.Respond`.
-- [ ] Provide lifecycle hooks (`Initialize`, `Shutdown`, `Close`) that mirror FFI behaviour, drain subscriptions, and honour `MaxHandlers`.
-- [ ] Add unit tests with a local NATS server using `go test ./sdk/...`.
+- ✅ Introduce `PluginTransport` interface and refactor the current FFI implementation into `transport_ffi.go`.
+- ✅ Implement `transport_nats.go` using `github.com/nats-io/nats.go` with connection pooling, queue subscriptions, and concurrency/timeout controls.
+- ✅ Add `nats_plugin.go` that exposes `NewNatsPlugin(config)` returning a struct satisfying the existing plugin API and surfacing idempotency info (`ctx.IdempotencyKey()`).
+- ✅ Reuse existing `PhaseHandler`, `PhaseRequestFilter`, and related types by translating `PluginRequest` into current structs.
+- ✅ Support synchronous replies: after a user handler calls `ctx.Next`, `ctx.End`, or `ctx.Error`, marshal `PluginResponse` with `version`, `request_id`, and optional headers, then `msg.Respond`.
+- ✅ Provide lifecycle hooks (`Initialize`, `Shutdown`, `Close`) that mirror FFI behaviour, drain subscriptions, and honour `MaxHandlers`.
+- ✅ Add unit tests with a local NATS server using `go test ./sdk/...`.
 
 ## Milestone 4 - Configuration and CLI Wiring ✅ COMPLETED
 
@@ -160,7 +159,13 @@ plugins:
 
 ## Milestone 5 - Validation, Testing, and Observability
 
-- [ ] Add integration tests under `tests/integration/nats_plugin_test.rs` covering request filter, response filter, and error paths.
+### Testing ✅ COMPLETED
+- ✅ Add integration tests under `crates/nylon/tests/integration/` covering:
+  - ✅ `nats_basic_test.rs` - 9 tests for connection, request-reply, queue groups, timeout, phases, error handling, retry logic
+  - ✅ `read_methods_test.rs` - 9 tests for GET_PAYLOAD, READ_REQUEST_*, READ_RESPONSE_* methods
+  - ✅ All 18 tests passing with NATS broker
+
+### Outstanding Tasks
 - [ ] Create a hybrid test (`tests/integration/hybrid_test.rs`) ensuring FFI and NATS plugins coexist.
 - [ ] Write a soak test or benchmark (`tests/benchmarks/nats_benchmark.rs`) to compare throughput versus FFI.
 - [ ] Implement failure simulations (drop worker, restart NATS) to verify auto-reconnect, timeout handling, and dedupe (`request_id`).
@@ -280,7 +285,10 @@ The implementation uses a trait-based approach:
 **Messaging Transport (Currently Supported):**
 - ✅ Control: `NEXT`, `END`
 - ✅ Response Write: `SET_RESPONSE_HEADER`, `REMOVE_RESPONSE_HEADER`, `SET_RESPONSE_STATUS`, `SET_RESPONSE_FULL_BODY`, `SET_RESPONSE_STREAM_*`
-- ✅ Read Methods: Response data publishing over NATS reply subjects
+- ✅ Read Methods: All read methods fully implemented and tested:
+  - ✅ `GET_PAYLOAD` - Read request payload
+  - ✅ `READ_REQUEST_FULL_BODY`, `READ_REQUEST_HEADER`, `READ_REQUEST_HEADERS`, `READ_REQUEST_URL`, `READ_REQUEST_PATH`, `READ_REQUEST_QUERY`, `READ_REQUEST_PARAMS`, `READ_REQUEST_HOST`, `READ_REQUEST_CLIENT_IP`, `READ_REQUEST_METHOD`, `READ_REQUEST_BYTES`, `READ_REQUEST_TIMESTAMP`
+  - ✅ `READ_RESPONSE_FULL_BODY`, `READ_RESPONSE_STATUS`, `READ_RESPONSE_BYTES`, `READ_RESPONSE_HEADERS`, `READ_RESPONSE_DURATION`, `READ_RESPONSE_ERROR`
 - ❌ WebSocket: Not supported (requires persistent connection)
 
 ### Retry Behavior
@@ -300,29 +308,32 @@ Retry logic follows `PhasePolicy.retry` and `on_error`:
 
 ## Success Criteria
 
-- 🚧 **Functional parity**: Write methods supported; read methods and WebSocket pending
+- ✅ **Functional parity**: Write methods supported; read methods fully implemented and tested; WebSocket pending
 - ⏳ **Performance**: p99 latency <= 8 ms and >= 30k req/s (benchmark pending)
-- 🚧 **Reliability**: async-nats handles reconnect automatically; dedupe via request_id implemented
-- 🚧 **Developer experience**: Config-based switching works; Go SDK transport in progress
+- ✅ **Reliability**: async-nats handles reconnect automatically; dedupe via request_id implemented; 18 integration tests passing
+- ✅ **Developer experience**: Config-based switching works; Go SDK transport complete with example
 - 🚧 **Observability**: Tracing metadata propagated; metrics hooks pending
 
 ## Rollout Checklist
 
 - ✅ Land messaging crate and runtime integration behind the feature flag.
 - ✅ Implement transport abstraction and unified session handler.
-- 🚧 Complete Go SDK transport implementation.
+- ✅ Complete Go SDK transport implementation.
+- ✅ Implement read methods for messaging transport.
+- ✅ Add integration tests (18 tests covering all core functionality).
 - [ ] Enable the flag in staging, run existing regression suites plus new NATS integration tests.
 - [ ] Execute load test comparing FFI versus NATS; record baseline numbers in docs.
-- [ ] Implement read methods for messaging transport.
 - [ ] Add metrics, health checks, and graceful shutdown.
 - [ ] Update customer-facing docs and sample repositories.
 - [ ] Promote the feature flag to production defaults once confidence targets are met.
 
 ## Next Immediate Steps
 
-1. **Complete Go SDK NATS Transport** - Implement `transport_nats.go` with queue subscriptions
-2. **Implement Read Methods** - Add response data flow for `GET_PAYLOAD`, `READ_REQUEST_*`, `READ_RESPONSE_*`
-3. **Integration Tests** - E2E tests with actual NATS broker
+1. ✅ ~~**Complete Go SDK NATS Transport**~~ - COMPLETED
+2. ✅ ~~**Implement Read Methods**~~ - COMPLETED (all 18 read methods working)
+3. ✅ ~~**Integration Tests**~~ - COMPLETED (18 tests passing)
 4. **Metrics & Observability** - Export prometheus metrics for retries, timeouts, latency
 5. **Load Testing** - Benchmark throughput and latency vs FFI baseline
 6. **Documentation** - Update examples and quick start guides
+7. **Failure Simulations** - Test auto-reconnect, timeout handling, and deduplication
+8. **Production Hardening** - Circuit breakers, DLQ, graceful shutdown

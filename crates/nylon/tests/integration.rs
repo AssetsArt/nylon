@@ -6,5 +6,6 @@
 mod integration {
     mod test_helpers;
     mod nats_basic_test;
+    mod read_methods_test;
 }
 
