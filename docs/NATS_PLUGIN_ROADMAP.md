@@ -18,11 +18,11 @@
 - ✅ **Error Handling**: Comprehensive error handling with Continue/End/Retry strategies
 - ✅ **Tracing**: Request ID, trace ID propagation, and span tracking per plugin session
 - ✅ **Configuration**: Parse and validate `messaging:` blocks, store in `KEY_MESSAGING_PLUGINS`
+- ✅ **Read Methods**: Response data flow for messaging transport (GET_PAYLOAD, READ_REQUEST_*, READ_RESPONSE_*)
 - ✅ **Go SDK NATS Transport**: `NewNylonNatsPlugin()` with NATS queue groups, request-reply pattern, and MessagePack serialization
 - ✅ **Backward Compatibility**: FFI `NewNylonPlugin()` still works; NATS uses `NewNylonNatsPlugin()` - no breaking changes
 
 ### 🚧 In Progress
-- 🚧 **Read Methods**: Response data flow for messaging transport (GET_PAYLOAD, READ_REQUEST_*, READ_RESPONSE_*)
 - 🚧 **Integration Tests**: End-to-end tests with NATS broker
 - 🚧 **Entry Name Support**: Extract entry name from request headers in NATS plugin
 
@@ -280,7 +280,7 @@ The implementation uses a trait-based approach:
 **Messaging Transport (Currently Supported):**
 - ✅ Control: `NEXT`, `END`
 - ✅ Response Write: `SET_RESPONSE_HEADER`, `REMOVE_RESPONSE_HEADER`, `SET_RESPONSE_STATUS`, `SET_RESPONSE_FULL_BODY`, `SET_RESPONSE_STREAM_*`
-- ⏳ Read Methods: Require response data flow back through NATS (TODO)
+- ✅ Read Methods: Response data publishing over NATS reply subjects
 - ❌ WebSocket: Not supported (requires persistent connection)
 
 ### Retry Behavior

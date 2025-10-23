@@ -1,10 +1,12 @@
-use crate::{NatsClient, encode_request, decode_response, PROTOCOL_VERSION};
-use nylon_types::transport::{PluginTransport, TraceMeta, TransportEvent, TransportInvoke, TransportResult};
+use crate::{NatsClient, PROTOCOL_VERSION, decode_response, encode_request};
+use async_nats::Subscriber;
+use futures::StreamExt;
+use nylon_types::transport::{
+    PluginTransport, TraceMeta, TransportEvent, TransportInvoke, TransportResult,
+};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::Mutex;
-use async_nats::Subscriber;
-use futures::StreamExt;
 
 /// Messaging-based transport implementation (NATS)
 pub struct MessagingTransport {
@@ -13,6 +15,7 @@ pub struct MessagingTransport {
     trace: TraceMeta,
     client: Arc<NatsClient>,
     request_subject: String,
+    reply_subject: String,
     reply_subscription: Arc<Mutex<Option<Subscriber>>>,
     session_id: u32,
     #[allow(dead_code)]
@@ -25,6 +28,7 @@ impl MessagingTransport {
         trace: TraceMeta,
         client: Arc<NatsClient>,
         request_subject: String,
+        reply_subject: String,
         session_id: u32,
         plugin_name: String,
         entry_name: String,
@@ -34,50 +38,55 @@ impl MessagingTransport {
             trace,
             client,
             request_subject,
+            reply_subject,
             reply_subscription: Arc::new(Mutex::new(None)),
             session_id,
             plugin_name,
             entry_name,
         }
     }
-    
+
     /// Setup reply subscription for receiving invoke responses
-    pub async fn setup_reply_subscription(&self, reply_subject: String) -> TransportResult<()> {
+    pub async fn setup_reply_subscription(&self) -> TransportResult<()> {
         let subscriber = self
             .client
             .client()
-            .subscribe(reply_subject)
+            .subscribe(self.reply_subject.clone())
             .await
             .map_err(|e| format!("Failed to subscribe to reply subject: {}", e))?;
-        
+
         let mut guard = self.reply_subscription.lock().await;
         *guard = Some(subscriber);
         Ok(())
     }
-    
+
     /// Flush buffered events to NATS by sending them as requests
     pub async fn flush_events(&mut self) -> TransportResult<()> {
         if self.outbox.is_empty() {
             return Ok(());
         }
-        
+
         let events = std::mem::take(&mut self.outbox);
-        
+
         for event in events {
             // Build headers with entry name
             let mut headers = std::collections::BTreeMap::new();
             headers.insert("entry".to_string(), self.entry_name.clone());
+            headers.insert("reply".to_string(), self.reply_subject.clone());
             if let Some(trace_id) = &self.trace.trace_id {
                 headers.insert("x-trace-id".to_string(), trace_id.clone());
             }
             if let Some(span_id) = &self.trace.span_id {
                 headers.insert("x-span-id".to_string(), span_id.clone());
             }
-            
+
             // Convert TransportEvent to PluginRequest
             let request = crate::protocol::PluginRequest {
                 version: PROTOCOL_VERSION,
-                request_id: self.trace.request_id.as_ref()
+                request_id: self
+                    .trace
+                    .request_id
+                    .as_ref()
                     .and_then(|s| s.parse::<u128>().ok())
                     .unwrap_or(0),
                 session_id: self.session_id,
@@ -90,20 +99,20 @@ impl MessagingTransport {
                     .as_millis() as u64,
                 headers: Some(headers),
             };
-            
-            let payload = encode_request(&request)
-                .map_err(|e| format!("Failed to encode request: {}", e))?;
-            
+
+            let payload =
+                encode_request(&request).map_err(|e| format!("Failed to encode request: {}", e))?;
+
             // Fire-and-forget publish (events don't expect replies)
             self.client
                 .publish(&self.request_subject, &payload, None)
                 .await
                 .map_err(|e| format!("Failed to publish event: {}", e))?;
         }
-        
+
         Ok(())
     }
-    
+
     /// Get buffered events count
     pub fn pending_events(&self) -> usize {
         self.outbox.len()
@@ -121,7 +130,7 @@ impl PluginTransport for MessagingTransport {
         // Non-blocking poll of NATS reply subscription
         let subscription = self.reply_subscription.clone();
         let duration = deadline.saturating_duration_since(Instant::now());
-        
+
         let result = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async {
                 let mut guard = subscription.lock().await;
@@ -129,16 +138,16 @@ impl PluginTransport for MessagingTransport {
                     Some(s) => s,
                     None => return Ok(None), // No subscription setup yet
                 };
-                
+
                 // Try to receive with timeout
                 let timeout_result = tokio::time::timeout(duration, sub.next()).await;
-                
+
                 match timeout_result {
                     Ok(Some(msg)) => {
                         // Decode response
                         let response = decode_response(&msg.payload)
                             .map_err(|e| format!("Failed to decode response: {}", e))?;
-                        
+
                         // Check for method invoke
                         if let Some(method) = response.method {
                             Ok(Some(TransportInvoke {
@@ -156,7 +165,7 @@ impl PluginTransport for MessagingTransport {
                 }
             })
         });
-        
+
         result
     }
 
@@ -164,4 +173,3 @@ impl PluginTransport for MessagingTransport {
         &self.trace
     }
 }
-

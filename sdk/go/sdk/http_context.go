@@ -13,6 +13,9 @@ func (ctx *NylonHttpPluginCtx) requestAndWait(method NylonMethods, payload []byt
 	methodID := MethodIDMapping[method]
 
 	ctx.mu.Lock()
+	if ctx.dataMap == nil {
+		ctx.dataMap = make(map[uint32][]byte)
+	}
 	delete(ctx.dataMap, methodID)
 	ctx.mu.Unlock()
 

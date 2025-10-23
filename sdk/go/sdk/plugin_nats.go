@@ -11,6 +11,8 @@ import (
 	"github.com/vmihailenco/msgpack/v5"
 )
 
+var natsSessions sync.Map
+
 // NatsPlugin is a NATS-based plugin instance
 type NatsPlugin struct {
 	config          *NatsPluginConfig
@@ -50,17 +52,27 @@ type PluginRequest struct {
 	RequestID interface{}       `msgpack:"request_id"` // Can be string or u128
 	SessionID uint32            `msgpack:"session_id"`
 	Phase     uint8             `msgpack:"phase"`
-	Method    string            `msgpack:"method,omitempty"`
+	Method    uint32            `msgpack:"method,omitempty"`
 	Data      []byte            `msgpack:"data,omitempty"`
 	Headers   map[string]string `msgpack:"headers,omitempty"`
 	Timestamp uint64            `msgpack:"timestamp,omitempty"`
 }
 
 // PluginResponse represents a response to Nylon
+type ResponseAction string
+
+const (
+	ResponseActionNext  ResponseAction = "next"
+	ResponseActionEnd   ResponseAction = "end"
+	ResponseActionError ResponseAction = "error"
+)
+
 type PluginResponse struct {
 	Version   uint16            `msgpack:"version"`
-	RequestID interface{}       `msgpack:"request_id"` // Can be string or u128
-	Method    string            `msgpack:"method,omitempty"`
+	RequestID interface{}       `msgpack:"request_id"`
+	SessionID uint32            `msgpack:"session_id"`
+	Method    uint32            `msgpack:"method,omitempty"`
+	Action    ResponseAction    `msgpack:"action"`
 	Data      []byte            `msgpack:"data,omitempty"`
 	Error     string            `msgpack:"error,omitempty"`
 	Headers   map[string]string `msgpack:"headers,omitempty"`
@@ -217,8 +229,13 @@ func (p *NatsPlugin) handleMessage(msg *nats.Msg) {
 		return
 	}
 
+	methodName := ""
+	if name, ok := methodNameFromID(req.Method); ok {
+		methodName = string(name)
+	}
+
 	fmt.Printf("[NatsPlugin] Received request: session=%d phase=%d method=%s headers=%+v\n",
-		req.SessionID, req.Phase, req.Method, req.Headers)
+		req.SessionID, req.Phase, methodName, req.Headers)
 
 	// Handle special methods from headers
 	if req.Headers != nil {
@@ -234,23 +251,12 @@ func (p *NatsPlugin) handleMessage(msg *nats.Msg) {
 		}
 	}
 
-	// Legacy: check Method field
-	if req.Method != "" {
-		switch req.Method {
-		case "initialize":
-			p.handleInitialize(msg, &req)
-			return
-		case "shutdown":
-			p.handleShutdown(msg, &req)
-			return
-		}
-	}
-
 	// Handle phase event
 	switch req.Phase {
 	case 0:
-		// Phase start event - just acknowledge
-		p.respondOK(msg, req.RequestID)
+		if handled := p.handleDataEvent(msg, &req); !handled {
+			p.respondError(msg, &req, nil, fmt.Sprintf("no active session for %d", req.SessionID))
+		}
 
 	case 1: // RequestFilter
 		p.handleRequestFilterPhase(msg, &req)
@@ -265,8 +271,36 @@ func (p *NatsPlugin) handleMessage(msg *nats.Msg) {
 		p.handleLoggingPhase(msg, &req)
 
 	default:
-		p.respondError(msg, req.RequestID, fmt.Sprintf("unknown phase: %d", req.Phase))
+		p.respondError(msg, &req, nil, fmt.Sprintf("unknown phase: %d", req.Phase))
 	}
+}
+
+func (p *NatsPlugin) handleDataEvent(msg *nats.Msg, req *PluginRequest) bool {
+	ctxValue, ok := natsSessions.Load(req.SessionID)
+	if !ok {
+		return false
+	}
+
+	natsCtx, ok := ctxValue.(*NylonHttpPluginCtx)
+	if !ok {
+		return false
+	}
+
+	methodID := req.Method
+
+	natsCtx.mu.Lock()
+	if natsCtx.dataMap == nil {
+		natsCtx.dataMap = make(map[uint32][]byte)
+	}
+	natsCtx.lastRequestID = req.RequestID
+	payload := make([]byte, len(req.Data))
+	copy(payload, req.Data)
+	natsCtx.dataMap[methodID] = payload
+	natsCtx.cond.Broadcast()
+	natsCtx.mu.Unlock()
+
+	p.respondOK(msg, req, natsCtx)
+	return true
 }
 
 // handleInitialize processes initialize request from Nylon
@@ -299,7 +333,7 @@ func (p *NatsPlugin) handleInitialize(msg *nats.Msg, req *PluginRequest) {
 	}
 
 	fmt.Println("[NatsPlugin] Sending OK response")
-	p.respondOK(msg, req.RequestID)
+	p.respondOK(msg, req, nil)
 }
 
 // handleShutdown processes shutdown request from Nylon
@@ -314,16 +348,16 @@ func (p *NatsPlugin) handleShutdown(msg *nats.Msg, req *PluginRequest) {
 		}
 	}
 
-	p.respondOK(msg, req.RequestID)
+	p.respondOK(msg, req, nil)
 }
 
 // handleRequestFilterPhase handles RequestFilter phase
 func (p *NatsPlugin) handleRequestFilterPhase(msg *nats.Msg, req *PluginRequest) {
-	natsCtx, phaseHandler, entryName := p.setupPhaseHandler(req)
+	natsCtx, phaseHandler, entryName := p.setupPhaseHandler(msg, req)
 
 	handlerFn, exists := p.phaseHandlers.Load(entryName)
 	if !exists {
-		p.respondError(msg, req.RequestID, fmt.Sprintf("no handler for entry: %s", entryName))
+		p.respondError(msg, req, natsCtx, fmt.Sprintf("no handler for entry: %s", entryName))
 		return
 	}
 
@@ -333,18 +367,16 @@ func (p *NatsPlugin) handleRequestFilterPhase(msg *nats.Msg, req *PluginRequest)
 
 	phaseHandler.requestFilter(&PhaseRequestFilter{ctx: natsCtx})
 
-	if !natsCtx.natsResponded {
-		p.respondOK(msg, req.RequestID)
-	}
+	p.respondOK(msg, req, natsCtx)
 }
 
 // handleResponseFilterPhase handles ResponseFilter phase
 func (p *NatsPlugin) handleResponseFilterPhase(msg *nats.Msg, req *PluginRequest) {
-	natsCtx, phaseHandler, entryName := p.setupPhaseHandler(req)
+	natsCtx, phaseHandler, entryName := p.setupPhaseHandler(msg, req)
 
 	handlerFn, exists := p.phaseHandlers.Load(entryName)
 	if !exists {
-		p.respondError(msg, req.RequestID, fmt.Sprintf("no handler for entry: %s", entryName))
+		p.respondError(msg, req, natsCtx, fmt.Sprintf("no handler for entry: %s", entryName))
 		return
 	}
 
@@ -354,18 +386,16 @@ func (p *NatsPlugin) handleResponseFilterPhase(msg *nats.Msg, req *PluginRequest
 
 	phaseHandler.responseFilter(&PhaseResponseFilter{ctx: natsCtx})
 
-	if !natsCtx.natsResponded {
-		p.respondOK(msg, req.RequestID)
-	}
+	p.respondOK(msg, req, natsCtx)
 }
 
 // handleResponseBodyFilterPhase handles ResponseBodyFilter phase
 func (p *NatsPlugin) handleResponseBodyFilterPhase(msg *nats.Msg, req *PluginRequest) {
-	natsCtx, phaseHandler, entryName := p.setupPhaseHandler(req)
+	natsCtx, phaseHandler, entryName := p.setupPhaseHandler(msg, req)
 
 	handlerFn, exists := p.phaseHandlers.Load(entryName)
 	if !exists {
-		p.respondError(msg, req.RequestID, fmt.Sprintf("no handler for entry: %s", entryName))
+		p.respondError(msg, req, natsCtx, fmt.Sprintf("no handler for entry: %s", entryName))
 		return
 	}
 
@@ -375,18 +405,16 @@ func (p *NatsPlugin) handleResponseBodyFilterPhase(msg *nats.Msg, req *PluginReq
 
 	phaseHandler.responseBodyFilter(&PhaseResponseBodyFilter{ctx: natsCtx})
 
-	if !natsCtx.natsResponded {
-		p.respondOK(msg, req.RequestID)
-	}
+	p.respondOK(msg, req, natsCtx)
 }
 
 // handleLoggingPhase handles Logging phase
 func (p *NatsPlugin) handleLoggingPhase(msg *nats.Msg, req *PluginRequest) {
-	natsCtx, phaseHandler, entryName := p.setupPhaseHandler(req)
+	natsCtx, phaseHandler, entryName := p.setupPhaseHandler(msg, req)
 
 	handlerFn, exists := p.phaseHandlers.Load(entryName)
 	if !exists {
-		p.respondError(msg, req.RequestID, fmt.Sprintf("no handler for entry: %s", entryName))
+		p.respondError(msg, req, natsCtx, fmt.Sprintf("no handler for entry: %s", entryName))
 		return
 	}
 
@@ -396,21 +424,41 @@ func (p *NatsPlugin) handleLoggingPhase(msg *nats.Msg, req *PluginRequest) {
 
 	phaseHandler.logging(&PhaseLogging{ctx: natsCtx})
 
-	if !natsCtx.natsResponded {
-		p.respondOK(msg, req.RequestID)
-	}
+	p.respondOK(msg, req, natsCtx)
 }
 
 // setupPhaseHandler creates phase handler context and structure
-func (p *NatsPlugin) setupPhaseHandler(req *PluginRequest) (*NylonHttpPluginCtx, *PhaseHandler, string) {
-	natsCtx := &NylonHttpPluginCtx{
-		sessionID: int32(req.SessionID),
-		dataMap:   make(map[uint32][]byte),
-		natsMode:  true,
-		natsMsg:   nil, // Will be set in handler if needed
-		natsReq:   req,
+func (p *NatsPlugin) setupPhaseHandler(msg *nats.Msg, req *PluginRequest) (*NylonHttpPluginCtx, *PhaseHandler, string) {
+	var natsCtx *NylonHttpPluginCtx
+	if ctxValue, ok := natsSessions.Load(req.SessionID); ok {
+		if existing, ok := ctxValue.(*NylonHttpPluginCtx); ok {
+			natsCtx = existing
+		}
 	}
-	natsCtx.cond = sync.NewCond(&natsCtx.mu)
+
+	if natsCtx == nil {
+		natsCtx = &NylonHttpPluginCtx{
+			sessionID: int32(req.SessionID),
+			dataMap:   make(map[uint32][]byte),
+			natsMode:  true,
+		}
+		natsCtx.cond = sync.NewCond(&natsCtx.mu)
+		natsSessions.Store(req.SessionID, natsCtx)
+	}
+
+	natsCtx.mu.Lock()
+	natsCtx.natsMode = true
+	natsCtx.lastRequestID = req.RequestID
+	natsCtx.natsConn = p.conn
+	if req.Headers != nil {
+		if reply, ok := req.Headers["reply"]; ok {
+			natsCtx.replySubject = reply
+		}
+	}
+	if natsCtx.replySubject == "" && msg.Reply != "" {
+		natsCtx.replySubject = msg.Reply
+	}
+	natsCtx.mu.Unlock()
 
 	phaseHandler := &PhaseHandler{
 		SessionId: int32(req.SessionID),
@@ -430,7 +478,6 @@ func (p *NatsPlugin) setupPhaseHandler(req *PluginRequest) (*NylonHttpPluginCtx,
 		},
 	}
 
-	// Extract entry name from request headers or use default
 	entryName := "default"
 	if req.Headers != nil {
 		if entry, ok := req.Headers["entry"]; ok {
@@ -438,37 +485,61 @@ func (p *NatsPlugin) setupPhaseHandler(req *PluginRequest) (*NylonHttpPluginCtx,
 		}
 	}
 
+	streamSessions.Store(int32(req.SessionID), phaseHandler)
+
 	return natsCtx, phaseHandler, entryName
 }
 
 // respondOK sends a success response
-func (p *NatsPlugin) respondOK(msg *nats.Msg, requestID interface{}) {
+func (p *NatsPlugin) respondOK(msg *nats.Msg, req *PluginRequest, ctx *NylonHttpPluginCtx) {
 	resp := PluginResponse{
 		Version:   ProtocolVersion,
-		RequestID: requestID,
+		RequestID: req.RequestID,
+		SessionID: req.SessionID,
+		Action:    ResponseActionNext,
 	}
-	p.respond(msg, &resp)
+	p.sendResponse(msg, req, ctx, &resp)
 }
 
 // respondError sends an error response
-func (p *NatsPlugin) respondError(msg *nats.Msg, requestID interface{}, errMsg string) {
+func (p *NatsPlugin) respondError(msg *nats.Msg, req *PluginRequest, ctx *NylonHttpPluginCtx, errMsg string) {
 	resp := PluginResponse{
 		Version:   ProtocolVersion,
-		RequestID: requestID,
+		RequestID: req.RequestID,
+		SessionID: req.SessionID,
+		Action:    ResponseActionError,
 		Error:     errMsg,
 	}
-	p.respond(msg, &resp)
+	p.sendResponse(msg, req, ctx, &resp)
 }
 
-// respond sends a response back via NATS
-func (p *NatsPlugin) respond(msg *nats.Msg, resp *PluginResponse) {
+// sendResponse sends a response back via NATS
+func (p *NatsPlugin) sendResponse(msg *nats.Msg, req *PluginRequest, ctx *NylonHttpPluginCtx, resp *PluginResponse) {
+	reply := ""
+	if req != nil && req.Headers != nil {
+		if value, ok := req.Headers["reply"]; ok && value != "" {
+			reply = value
+		}
+	}
+	if reply == "" && ctx != nil {
+		reply = ctx.replySubject
+	}
+	if reply == "" && msg.Reply != "" {
+		reply = msg.Reply
+	}
+
+	if reply == "" {
+		fmt.Printf("[NatsPlugin] No reply subject for response action=%s session=%d\n", resp.Action, resp.SessionID)
+		return
+	}
+
 	data, err := msgpack.Marshal(resp)
 	if err != nil {
 		fmt.Printf("[NatsPlugin] Failed to encode response: %v\n", err)
 		return
 	}
 
-	if err := msg.Respond(data); err != nil {
+	if err := p.conn.Publish(reply, data); err != nil {
 		fmt.Printf("[NatsPlugin] Failed to send response: %v\n", err)
 	}
 }
@@ -505,34 +576,48 @@ func (p *NatsPlugin) Close() error {
 }
 
 // Helper to send NATS request from context (used by request methods)
-func (ctx *NylonHttpPluginCtx) natsRequest(method NylonMethods, data []byte) []byte {
-	if !ctx.natsMode || ctx.natsMsg == nil {
-		return nil
+func (ctx *NylonHttpPluginCtx) natsRequest(method NylonMethods, data []byte) error {
+	if !ctx.natsMode {
+		return fmt.Errorf("nats mode disabled")
 	}
 
-	// Create method request
-	req := PluginResponse{
+	ctx.mu.Lock()
+	conn := ctx.natsConn
+	reply := ctx.replySubject
+	requestID := ctx.lastRequestID
+	sessionID := uint32(ctx.sessionID)
+	ctx.mu.Unlock()
+
+	if conn == nil || reply == "" {
+		return fmt.Errorf("nats context not initialized")
+	}
+
+	methodID, ok := MethodIDMapping[method]
+	if !ok {
+		return fmt.Errorf("unknown method: %s", method)
+	}
+
+	action := ResponseActionNext
+	switch method {
+	case NylonMethodEnd:
+		action = ResponseActionEnd
+	case NylonMethodNext:
+		action = ResponseActionNext
+	}
+
+	resp := PluginResponse{
 		Version:   ProtocolVersion,
-		RequestID: ctx.natsReq.RequestID,
-		Method:    string(method),
+		RequestID: requestID,
+		SessionID: sessionID,
+		Method:    methodID,
+		Action:    action,
 		Data:      data,
 	}
 
-	reqData, err := msgpack.Marshal(&req)
+	payload, err := msgpack.Marshal(&resp)
 	if err != nil {
-		fmt.Printf("[NatsPlugin] Failed to marshal method request: %v\n", err)
-		return nil
+		return err
 	}
 
-	// Send response with method invoke
-	if err := ctx.natsMsg.Respond(reqData); err != nil {
-		fmt.Printf("[NatsPlugin] Failed to send method request: %v\n", err)
-		return nil
-	}
-
-	ctx.natsResponded = true
-
-	// For NATS mode, we don't wait for response here
-	// The response will come in subsequent request
-	return nil
+	return conn.Publish(reply, payload)
 }

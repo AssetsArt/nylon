@@ -2,7 +2,8 @@ use bytes::Bytes;
 use dashmap::DashMap;
 use nylon_error::NylonError;
 use nylon_messaging::{
-    MessageHeaders, MessagingError, MessagingTransport, NatsClient, NatsClientOptions, RetryPolicy, new_request_id,
+    MessageHeaders, MessagingError, MessagingTransport, NatsClient, NatsClientOptions, RetryPolicy,
+    new_request_id,
 };
 use nylon_store::{self, KEY_MESSAGING_CONFIG, KEY_MESSAGING_PLUGINS};
 use nylon_types::context::NylonContext;
@@ -237,19 +238,20 @@ fn build_phase_policies(
     if let Some(configs) = per_phase {
         for (phase, cfg) in configs {
             let default_policy = PhasePolicy::for_phase(*phase);
-            
-            let timeout = cfg.timeout_ms
+
+            let timeout = cfg
+                .timeout_ms
                 .map(Duration::from_millis)
                 .or(default_policy.timeout);
-            
+
             let on_error = cfg.on_error.unwrap_or(default_policy.on_error);
-            
+
             let retry = if cfg.retry.is_some() || base_retry.is_some() {
                 merge_retry_policy(base_retry, cfg.retry.as_ref())
             } else {
                 default_policy.retry
             };
-            
+
             policies.insert(
                 *phase,
                 PhasePolicy {
@@ -312,13 +314,13 @@ async fn send_initialize_message(
     client: &Arc<NatsClient>,
     plugin: Arc<MessagingPlugin>,
 ) -> Result<(), NylonError> {
-    use nylon_messaging::{encode_request, PROTOCOL_VERSION};
-    
+    use nylon_messaging::{PROTOCOL_VERSION, encode_request};
+
     debug!(
         plugin = %plugin.plugin_name(),
         "Sending initialize message to workers"
     );
-    
+
     // Encode config as MessagePack
     let config = serde_json::json!({
         "debug": true,
@@ -328,44 +330,53 @@ async fn send_initialize_message(
     let config_json = serde_json::to_string(&config)
         .map_err(|e| NylonError::RuntimeError(format!("Failed to encode config: {}", e)))?;
     let config_bytes = config_json.into_bytes();
-    
+
     // Build headers
     let mut headers = std::collections::BTreeMap::new();
     headers.insert("type".to_string(), "lifecycle".to_string());
-    
+
     // Create initialize request
     let request = nylon_messaging::PluginRequest {
         version: PROTOCOL_VERSION,
         request_id: new_request_id(),
         session_id: 0,
         phase: 0,
-        method: 0,  // Special method code for initialize
+        method: 0, // Special method code for initialize
         data: config_bytes,
         timestamp: now_unix_millis(),
         headers: Some(headers),
     };
-    
+
     // Add method field to headers
     let mut request_with_method = request;
     if let Some(ref mut headers) = request_with_method.headers {
         headers.insert("method".to_string(), "initialize".to_string());
     }
-    
+
     let payload = encode_request(&request_with_method)
         .map_err(|e| NylonError::RuntimeError(format!("Failed to encode request: {}", e)))?;
-    
+
     // Publish to all phases (workers subscribe to these)
-    let phases = ["request_filter", "response_filter", "response_body_filter", "logging"];
+    let phases = [
+        "request_filter",
+        "response_filter",
+        "response_body_filter",
+        "logging",
+    ];
     for phase in &phases {
         let subject = format!("nylon.plugin.{}.{}", plugin.plugin_name(), phase);
-        
+
         debug!(
             plugin = %plugin.plugin_name(),
             subject = %subject,
             "Publishing initialize to subject"
         );
-        
-        if let Err(e) = client.client().publish(subject.clone(), payload.clone().into()).await {
+
+        if let Err(e) = client
+            .client()
+            .publish(subject.clone(), payload.clone().into())
+            .await
+        {
             debug!(
                 plugin = %plugin.plugin_name(),
                 subject = %subject,
@@ -374,7 +385,7 @@ async fn send_initialize_message(
             );
         }
     }
-    
+
     Ok(())
 }
 
@@ -487,7 +498,7 @@ where
     };
 
     let is_new_session = session_id == 0;
-    
+
     if is_new_session {
         session_id = next_session_id();
         ctx.session_ids
@@ -500,56 +511,52 @@ where
         .client()
         .await
         .map_err(|err| map_messaging_error(&plugin, err))?;
-    
+
     // Create transport and handler with tracing
     let request_id = new_request_id();
-    let trace_id = ctx
-        .params
-        .read()
-        .ok()
-        .and_then(|guard| guard.as_ref().and_then(|map| map.get("x-trace-id").cloned()));
-    
+    let trace_id = ctx.params.read().ok().and_then(|guard| {
+        guard
+            .as_ref()
+            .and_then(|map| map.get("x-trace-id").cloned())
+    });
+
     let trace = TraceMeta {
         request_id: Some(request_id.to_string()),
         trace_id,
         span_id: Some(format!("{}:{}", plugin.plugin_name(), session_id)),
     };
-    
+
     let request_subject = format!(
         "nylon.plugin.{}.{}",
         plugin.plugin_name(),
         phase_subject_fragment(phase.clone())
     );
-    
-    let reply_subject = format!(
-        "nylon.plugin.{}.reply.{}",
-        plugin.plugin_name(),
-        session_id
-    );
-    
+
+    let reply_subject = format!("nylon.plugin.{}.reply.{}", plugin.plugin_name(), session_id);
+
     let transport = MessagingTransport::new(
         trace,
         client.clone(),
         request_subject.clone(),
+        reply_subject.clone(),
         session_id,
         plugin.plugin_name().to_string(),
         entry.to_string(),
     );
-    
+
     // Setup reply subscription
     let setup_result = tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(async {
-            transport.setup_reply_subscription(reply_subject.clone()).await
-        })
+        tokio::runtime::Handle::current()
+            .block_on(async { transport.setup_reply_subscription().await })
     });
-    
+
     if let Err(e) = setup_result {
         return Err(NylonError::RuntimeError(format!(
             "Failed to setup reply subscription: {}",
             e
         )));
     }
-    
+
     let mut handler = TransportSessionHandler::new(transport);
 
     // Send Initialize message for new sessions (fire-and-forget)
@@ -562,20 +569,19 @@ where
             }
         });
     }
-    
+
     // Send start phase event
     let phase_code = phase.clone().to_u8();
     handler
         .start_phase(phase_code)
         .map_err(|e| NylonError::RuntimeError(format!("Failed to start phase: {}", e)))?;
-    
+
     // Flush initial event to NATS
     let flush_result = tokio::task::block_in_place(|| {
-        tokio::runtime::Handle::current().block_on(async {
-            handler.transport_mut().flush_events().await
-        })
+        tokio::runtime::Handle::current()
+            .block_on(async { handler.transport_mut().flush_events().await })
     });
-    
+
     if let Err(e) = flush_result {
         return Err(NylonError::RuntimeError(format!(
             "Failed to flush events: {}",
@@ -584,31 +590,37 @@ where
     }
 
     // Get phase policy for timeout and retry
-    let phase_policy = plugin
-        .per_phase()
-        .get(&MessagingPhase::RequestFilter)
-        .cloned();
-    
+    let phase_policy = match phase {
+        PluginPhase::RequestFilter => plugin.per_phase().get(&MessagingPhase::RequestFilter),
+        PluginPhase::ResponseFilter => plugin.per_phase().get(&MessagingPhase::ResponseFilter),
+        PluginPhase::ResponseBodyFilter => {
+            plugin.per_phase().get(&MessagingPhase::ResponseBodyFilter)
+        }
+        PluginPhase::Logging => plugin.per_phase().get(&MessagingPhase::Logging),
+        PluginPhase::Zero => None,
+    }
+    .cloned();
+
     let timeout_ms = phase_policy
         .as_ref()
         .and_then(|p| p.timeout.map(|d| d.as_millis() as u64))
         .unwrap_or(5000);
-    
+
     let on_error = phase_policy
         .as_ref()
         .map(|p| p.on_error)
         .unwrap_or(MessagingOnError::Retry);
-    
+
     // Process loop with retry support
     let mut attempts = 0;
     let max_attempts = phase_policy
         .as_ref()
         .map(|p| p.retry.max_attempts)
         .unwrap_or(1);
-    
+
     loop {
         attempts += 1;
-        
+
         match handler.process_loop(timeout_ms) {
             Ok(crate::transport_handler::PluginLoopResult::Invoke(inv)) => {
                 // Received method invoke from plugin
@@ -618,10 +630,11 @@ where
                     data_len = inv.data.len(),
                     "received invoke in messaging transport"
                 );
-                
+
                 // Process method invoke
                 match crate::messaging_methods::process_messaging_method(
                     proxy,
+                    &mut handler,
                     inv,
                     ctx,
                     session,
@@ -662,23 +675,26 @@ where
                                     "retrying after error"
                                 );
                                 // Reset handler for retry
-                                handler
-                                    .start_phase(phase_code)
-                                    .map_err(|e| NylonError::RuntimeError(format!("Failed to start phase on retry: {}", e)))?;
-                                
+                                handler.start_phase(phase_code).map_err(|e| {
+                                    NylonError::RuntimeError(format!(
+                                        "Failed to start phase on retry: {}",
+                                        e
+                                    ))
+                                })?;
+
                                 let flush_result = tokio::task::block_in_place(|| {
                                     tokio::runtime::Handle::current().block_on(async {
                                         handler.transport_mut().flush_events().await
                                     })
                                 });
-                                
+
                                 if let Err(e) = flush_result {
                                     return Err(NylonError::RuntimeError(format!(
                                         "Failed to flush events on retry: {}",
                                         e
                                     )));
                                 }
-                                
+
                                 continue;
                             }
                         }
@@ -695,7 +711,7 @@ where
                     );
                     return Ok(crate::types::PluginResult::default());
                 }
-                
+
                 // Retry on timeout if policy allows
                 match on_error {
                     MessagingOnError::Retry => {
@@ -718,7 +734,7 @@ where
                         attempts, e
                     )));
                 }
-                
+
                 debug!(
                     plugin = %plugin.plugin_name(),
                     error = %e,

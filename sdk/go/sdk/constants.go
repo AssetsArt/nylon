@@ -111,6 +111,20 @@ var MethodIDMapping = map[NylonMethods]uint32{
 	NylonMethodWebSocketOnError:             354,
 }
 
+var methodNameByID map[uint32]NylonMethods
+
+func init() {
+	methodNameByID = make(map[uint32]NylonMethods, len(MethodIDMapping))
+	for name, id := range MethodIDMapping {
+		methodNameByID[id] = name
+	}
+}
+
+func methodNameFromID(id uint32) (NylonMethods, bool) {
+	name, ok := methodNameByID[id]
+	return name, ok
+}
+
 const (
 	StatusOK                  = 200
 	StatusFound               = 302

@@ -23,9 +23,9 @@ type NylonHttpPluginCtx struct {
 
 	// NATS mode
 	natsMode      bool
-	natsMsg       *nats.Msg
-	natsReq       *PluginRequest
-	natsResponded bool
+	lastRequestID interface{}
+	natsConn      *nats.Conn
+	replySubject  string
 }
 
 type Headers struct {

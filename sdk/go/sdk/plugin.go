@@ -258,6 +258,10 @@ func RequestMethod(sessionID int32, phase int8, method NylonMethods, data []byte
 	if !ok {
 		return fmt.Errorf("invalid callback type for session %d", sessionID)
 	}
+
+	if phaseHandler.natsMode {
+		return phaseHandler.http_ctx.natsRequest(method, data)
+	}
 	cb := phaseHandler.cb
 	var dataPtr *C.uchar
 	var poolSize int
