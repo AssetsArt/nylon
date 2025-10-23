@@ -18,29 +18,41 @@ pub enum ResponseAction {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginRequest {
+    #[serde(rename = "version")]
     pub version: u16,
+    #[serde(rename = "request_id")]
     pub request_id: RequestId,
+    #[serde(rename = "session_id")]
     pub session_id: u32,
+    #[serde(rename = "phase")]
     pub phase: u8,
+    #[serde(rename = "method")]
     pub method: u32,
+    #[serde(rename = "data")]
     pub data: Vec<u8>,
+    #[serde(rename = "timestamp")]
     pub timestamp: u64,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "headers", default, skip_serializing_if = "Option::is_none")]
     pub headers: Option<MessageHeaders>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PluginResponse {
+    #[serde(rename = "version")]
     pub version: u16,
+    #[serde(rename = "request_id")]
     pub request_id: RequestId,
+    #[serde(rename = "session_id")]
     pub session_id: u32,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "method", default, skip_serializing_if = "Option::is_none")]
     pub method: Option<u32>,
+    #[serde(rename = "action")]
     pub action: ResponseAction,
+    #[serde(rename = "data")]
     pub data: Vec<u8>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "error", default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "headers", default, skip_serializing_if = "Option::is_none")]
     pub headers: Option<MessageHeaders>,
 }
 
@@ -61,7 +73,7 @@ pub fn decode_request(bytes: &[u8]) -> Result<PluginRequest, ProtocolError> {
 }
 
 pub fn encode_response(response: &PluginResponse) -> Result<Vec<u8>, ProtocolError> {
-    Ok(rmp_serde::to_vec(response)?)
+    Ok(rmp_serde::to_vec_named(response)?)
 }
 
 pub fn decode_response(bytes: &[u8]) -> Result<PluginResponse, ProtocolError> {
@@ -69,5 +81,5 @@ pub fn decode_response(bytes: &[u8]) -> Result<PluginResponse, ProtocolError> {
 }
 
 pub fn encode_request(request: &PluginRequest) -> Result<Vec<u8>, ProtocolError> {
-    Ok(rmp_serde::to_vec(request)?)
+    Ok(rmp_serde::to_vec_named(request)?)
 }

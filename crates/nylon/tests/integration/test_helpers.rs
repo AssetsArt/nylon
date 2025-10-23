@@ -2,7 +2,6 @@
 
 use futures::StreamExt;
 use nylon_messaging::{NatsClient, NatsClientOptions};
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -27,6 +26,7 @@ pub async fn test_request(
     Ok(response)
 }
 
+#[allow(dead_code)]
 pub async fn test_publish(
     client: &NatsClient,
     subject: &str,
@@ -112,14 +112,17 @@ pub fn wait_for_workers() -> Duration {
     Duration::from_millis(500)
 }
 
+#[allow(dead_code)]
 pub fn short_timeout() -> Duration {
     Duration::from_millis(500)
 }
 
+#[allow(dead_code)]
 pub fn medium_timeout() -> Duration {
     Duration::from_secs(2)
 }
 
+#[allow(dead_code)]
 pub fn long_timeout() -> Duration {
     Duration::from_secs(5)
 }

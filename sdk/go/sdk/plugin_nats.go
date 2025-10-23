@@ -52,10 +52,10 @@ type PluginRequest struct {
 	RequestID interface{}       `msgpack:"request_id"` // Can be string or u128
 	SessionID uint32            `msgpack:"session_id"`
 	Phase     uint8             `msgpack:"phase"`
-	Method    uint32            `msgpack:"method,omitempty"`
-	Data      []byte            `msgpack:"data,omitempty"`
+	Method    uint32            `msgpack:"method"`
+	Data      []byte            `msgpack:"data"`
+	Timestamp uint64            `msgpack:"timestamp"`
 	Headers   map[string]string `msgpack:"headers,omitempty"`
-	Timestamp uint64            `msgpack:"timestamp,omitempty"`
 }
 
 // PluginResponse represents a response to Nylon
@@ -71,10 +71,10 @@ type PluginResponse struct {
 	Version   uint16            `msgpack:"version"`
 	RequestID interface{}       `msgpack:"request_id"`
 	SessionID uint32            `msgpack:"session_id"`
-	Method    uint32            `msgpack:"method,omitempty"`
+	Method    *uint32           `msgpack:"method,omitempty"`
 	Action    ResponseAction    `msgpack:"action"`
-	Data      []byte            `msgpack:"data,omitempty"`
-	Error     string            `msgpack:"error,omitempty"`
+	Data      []byte            `msgpack:"data"`
+	Error     *string           `msgpack:"error,omitempty"`
 	Headers   map[string]string `msgpack:"headers,omitempty"`
 }
 
@@ -170,19 +170,25 @@ func (p *NatsPlugin) AddPhaseHandler(phaseName string, handler func(phase *Phase
 
 // Start begins listening for NATS messages
 func (p *NatsPlugin) Start() error {
+	// Check if already started
 	p.mu.Lock()
-
 	if p.started {
 		p.mu.Unlock()
 		return fmt.Errorf("plugin already started")
 	}
+	p.mu.Unlock()
 
+	// Connect without holding the lock (Connect has its own lock)
 	if p.conn == nil {
 		if err := p.Connect(); err != nil {
-			p.mu.Unlock()
+			fmt.Printf("[NatsPlugin] Failed to connect to NATS: %v\n", err)
 			return err
 		}
 	}
+	fmt.Printf("[NatsPlugin] Connected to NATS: %s\n", p.config.Servers[0])
+
+	// Lock again for subscription setup
+	p.mu.Lock()
 
 	// Subscribe to all phases with queue group
 	phases := []string{"request_filter", "response_filter", "response_body_filter", "logging"}
@@ -203,9 +209,7 @@ func (p *NatsPlugin) Start() error {
 
 	// Subscribe to lifecycle subject WITHOUT queue group so all workers receive it
 	lifecycleSubject := fmt.Sprintf("%s.%s.lifecycle", p.config.SubjectPrefix, p.config.Name)
-	lifecycleSub, err := p.conn.Subscribe(lifecycleSubject, func(msg *nats.Msg) {
-		p.handleMessage(msg)
-	})
+	lifecycleSub, err := p.conn.Subscribe(lifecycleSubject, p.handleMessage)
 	if err != nil {
 		p.mu.Unlock()
 		return fmt.Errorf("failed to subscribe to %s: %w", lifecycleSubject, err)
@@ -227,11 +231,12 @@ func (p *NatsPlugin) handleMessage(msg *nats.Msg) {
 	// Decode request
 	var req PluginRequest
 	if err := msgpack.Unmarshal(msg.Data, &req); err != nil {
-		fmt.Printf("[NatsPlugin] Failed to decode request: %v (data len: %d)\n", err, len(msg.Data))
+		fmt.Printf("[NatsPlugin] Failed to decode request: %v\n", err)
 		// Try to respond with error even if decode failed
+		errStr := fmt.Sprintf("decode error: %v", err)
 		errorResp := PluginResponse{
 			Version: ProtocolVersion,
-			Error:   fmt.Sprintf("decode error: %v", err),
+			Error:   &errStr,
 		}
 		if data, err := msgpack.Marshal(errorResp); err == nil {
 			msg.Respond(data)
@@ -518,7 +523,7 @@ func (p *NatsPlugin) respondError(msg *nats.Msg, req *PluginRequest, ctx *NylonH
 		RequestID: req.RequestID,
 		SessionID: req.SessionID,
 		Action:    ResponseActionError,
-		Error:     errMsg,
+		Error:     &errMsg,
 	}
 	p.sendResponse(msg, req, ctx, &resp)
 }
@@ -619,7 +624,7 @@ func (ctx *NylonHttpPluginCtx) natsRequest(method NylonMethods, data []byte) err
 		Version:   ProtocolVersion,
 		RequestID: requestID,
 		SessionID: sessionID,
-		Method:    methodID,
+		Method:    &methodID,
 		Action:    action,
 		Data:      data,
 	}

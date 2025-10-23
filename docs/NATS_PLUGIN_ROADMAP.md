@@ -327,13 +327,60 @@ Retry logic follows `PhasePolicy.retry` and `on_error`:
 - [ ] Update customer-facing docs and sample repositories.
 - [ ] Promote the feature flag to production defaults once confidence targets are met.
 
+## Recent Fixes
+
+### MessagePack Protocol Compatibility (October 2024)
+**Issue**: Go SDK was receiving MessagePack decoding errors (`msgpack: invalid code=dc decoding string/bytes length`)
+
+**Root Causes**:
+1. **Struct field ordering**: Rust had `timestamp` before `headers`, Go had them reversed
+2. **`omitempty` tags**: Go used `omitempty` on `method` and `data`, but Rust didn't
+3. **Serialization format**: Rust's `rmp_serde::to_vec()` serializes structs as **MessagePack arrays** `[v1, v2, ...]`, but Go's `msgpack` tags expect **MessagePack maps** `{field: value, ...}`
+
+**Fixes**:
+```go
+// Before (WRONG):
+type PluginRequest struct {
+    // ...
+    Method    uint32            `msgpack:"method,omitempty"`
+    Data      []byte            `msgpack:"data,omitempty"`
+    Headers   map[string]string `msgpack:"headers,omitempty"`
+    Timestamp uint64            `msgpack:"timestamp,omitempty"`
+}
+
+// After (CORRECT):
+type PluginRequest struct {
+    // ...
+    Method    uint32            `msgpack:"method"`
+    Data      []byte            `msgpack:"data"`
+    Timestamp uint64            `msgpack:"timestamp"`
+    Headers   map[string]string `msgpack:"headers,omitempty"`
+}
+```
+
+```rust
+// Rust side - Force MessagePack map format (not array):
+pub fn encode_request(request: &PluginRequest) -> Result<Vec<u8>, ProtocolError> {
+    Ok(rmp_serde::to_vec_named(request)?)  // Use to_vec_named, NOT to_vec!
+}
+```
+
+**Verification**: All 18 integration tests pass after fix. 
+
+**Lessons Learned**:
+1. **Field order matters**: Even with named fields, maintaining consistent order helps debugging
+2. **Serialization format matters**: `rmp_serde::to_vec()` creates **arrays**, `to_vec_named()` creates **maps** with field names
+3. **Always test with real data**: Hex dumps revealed the array format (`98` = fixarray) vs expected map format (`8X` = fixmap)
+4. **Go `msgpack` tags require map format**: Go's `msgpack:"field_name"` tags expect MessagePack maps, not arrays
+
 ## Next Immediate Steps
 
 1. ✅ ~~**Complete Go SDK NATS Transport**~~ - COMPLETED
 2. ✅ ~~**Implement Read Methods**~~ - COMPLETED (all 18 read methods working)
 3. ✅ ~~**Integration Tests**~~ - COMPLETED (18 tests passing)
-4. **Metrics & Observability** - Export prometheus metrics for retries, timeouts, latency
-5. **Load Testing** - Benchmark throughput and latency vs FFI baseline
-6. **Documentation** - Update examples and quick start guides
-7. **Failure Simulations** - Test auto-reconnect, timeout handling, and deduplication
-8. **Production Hardening** - Circuit breakers, DLQ, graceful shutdown
+4. ✅ ~~**Fix MessagePack Protocol Compatibility**~~ - COMPLETED
+5. **Metrics & Observability** - Export prometheus metrics for retries, timeouts, latency
+6. **Load Testing** - Benchmark throughput and latency vs FFI baseline
+7. **Documentation** - Update examples and quick start guides
+8. **Failure Simulations** - Test auto-reconnect, timeout handling, and deduplication
+9. **Production Hardening** - Circuit breakers, DLQ, graceful shutdown
