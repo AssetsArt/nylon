@@ -3,12 +3,14 @@
 
 pub mod cache;
 pub mod constants;
+pub mod ffi_transport;
 pub mod loaders;
 pub mod messaging;
 mod native;
 pub mod plugin_manager;
 pub mod session_handler;
 pub mod stream;
+pub mod transport_handler;
 pub mod types;
 
 use crate::constants::methods;

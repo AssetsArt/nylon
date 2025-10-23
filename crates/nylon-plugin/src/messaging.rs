@@ -2,8 +2,7 @@ use bytes::Bytes;
 use dashmap::DashMap;
 use nylon_error::NylonError;
 use nylon_messaging::{
-    MessageHeaders, MessagingError, NatsClient, NatsClientOptions, PROTOCOL_VERSION,
-    ResponseAction, RetryPolicy, decode_response, encode_request, new_request_id,
+    MessageHeaders, MessagingError, MessagingTransport, NatsClient, NatsClientOptions, RetryPolicy, new_request_id,
 };
 use nylon_store::{self, KEY_MESSAGING_CONFIG, KEY_MESSAGING_PLUGINS};
 use nylon_types::context::NylonContext;
@@ -12,6 +11,7 @@ use nylon_types::plugins::{
     MessagingTlsConfig, OverflowPolicy, PluginItem, PluginPhase, RetryPolicyConfig,
 };
 use nylon_types::template::Expr;
+use nylon_types::transport::TraceMeta;
 use once_cell::sync::OnceCell;
 use pingora::proxy::{ProxyHttp, Session};
 use std::{
@@ -24,7 +24,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::sync::Mutex;
-use tracing::{debug, warn};
+use tracing::debug;
+
+use crate::transport_handler::TransportSessionHandler;
 
 #[derive(Clone, Debug)]
 pub struct PhasePolicy {
@@ -217,6 +219,7 @@ fn apply_retry_config(policy: &mut RetryPolicy, config: &RetryPolicyConfig) {
     }
 }
 
+#[allow(dead_code)]
 fn phase_subject_fragment(phase: PluginPhase) -> &'static str {
     match phase {
         PluginPhase::Zero => "zero",
@@ -227,6 +230,7 @@ fn phase_subject_fragment(phase: PluginPhase) -> &'static str {
     }
 }
 
+#[allow(dead_code)]
 fn now_unix_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -242,6 +246,7 @@ fn map_messaging_error(plugin: &MessagingPlugin, err: MessagingError) -> NylonEr
     ))
 }
 
+#[allow(dead_code)]
 fn map_protocol_error(plugin: &MessagingPlugin, err: nylon_messaging::ProtocolError) -> NylonError {
     NylonError::RuntimeError(format!(
         "Messaging plugin '{}' protocol error: {}",
@@ -343,76 +348,44 @@ where
             .insert(key.clone(), session_id);
     }
 
-    let client = plugin
+    let _client = plugin
         .client()
         .await
         .map_err(|err| map_messaging_error(&plugin, err))?;
 
-    let request_id = new_request_id();
-
-    let phase_code = phase.clone().to_u8();
-    let request = nylon_messaging::PluginRequest {
-        version: PROTOCOL_VERSION,
-        request_id,
-        session_id,
-        phase: phase_code,
-        method: 0,
-        data: Vec::new(),
-        timestamp: now_unix_millis(),
-        headers: None,
+    // Phase 1: Create transport and handler
+    let trace = TraceMeta {
+        request_id: Some(new_request_id().to_string()),
+        trace_id: None,
+        span_id: None,
     };
+    let transport = MessagingTransport::new(trace);
+    let mut handler = TransportSessionHandler::new(transport);
 
-    let payload = encode_request(&request).map_err(|err| map_protocol_error(&plugin, err))?;
+    // Send start phase event
+    let phase_code = phase.clone().to_u8();
+    handler
+        .start_phase(phase_code)
+        .map_err(|e| NylonError::RuntimeError(format!("Failed to start phase: {}", e)))?;
 
-    let subject = format!(
-        "nylon.plugin.{}.{}",
-        plugin.plugin_name(),
-        phase_subject_fragment(phase)
-    );
-
-    let response_bytes = client
-        .request(&subject, &payload, None)
-        .await
-        .map_err(|err| map_messaging_error(&plugin, err))?;
-
-    let response =
-        decode_response(&response_bytes).map_err(|err| map_protocol_error(&plugin, err))?;
-
-    if response.version != PROTOCOL_VERSION {
-        warn!(
-            plugin = %plugin.plugin_name(),
-            expected = PROTOCOL_VERSION,
-            actual = response.version,
-            "Messaging protocol version mismatch"
-        );
-    }
-
-    if response.request_id != request_id {
-        warn!(
-            plugin = %plugin.plugin_name(),
-            expected = %request_id,
-            actual = %response.request_id,
-            "Messaging response request_id mismatch"
-        );
-    }
-
-    match response.action {
-        ResponseAction::Next => {
-            if let Some(method) = response.method {
-                debug!(
-                    plugin = %plugin.plugin_name(),
-                    method,
-                    data_len = response.data.len(),
-                    "received messaging method without executor (TODO)"
-                );
-            }
+    // Simple process loop with timeout (5 seconds)
+    let timeout_ms = 5000;
+    match handler.process_loop(timeout_ms) {
+        Ok(crate::transport_handler::PluginLoopResult::Invoke(_inv)) => {
+            // Phase 1: No invoke processing yet, just return default
+            debug!(
+                plugin = %plugin.plugin_name(),
+                "received invoke in messaging transport (processing TODO)"
+            );
             Ok(crate::types::PluginResult::default())
         }
-        ResponseAction::End => Ok(crate::types::PluginResult::new(true, false)),
-        ResponseAction::Error => {
-            Err(NylonError::RuntimeError(response.error.unwrap_or_else(
-                || "messaging plugin returned error".to_string(),
-            )))
+        Ok(crate::transport_handler::PluginLoopResult::Timeout) => {
+            // Timeout reached, return default result
+            Ok(crate::types::PluginResult::default())
         }
+        Err(e) => Err(NylonError::RuntimeError(format!(
+            "Transport error: {}",
+            e
+        ))),
     }
 }

@@ -5,6 +5,7 @@ pub mod route;
 pub mod services;
 pub mod template;
 pub mod tls;
+pub mod transport;
 pub mod websocket;
 
 /// Nylon runtime server instance
