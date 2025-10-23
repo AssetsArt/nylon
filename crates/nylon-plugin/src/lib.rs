@@ -48,36 +48,19 @@ where
     let handle = PluginManager::get_plugin(plugin_name)?;
     match handle {
         PluginHandle::Ffi(plugin) => {
-            // Optional: Use transport-based FFI path if env var is set
-            if std::env::var("NYLON_USE_FFI_TRANSPORT").is_ok() {
-                run_ffi_session_with_transport(
-                    proxy,
-                    plugin_name,
-                    phase,
-                    entry,
-                    ctx,
-                    session,
-                    payload,
-                    payload_ast,
-                    response_body,
-                    plugin,
-                )
-                .await
-            } else {
-                run_ffi_session(
-                    proxy,
-                    plugin_name,
-                    phase,
-                    entry,
-                    ctx,
-                    session,
-                    payload,
-                    payload_ast,
-                    response_body,
-                    plugin,
-                )
-                .await
-            }
+            run_ffi_session(
+                proxy,
+                plugin_name,
+                phase,
+                entry,
+                ctx,
+                session,
+                payload,
+                payload_ast,
+                response_body,
+                plugin,
+            )
+            .await
         }
         PluginHandle::Messaging(plugin) => {
             messaging::execute_session(
@@ -94,112 +77,6 @@ where
             )
             .await
         }
-    }
-}
-
-/// Run FFI session using transport abstraction (simplified path)
-#[allow(dead_code)]
-async fn run_ffi_session_with_transport<T>(
-    proxy: &T,
-    plugin_name: &str,
-    phase: PluginPhase,
-    entry: &str,
-    ctx: &mut NylonContext,
-    session: &mut Session,
-    payload: &Option<serde_json::Value>,
-    payload_ast: &Option<HashMap<String, Vec<Expr>>>,
-    response_body: &Option<Bytes>,
-    plugin: Arc<FfiPlugin>,
-) -> Result<PluginResult, NylonError>
-where
-    T: ProxyHttp + Send + Sync,
-    <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
-{
-    use crate::ffi_transport::FfiTransport;
-    use crate::transport_handler::{TransportSessionHandler, PluginLoopResult};
-    use nylon_types::transport::TraceMeta;
-    
-    let key = format!("{}-{}", plugin_name, entry);
-    let mut session_id = {
-        let map = ctx
-            .session_ids
-            .read()
-            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
-        *map.get(&key).unwrap_or(&0)
-    };
-    
-    let session_stream;
-    {
-        let map = ctx
-            .session_stream
-            .read()
-            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
-        if let Some(ss) = map.get(&key) {
-            session_stream = ss.clone();
-        } else {
-            drop(map);
-            let ss = SessionStream::new(plugin.clone(), session_id);
-            let mut w = ctx
-                .session_stream
-                .write()
-                .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?;
-            w.insert(key.clone(), ss.clone());
-            session_stream = ss;
-        }
-    }
-    
-    if session_id == 0 {
-        let new_session_id = session_stream.open(entry).await?;
-        session_id = new_session_id;
-        ctx.session_ids
-            .write()
-            .map_err(|_| NylonError::InternalServerError("lock poisoned".into()))?
-            .insert(key.clone(), new_session_id);
-    }
-    
-    let rx_arc = get_rx(session_id)?;
-    
-    // Create FfiTransport
-    let trace = TraceMeta {
-        request_id: None,
-        trace_id: None,
-        span_id: None,
-    };
-    let transport = FfiTransport::new(session_stream.clone(), rx_arc, trace);
-    let mut handler = TransportSessionHandler::new(transport);
-    
-    // Send start phase event
-    handler
-        .start_phase(phase.to_u8())
-        .map_err(|e| NylonError::RuntimeError(format!("Failed to start phase: {}", e)))?;
-    
-    // Process loop with timeout
-    const TIMEOUT_MS: u64 = 30000; // 30 seconds default
-    match handler.process_loop(TIMEOUT_MS) {
-        Ok(PluginLoopResult::Invoke(inv)) => {
-            // Process method invoke
-            if let Some(result) = SessionHandler::process_method(
-                proxy,
-                inv.method,
-                inv.data,
-                ctx,
-                session,
-                &session_stream,
-                payload,
-                payload_ast,
-                response_body,
-            )
-            .await?
-            {
-                return Ok(result);
-            }
-            Ok(PluginResult::default())
-        }
-        Ok(PluginLoopResult::Timeout) => Ok(PluginResult::default()),
-        Err(e) => Err(NylonError::RuntimeError(format!(
-            "Transport error: {}",
-            e
-        ))),
     }
 }
 

@@ -8,21 +8,23 @@
 
 ## Current Status (December 2024)
 
-### ✅ Completed (Phase 1-3)
+### ✅ Completed (Phase 1-4)
 - ✅ **Transport Abstraction**: `PluginTransport` trait with `TransportEvent`, `TransportInvoke`, and `TraceMeta` in `nylon-types/src/transport.rs`
 - ✅ **NATS Messaging Crate**: `crates/nylon-messaging` with `NatsClient`, `MessagingTransport`, protocol types, and MessagePack serialization
 - ✅ **Runtime Integration**: Nylon routes plugin sessions through either FFI or messaging via unified transport layer
 - ✅ **Method Processing**: Dispatcher for NATS invokes with support for control and response write methods
 - ✅ **Retry Logic**: Full retry support with `PhasePolicy` (max_attempts, backoff, on_error policies)
+- ✅ **Smart Defaults**: Production-ready defaults for all phases (no config required)
 - ✅ **Error Handling**: Comprehensive error handling with Continue/End/Retry strategies
 - ✅ **Tracing**: Request ID, trace ID propagation, and span tracking per plugin session
 - ✅ **Configuration**: Parse and validate `messaging:` blocks, store in `KEY_MESSAGING_PLUGINS`
-- ✅ **FFI Transport Path**: Optional transport-based FFI path via `NYLON_USE_FFI_TRANSPORT` env var
+- ✅ **Go SDK NATS Transport**: `NewNylonNatsPlugin()` with NATS queue groups, request-reply pattern, and MessagePack serialization
+- ✅ **Backward Compatibility**: FFI `NewNylonPlugin()` still works; NATS uses `NewNylonNatsPlugin()` - no breaking changes
 
 ### 🚧 In Progress
 - 🚧 **Read Methods**: Response data flow for messaging transport (GET_PAYLOAD, READ_REQUEST_*, READ_RESPONSE_*)
-- 🚧 **Go SDK Transport**: NATS backend implementation for Go SDK
 - 🚧 **Integration Tests**: End-to-end tests with NATS broker
+- 🚧 **Entry Name Support**: Extract entry name from request headers in NATS plugin
 
 ### ⏳ Not Started
 - ⏳ **WebSocket Support**: WebSocket methods over NATS (see `docs/WEBSOCKET_NATS_DESIGN.md`)

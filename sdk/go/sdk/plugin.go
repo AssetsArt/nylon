@@ -307,6 +307,7 @@ type PhaseHandler struct {
 	SessionId          int32
 	cb                 C.data_event_fn
 	http_ctx           *NylonHttpPluginCtx
+	natsMode           bool
 	requestFilter      func(ctx *PhaseRequestFilter)
 	responseFilter     func(ctx *PhaseResponseFilter)
 	responseBodyFilter func(ctx *PhaseResponseBodyFilter)

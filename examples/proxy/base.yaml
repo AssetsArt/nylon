@@ -1,11 +1,32 @@
 header_selector: x-nylon-proxy
 
+# NATS messaging configuration (optional)
+messaging:
+  - name: default
+    servers:
+      - nats://localhost:4222
+    # Optional: override defaults
+    # request_timeout_ms: 5000
+    # max_inflight: 1024
+
 plugins:
+  # FFI Plugin (in-process, low latency)
   - name: plugin_sdk
     type: ffi
     file: ./target/examples/go/plugin_sdk.so
     config:
       debug: true
+  
+  # NATS Plugin (distributed, scalable) - uncomment to use
+  # - name: plugin_nats
+  #   messaging: default
+  #   group: my-workers
+  #   config:
+  #     debug: true
+  #   # Optional: per-phase overrides
+  #   # per_phase:
+  #   #   request_filter:
+  #   #     timeout_ms: 8000
 
 services:
   # Http service
@@ -91,3 +112,11 @@ middleware_groups:
       payload:
         client_ip: "${request(client_ip)}"
         user_id: "${header(x-user-id)}"
+  
+  # Authorization example using NATS plugin (uncomment to use)
+  # auth_nats:
+  #   - plugin: plugin_nats
+  #     entry: "authz"
+  #     payload:
+  #       client_ip: "${request(client_ip)}"
+  #       user_id: "${header(x-user-id)}"

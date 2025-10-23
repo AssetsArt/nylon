@@ -2,6 +2,8 @@ package sdk
 
 import (
 	"sync"
+
+	"github.com/nats-io/nats.go"
 )
 
 type HttpPluginFunc func(ctx *NylonHttpPluginCtx)
@@ -18,6 +20,12 @@ type NylonHttpPluginCtx struct {
 	// WebSocket state
 	wsCallbacks *WebSocketCallbacks
 	wsUpgraded  bool
+
+	// NATS mode
+	natsMode      bool
+	natsMsg       *nats.Msg
+	natsReq       *PluginRequest
+	natsResponded bool
 }
 
 type Headers struct {
