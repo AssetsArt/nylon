@@ -61,6 +61,11 @@ impl<T: PluginTransport> TransportSessionHandler<T> {
     pub fn transport(&self) -> &T {
         &self.transport
     }
+    
+    /// Get mutable transport reference
+    pub fn transport_mut(&mut self) -> &mut T {
+        &mut self.transport
+    }
 }
 
 /// Result of process loop

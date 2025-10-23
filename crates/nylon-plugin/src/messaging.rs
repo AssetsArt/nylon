@@ -219,7 +219,6 @@ fn apply_retry_config(policy: &mut RetryPolicy, config: &RetryPolicyConfig) {
     }
 }
 
-#[allow(dead_code)]
 fn phase_subject_fragment(phase: PluginPhase) -> &'static str {
     match phase {
         PluginPhase::Zero => "zero",
@@ -348,18 +347,52 @@ where
             .insert(key.clone(), session_id);
     }
 
-    let _client = plugin
+    let client = plugin
         .client()
         .await
         .map_err(|err| map_messaging_error(&plugin, err))?;
 
-    // Phase 1: Create transport and handler
+    // Create transport and handler
     let trace = TraceMeta {
         request_id: Some(new_request_id().to_string()),
         trace_id: None,
         span_id: None,
     };
-    let transport = MessagingTransport::new(trace);
+    
+    let request_subject = format!(
+        "nylon.plugin.{}.{}",
+        plugin.plugin_name(),
+        phase_subject_fragment(phase.clone())
+    );
+    
+    let reply_subject = format!(
+        "nylon.plugin.{}.reply.{}",
+        plugin.plugin_name(),
+        session_id
+    );
+    
+    let transport = MessagingTransport::new(
+        trace,
+        client.clone(),
+        request_subject.clone(),
+        session_id,
+        plugin.plugin_name().to_string(),
+    );
+    
+    // Setup reply subscription
+    let setup_result = tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            transport.setup_reply_subscription(reply_subject.clone()).await
+        })
+    });
+    
+    if let Err(e) = setup_result {
+        return Err(NylonError::RuntimeError(format!(
+            "Failed to setup reply subscription: {}",
+            e
+        )));
+    }
+    
     let mut handler = TransportSessionHandler::new(transport);
 
     // Send start phase event
@@ -367,20 +400,48 @@ where
     handler
         .start_phase(phase_code)
         .map_err(|e| NylonError::RuntimeError(format!("Failed to start phase: {}", e)))?;
+    
+    // Flush initial event to NATS
+    let flush_result = tokio::task::block_in_place(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            handler.transport_mut().flush_events().await
+        })
+    });
+    
+    if let Err(e) = flush_result {
+        return Err(NylonError::RuntimeError(format!(
+            "Failed to flush events: {}",
+            e
+        )));
+    }
 
-    // Simple process loop with timeout (5 seconds)
-    let timeout_ms = 5000;
+    // Process loop with timeout (from phase policy or default 5 seconds)
+    let timeout_ms = plugin
+        .per_phase()
+        .get(&MessagingPhase::RequestFilter)
+        .and_then(|p| p.timeout.map(|d| d.as_millis() as u64))
+        .unwrap_or(5000);
+    
     match handler.process_loop(timeout_ms) {
-        Ok(crate::transport_handler::PluginLoopResult::Invoke(_inv)) => {
-            // Phase 1: No invoke processing yet, just return default
+        Ok(crate::transport_handler::PluginLoopResult::Invoke(inv)) => {
+            // Received method invoke from plugin
             debug!(
                 plugin = %plugin.plugin_name(),
-                "received invoke in messaging transport (processing TODO)"
+                method = inv.method,
+                data_len = inv.data.len(),
+                "received invoke in messaging transport"
             );
+            
+            // TODO: Process method invoke (call SessionHandler::process_method equivalent)
+            // For now, just return default to continue
             Ok(crate::types::PluginResult::default())
         }
         Ok(crate::transport_handler::PluginLoopResult::Timeout) => {
             // Timeout reached, return default result
+            debug!(
+                plugin = %plugin.plugin_name(),
+                "messaging transport timeout"
+            );
             Ok(crate::types::PluginResult::default())
         }
         Err(e) => Err(NylonError::RuntimeError(format!(
