@@ -8,7 +8,7 @@ nylon-types = { path = "../nylon-types" }
 nylon-error = { path = "../nylon-error" }
 nylon-store = { path = "../nylon-store" }
 nylon-sdk = { path = "../../sdk/rust" }
-nylon-messaging = { path = "../nylon-messaging" }
+nylon-messaging = { path = "../nylon-messaging", optional = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 pingora = { workspace = true }
@@ -25,3 +25,7 @@ sha1 = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 libc = { workspace = true }
+
+[features]
+default = ["messaging"]
+messaging = ["nylon-messaging"]

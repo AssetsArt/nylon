@@ -12,6 +12,7 @@ nylon-store = { path = "../nylon-store" }
 nylon-plugin = { path = "../nylon-plugin" }
 nylon-tls = { path = "../nylon-tls" }
 nylon-sdk = { path = "../../sdk/rust" }
+nylon-messaging = { path = "../nylon-messaging", optional = true }
 tracing-subscriber = { workspace = true }
 tracing = { workspace = true }
 pingora = { workspace = true }
@@ -25,3 +26,11 @@ flatbuffers = { workspace = true }
 dashmap = { workspace = true }
 mime_guess = { workspace = true }
 fastrand = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+futures = { workspace = true }
+
+[features]
+default = []
+messaging = ["nylon-messaging", "nylon-plugin/messaging"]
