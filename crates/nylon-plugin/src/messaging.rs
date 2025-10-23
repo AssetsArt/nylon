@@ -35,6 +35,67 @@ pub struct PhasePolicy {
     pub retry: RetryPolicy,
 }
 
+impl Default for PhasePolicy {
+    fn default() -> Self {
+        Self {
+            timeout: Some(Duration::from_millis(5000)),
+            on_error: MessagingOnError::Retry,
+            retry: RetryPolicy::default(),
+        }
+    }
+}
+
+impl PhasePolicy {
+    /// Default policy for request_filter phase
+    pub fn request_filter_default() -> Self {
+        Self {
+            timeout: Some(Duration::from_millis(5000)),
+            on_error: MessagingOnError::Retry,
+            retry: RetryPolicy {
+                max_attempts: 3,
+                backoff_initial: Duration::from_millis(100),
+                backoff_max: Duration::from_millis(1000),
+            },
+        }
+    }
+
+    /// Default policy for response_filter phase
+    pub fn response_filter_default() -> Self {
+        Self {
+            timeout: Some(Duration::from_millis(3000)),
+            on_error: MessagingOnError::Continue,
+            retry: RetryPolicy {
+                max_attempts: 2,
+                backoff_initial: Duration::from_millis(50),
+                backoff_max: Duration::from_millis(500),
+            },
+        }
+    }
+
+    /// Default policy for logging phase
+    pub fn logging_default() -> Self {
+        Self {
+            timeout: Some(Duration::from_millis(200)),
+            on_error: MessagingOnError::Continue,
+            retry: RetryPolicy {
+                max_attempts: 1,
+                backoff_initial: Duration::from_millis(0),
+                backoff_max: Duration::from_millis(0),
+            },
+        }
+    }
+
+    /// Get default policy for a specific phase
+    pub fn for_phase(phase: MessagingPhase) -> Self {
+        match phase {
+            MessagingPhase::RequestFilter => Self::request_filter_default(),
+            MessagingPhase::ResponseFilter => Self::response_filter_default(),
+            MessagingPhase::ResponseBodyFilter => Self::response_filter_default(),
+            MessagingPhase::Logging => Self::logging_default(),
+        }
+    }
+}
+
 pub struct MessagingPlugin {
     plugin_name: String,
     config_name: String,
@@ -164,13 +225,31 @@ fn build_phase_policies(
     per_phase: Option<&HashMap<MessagingPhase, MessagingPhaseConfig>>,
     base_retry: Option<&RetryPolicyConfig>,
 ) -> HashMap<MessagingPhase, PhasePolicy> {
+    use MessagingPhase::*;
     let mut policies = HashMap::new();
 
+    // Start with sensible defaults for all phases
+    for phase in [RequestFilter, ResponseFilter, ResponseBodyFilter, Logging] {
+        policies.insert(phase, PhasePolicy::for_phase(phase));
+    }
+
+    // Override with user config if provided
     if let Some(configs) = per_phase {
         for (phase, cfg) in configs {
-            let timeout = cfg.timeout_ms.map(Duration::from_millis);
-            let on_error = cfg.on_error.unwrap_or(MessagingOnError::Retry);
-            let retry = merge_retry_policy(base_retry, cfg.retry.as_ref());
+            let default_policy = PhasePolicy::for_phase(*phase);
+            
+            let timeout = cfg.timeout_ms
+                .map(Duration::from_millis)
+                .or(default_policy.timeout);
+            
+            let on_error = cfg.on_error.unwrap_or(default_policy.on_error);
+            
+            let retry = if cfg.retry.is_some() || base_retry.is_some() {
+                merge_retry_policy(base_retry, cfg.retry.as_ref())
+            } else {
+                default_policy.retry
+            };
+            
             policies.insert(
                 *phase,
                 PhasePolicy {

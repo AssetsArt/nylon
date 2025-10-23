@@ -46,6 +46,31 @@ See detailed design in `docs/WEBSOCKET_NATS_DESIGN.md`. Summary:
 
 **Benefits:** Simple, scalable, no JetStream complexity, workers can scale independently.
 
+## Configuration
+
+### Zero-Config by Default
+See `docs/NATS_PLUGIN_CONFIG.md` for complete configuration guide.
+
+**Minimal config works out of the box:**
+```yaml
+messaging:
+  - name: default
+    servers: [nats://localhost:4222]
+
+plugins:
+  - name: my-plugin
+    messaging: default
+    # No per_phase config needed - smart defaults applied!
+```
+
+**Smart defaults per phase:**
+- `request_filter`: 5s timeout, retry 3x with backoff (critical path)
+- `response_filter`: 3s timeout, continue on error, retry 2x
+- `response_body_filter`: 3s timeout, continue on error, retry 2x
+- `logging`: 200ms timeout, never block, no retries (observability)
+- All values are production-ready and optional to override
+- See `docs/NATS_PLUGIN_CONFIG.md` for complete reference
+
 ## Critical Path
 
 1. Build a reusable messaging layer that encapsulates NATS connectivity, retries and serialization.
