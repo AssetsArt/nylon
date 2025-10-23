@@ -6,6 +6,7 @@ pub mod constants;
 pub mod ffi_transport;
 pub mod loaders;
 pub mod messaging;
+pub mod messaging_methods;
 mod native;
 pub mod plugin_manager;
 pub mod session_handler;
@@ -47,19 +48,36 @@ where
     let handle = PluginManager::get_plugin(plugin_name)?;
     match handle {
         PluginHandle::Ffi(plugin) => {
-            run_ffi_session(
-                proxy,
-                plugin_name,
-                phase,
-                entry,
-                ctx,
-                session,
-                payload,
-                payload_ast,
-                response_body,
-                plugin,
-            )
-            .await
+            // Optional: Use transport-based FFI path if env var is set
+            if std::env::var("NYLON_USE_FFI_TRANSPORT").is_ok() {
+                run_ffi_session_with_transport(
+                    proxy,
+                    plugin_name,
+                    phase,
+                    entry,
+                    ctx,
+                    session,
+                    payload,
+                    payload_ast,
+                    response_body,
+                    plugin,
+                )
+                .await
+            } else {
+                run_ffi_session(
+                    proxy,
+                    plugin_name,
+                    phase,
+                    entry,
+                    ctx,
+                    session,
+                    payload,
+                    payload_ast,
+                    response_body,
+                    plugin,
+                )
+                .await
+            }
         }
         PluginHandle::Messaging(plugin) => {
             messaging::execute_session(

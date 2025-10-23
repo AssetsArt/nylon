@@ -415,7 +415,7 @@ impl SessionHandler {
             .await
     }
 
-    async fn handle_set_response_header(
+    pub async fn handle_set_response_header(
         data: &[u8],
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
@@ -428,7 +428,7 @@ impl SessionHandler {
         Ok(())
     }
 
-    async fn handle_remove_response_header(
+    pub async fn handle_remove_response_header(
         data: &[u8],
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
@@ -440,7 +440,7 @@ impl SessionHandler {
         Ok(())
     }
 
-    async fn handle_set_response_status(
+    pub async fn handle_set_response_status(
         data: &[u8],
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
@@ -452,7 +452,7 @@ impl SessionHandler {
         Ok(())
     }
 
-    async fn handle_set_response_full_body(
+    pub async fn handle_set_response_full_body(
         data: Vec<u8>,
         ctx: &mut NylonContext,
     ) -> Result<(), NylonError> {
@@ -462,7 +462,7 @@ impl SessionHandler {
         Ok(())
     }
 
-    async fn handle_set_response_stream_header<T>(
+    pub async fn handle_set_response_stream_header<T>(
         proxy: &T,
         ctx: &mut NylonContext,
         session: &mut Session,
@@ -492,7 +492,7 @@ impl SessionHandler {
         Ok(())
     }
 
-    async fn handle_set_response_stream_data(
+    pub async fn handle_set_response_stream_data(
         data: Vec<u8>,
         session: &mut Session,
     ) -> Result<(), NylonError> {
@@ -504,7 +504,7 @@ impl SessionHandler {
         Ok(())
     }
 
-    async fn handle_set_response_stream_end(session: &mut Session) -> Result<(), NylonError> {
+    pub async fn handle_set_response_stream_end(session: &mut Session) -> Result<(), NylonError> {
         let tasks = vec![HttpTask::Done];
         session
             .response_duplex_vec(tasks)

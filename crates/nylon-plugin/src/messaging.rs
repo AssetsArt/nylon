@@ -328,8 +328,6 @@ where
     T: ProxyHttp + Send + Sync,
     <T as ProxyHttp>::CTX: Send + Sync + From<NylonContext>,
 {
-    let _ = (proxy, session, payload, payload_ast, response_body);
-
     let key = format!("{}-{}", plugin_name, entry);
     let mut session_id = {
         let map = ctx
@@ -352,11 +350,18 @@ where
         .await
         .map_err(|err| map_messaging_error(&plugin, err))?;
 
-    // Create transport and handler
+    // Create transport and handler with tracing
+    let request_id = new_request_id();
+    let trace_id = ctx
+        .params
+        .read()
+        .ok()
+        .and_then(|guard| guard.as_ref().and_then(|map| map.get("x-trace-id").cloned()));
+    
     let trace = TraceMeta {
-        request_id: Some(new_request_id().to_string()),
-        trace_id: None,
-        span_id: None,
+        request_id: Some(request_id.to_string()),
+        trace_id,
+        span_id: Some(format!("{}:{}", plugin.plugin_name(), session_id)),
     };
     
     let request_subject = format!(
@@ -415,38 +420,151 @@ where
         )));
     }
 
-    // Process loop with timeout (from phase policy or default 5 seconds)
-    let timeout_ms = plugin
+    // Get phase policy for timeout and retry
+    let phase_policy = plugin
         .per_phase()
         .get(&MessagingPhase::RequestFilter)
+        .cloned();
+    
+    let timeout_ms = phase_policy
+        .as_ref()
         .and_then(|p| p.timeout.map(|d| d.as_millis() as u64))
         .unwrap_or(5000);
     
-    match handler.process_loop(timeout_ms) {
-        Ok(crate::transport_handler::PluginLoopResult::Invoke(inv)) => {
-            // Received method invoke from plugin
-            debug!(
-                plugin = %plugin.plugin_name(),
-                method = inv.method,
-                data_len = inv.data.len(),
-                "received invoke in messaging transport"
-            );
-            
-            // TODO: Process method invoke (call SessionHandler::process_method equivalent)
-            // For now, just return default to continue
-            Ok(crate::types::PluginResult::default())
+    let on_error = phase_policy
+        .as_ref()
+        .map(|p| p.on_error)
+        .unwrap_or(MessagingOnError::Retry);
+    
+    // Process loop with retry support
+    let mut attempts = 0;
+    let max_attempts = phase_policy
+        .as_ref()
+        .map(|p| p.retry.max_attempts)
+        .unwrap_or(1);
+    
+    loop {
+        attempts += 1;
+        
+        match handler.process_loop(timeout_ms) {
+            Ok(crate::transport_handler::PluginLoopResult::Invoke(inv)) => {
+                // Received method invoke from plugin
+                debug!(
+                    plugin = %plugin.plugin_name(),
+                    method = inv.method,
+                    data_len = inv.data.len(),
+                    "received invoke in messaging transport"
+                );
+                
+                // Process method invoke
+                match crate::messaging_methods::process_messaging_method(
+                    proxy,
+                    inv,
+                    ctx,
+                    session,
+                    payload,
+                    payload_ast,
+                    response_body,
+                )
+                .await
+                {
+                    Ok(Some(result)) => return Ok(result),
+                    Ok(None) => {
+                        // Method processed, continue loop to wait for next invoke
+                        continue;
+                    }
+                    Err(e) => {
+                        // Handle error based on policy
+                        match on_error {
+                            MessagingOnError::Continue => {
+                                debug!(
+                                    plugin = %plugin.plugin_name(),
+                                    error = %e,
+                                    "error processing method, continuing"
+                                );
+                                continue;
+                            }
+                            MessagingOnError::End => {
+                                return Err(e);
+                            }
+                            MessagingOnError::Retry => {
+                                if attempts >= max_attempts {
+                                    return Err(e);
+                                }
+                                debug!(
+                                    plugin = %plugin.plugin_name(),
+                                    error = %e,
+                                    attempt = attempts,
+                                    max_attempts,
+                                    "retrying after error"
+                                );
+                                // Reset handler for retry
+                                handler
+                                    .start_phase(phase_code)
+                                    .map_err(|e| NylonError::RuntimeError(format!("Failed to start phase on retry: {}", e)))?;
+                                
+                                let flush_result = tokio::task::block_in_place(|| {
+                                    tokio::runtime::Handle::current().block_on(async {
+                                        handler.transport_mut().flush_events().await
+                                    })
+                                });
+                                
+                                if let Err(e) = flush_result {
+                                    return Err(NylonError::RuntimeError(format!(
+                                        "Failed to flush events on retry: {}",
+                                        e
+                                    )));
+                                }
+                                
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(crate::transport_handler::PluginLoopResult::Timeout) => {
+                // Timeout reached
+                if attempts >= max_attempts {
+                    debug!(
+                        plugin = %plugin.plugin_name(),
+                        "messaging transport timeout after {} attempts",
+                        attempts
+                    );
+                    return Ok(crate::types::PluginResult::default());
+                }
+                
+                // Retry on timeout if policy allows
+                match on_error {
+                    MessagingOnError::Retry => {
+                        debug!(
+                            plugin = %plugin.plugin_name(),
+                            attempt = attempts,
+                            max_attempts,
+                            "retrying after timeout"
+                        );
+                        continue;
+                    }
+                    _ => return Ok(crate::types::PluginResult::default()),
+                }
+            }
+            Err(e) => {
+                // Transport error - retry or fail based on policy
+                if attempts >= max_attempts || on_error != MessagingOnError::Retry {
+                    return Err(NylonError::RuntimeError(format!(
+                        "Transport error after {} attempts: {}",
+                        attempts, e
+                    )));
+                }
+                
+                debug!(
+                    plugin = %plugin.plugin_name(),
+                    error = %e,
+                    attempt = attempts,
+                    max_attempts,
+                    "retrying after transport error"
+                );
+                continue;
+            }
         }
-        Ok(crate::transport_handler::PluginLoopResult::Timeout) => {
-            // Timeout reached, return default result
-            debug!(
-                plugin = %plugin.plugin_name(),
-                "messaging transport timeout"
-            );
-            Ok(crate::types::PluginResult::default())
-        }
-        Err(e) => Err(NylonError::RuntimeError(format!(
-            "Transport error: {}",
-            e
-        ))),
     }
 }
