@@ -81,12 +81,12 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
-	go func() {
-		<-sigChan
-		fmt.Println("\n[NatsPlugin] Shutting down gracefully...")
-		plugin.Close()
-		os.Exit(0)
-	}()
+	// go func() {
+	// 	<-sigChan
+	// 	fmt.Println("\n[NatsPlugin] Shutting down gracefully...")
+	// 	plugin.Close()
+	// 	os.Exit(0)
+	// }()
 
 	// Start the plugin (blocks forever)
 	fmt.Printf("[NatsPlugin] Starting plugin: %s\n", config.Name)
