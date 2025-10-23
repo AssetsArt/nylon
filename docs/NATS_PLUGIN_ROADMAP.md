@@ -25,9 +25,26 @@
 - 🚧 **Integration Tests**: End-to-end tests with NATS broker
 
 ### ⏳ Not Started
-- ⏳ **WebSocket Support**: WebSocket methods over NATS (may require alternative approach)
+- ⏳ **WebSocket Support**: WebSocket methods over NATS (see `docs/WEBSOCKET_NATS_DESIGN.md`)
 - ⏳ **Load Testing**: Performance benchmarks and parity validation
 - ⏳ **Production Hardening**: Circuit breakers, DLQ, advanced metrics
+
+### 🎯 WebSocket Support Strategy
+See detailed design in `docs/WEBSOCKET_NATS_DESIGN.md`. Summary:
+
+**Core NATS Queue Groups Only** (No JetStream required):
+- ✅ Nylon handles WebSocket protocol (frames, handshake)
+- ✅ Workers receive high-level events via request-reply
+- ✅ Queue groups auto-balance (per [NATS Queue Groups](https://docs.nats.io/nats-concepts/core-nats/queue/queues_walkthrough))
+- ✅ Room broadcasting via pub/sub (no queue group = fan-out)
+- ✅ Stateless workers (no session state)
+- ✅ Simple deployment (NATS Core server only)
+
+**Subjects:**
+- `nylon.ws.{plugin}.events` → Queue group workers (one receives)
+- `nylon.ws.room.{room}` → Pub/sub (all receive)
+
+**Benefits:** Simple, scalable, no JetStream complexity, workers can scale independently.
 
 ## Critical Path
 
