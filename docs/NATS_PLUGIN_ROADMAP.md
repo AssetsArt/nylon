@@ -6,14 +6,28 @@
 - Keep the Go SDK API stable while letting plugin authors opt-in to horizontal scaling through configuration.
 - Provide the operational guardrails (metrics, logging, failure handling) needed for staging and production rollouts.
 
-## Current Status (May 2024)
+## Current Status (December 2024)
 
-- Nylon core only understands `PluginType::Ffi`; the loader path in `crates/nylon-plugin` has no awareness of messaging transports.
-- There is no shared messaging crate; NATS connectivity, pooling and protocol handling do not exist.
-- `nylon-types` and `nylon-config` cannot parse or validate messaging config blocks.
-- The Go SDK exposes only FFI constructors; there is no transport abstraction to plug in a NATS backend.
-- Documentation (for example `docs/NATS_PLUGIN_QUICK_START.md`) references `NewNatsPlugin`, but the symbol is not implemented yet.
-- No automated tests cover request/response over a message broker, and we have no load or failure scenarios to measure parity.
+### ✅ Completed (Phase 1-3)
+- ✅ **Transport Abstraction**: `PluginTransport` trait with `TransportEvent`, `TransportInvoke`, and `TraceMeta` in `nylon-types/src/transport.rs`
+- ✅ **NATS Messaging Crate**: `crates/nylon-messaging` with `NatsClient`, `MessagingTransport`, protocol types, and MessagePack serialization
+- ✅ **Runtime Integration**: Nylon routes plugin sessions through either FFI or messaging via unified transport layer
+- ✅ **Method Processing**: Dispatcher for NATS invokes with support for control and response write methods
+- ✅ **Retry Logic**: Full retry support with `PhasePolicy` (max_attempts, backoff, on_error policies)
+- ✅ **Error Handling**: Comprehensive error handling with Continue/End/Retry strategies
+- ✅ **Tracing**: Request ID, trace ID propagation, and span tracking per plugin session
+- ✅ **Configuration**: Parse and validate `messaging:` blocks, store in `KEY_MESSAGING_PLUGINS`
+- ✅ **FFI Transport Path**: Optional transport-based FFI path via `NYLON_USE_FFI_TRANSPORT` env var
+
+### 🚧 In Progress
+- 🚧 **Read Methods**: Response data flow for messaging transport (GET_PAYLOAD, READ_REQUEST_*, READ_RESPONSE_*)
+- 🚧 **Go SDK Transport**: NATS backend implementation for Go SDK
+- 🚧 **Integration Tests**: End-to-end tests with NATS broker
+
+### ⏳ Not Started
+- ⏳ **WebSocket Support**: WebSocket methods over NATS (may require alternative approach)
+- ⏳ **Load Testing**: Performance benchmarks and parity validation
+- ⏳ **Production Hardening**: Circuit breakers, DLQ, advanced metrics
 
 ## Critical Path
 
@@ -37,62 +51,68 @@
 - **Security**: support unauthenticated dev setups but require TLS + nkeys/JWT for staging/prod. Configuration must capture `auth` and TLS material.
 - **Graceful shutdown & health**: drain inflight requests on both Nylon and worker shutdown. Provide `/healthz` and `/metrics` endpoints with NATS connection status and instrumentation.
 
-## Milestone 0 - Repository Preparation (0.5 day)
+## Milestone 0 - Repository Preparation ✅ COMPLETED
 
-- [ ] Add `crates/nylon-messaging` to the workspace and share crate-level lint configuration.
-- [ ] Decide on MessagePack (`rmp-serde`) as the canonical encoding and document versioning policy.
+- ✅ Add `crates/nylon-messaging` to the workspace and share crate-level lint configuration.
+- ✅ Decide on MessagePack (`rmp-serde`) as the canonical encoding and document versioning policy.
 - [ ] Add a `scripts/dev-nats.sh` helper that starts a local NATS server (docker-compose or `nats-server` binary).
-- [ ] Gate the new code behind a `messaging` cargo feature flag so we can merge incrementally.
+- ✅ Gate the new code behind a `messaging` cargo feature flag so we can merge incrementally.
 
-## Milestone 1 - Messaging Foundation (Rust)
+## Milestone 1 - Messaging Foundation (Rust) ✅ COMPLETED
 
 `crates/nylon-messaging/`
-- [ ] Add dependencies: `async-nats = "0.33"`, `tokio` (full), `rmp-serde`, `serde`, `tracing`.
-- [ ] Implement `NatsClient::connect(servers: &[String], options: NatsClientOptions)` returning `Arc<NatsClient>`.
-- [ ] Provide `request(subject, payload)` and `publish(subject, payload)` helpers with timeout handling and trace header propagation.
-- [ ] Generate a `request_id` (or accept caller-provided) and attach to each outbound message; export dedupe helpers for Nylon core.
-- [ ] Add queue subscription helper for worker-side consumption (`subscribe_with_group`).
-- [ ] Implement automatic reconnect and health probes (`check_connection`, `on_connection_lost`) with `max_inflight` accounting.
-- [ ] Define `protocol.rs` with `PluginRequest`, `PluginResponse`, `ResponseAction` enums matching plugin phases, including schema `version` and `request_id`.
-- [ ] Add serialization utilities (`to_bytes`, `from_bytes`) plus integration tests that spin up an in-process NATS server and assert version interoperability.
-- [ ] Expose metrics hooks (`messaging_requests_total`, `messaging_request_duration_seconds`, `messaging_retries_total`, `messaging_timeouts_total`) via callbacks.
+- ✅ Add dependencies: `async-nats = "0.33"`, `tokio` (full), `rmp-serde`, `serde`, `tracing`, `futures`.
+- ✅ Implement `NatsClient::connect(servers: &[String], options: NatsClientOptions)` returning `Arc<NatsClient>`.
+- ✅ Provide `request(subject, payload)` and `publish(subject, payload)` helpers with timeout handling and trace header propagation.
+- ✅ Generate a `request_id` (or accept caller-provided) via `new_request_id()` using UUID v7; dedupe in `TransportSessionHandler`.
+- ✅ Add queue subscription helper for worker-side consumption (`subscribe_queue`).
+- ✅ Implement reconnect logic (async-nats handles automatically); `max_inflight` accounting via `Semaphore`.
+- ✅ Define `protocol.rs` with `PluginRequest`, `PluginResponse`, `ResponseAction` enums matching plugin phases, including schema `version` and `request_id`.
+- ✅ Add serialization utilities (`encode_request`, `decode_response`, `encode_response`, `decode_request`) using MessagePack.
+- [ ] Integration tests with in-process NATS server and version interoperability assertions.
+- [ ] Expose metrics hooks (`messaging_requests_total`, `messaging_request_duration_seconds`, `messaging_retries_total`, `messaging_timeouts_total`).
 
-## Milestone 2 - Runtime Integration (Rust)
+## Milestone 2 - Runtime Integration (Rust) ✅ MOSTLY COMPLETED
 
 `crates/nylon-types/src/plugins.rs`
-- [ ] Extend `PluginType` with `Messaging`.
-- [ ] Introduce `MessagingConfig` and `MessagingPluginRef` structs with serde support for YAML/TOML.
+- ✅ Extend `PluginType` with `Messaging`.
+- ✅ Introduce `MessagingConfig` and related structs with serde support for YAML/TOML.
+- ✅ Add `transport.rs` with `PluginTransport` trait, `TransportEvent`, `TransportInvoke`, and `TraceMeta`.
 
 `crates/nylon-config/src/plugins.rs`
-- [ ] Parse the `messaging` block, validate URLs, authentication and default queue groups.
-- [ ] Store messaging configs in `nylon-store` for fast lookup during plugin load.
+- ✅ Parse the `messaging` block, validate URLs, authentication and default queue groups.
+- ✅ Store messaging configs in `nylon-store` (`KEY_MESSAGING_CONFIG`, `KEY_MESSAGING_PLUGINS`) for fast lookup.
 
 `crates/nylon-plugin/src`
-- [ ] Create `messaging.rs` implementing `MessagingPlugin` that wraps `Arc<NatsClient>` plus metadata.
-- [ ] Update `plugin_manager.rs` so `get_plugin` returns either `FfiPlugin` or `MessagingPlugin` via an enum or trait.
-- [ ] Extend `stream.rs` and `session_handler.rs` with a `SessionTransport` trait so phases call into NATS transparently.
-- [ ] Implement request/reply flow: construct subject `nylon.{env}.{plugin}.{phase}`, attach inbox for replies, await `PluginResponse`, enforce `max_inflight` and `overflow_policy`.
-- [ ] Handle `ResponseAction::{Next,End,Error}` identically to the FFI pipeline, including session cleanup and dedupe via `request_id` cache.
-- [ ] Add graceful shutdown: draining subscriptions and closing NATS connections with a timeout while reporting inflight counts and outstanding retries.
-- [ ] Surface tracing spans (phase, method, session) and translate messaging errors into `NylonError` variants.
+- ✅ Create `messaging.rs` implementing `MessagingPlugin` that wraps `Arc<NatsClient>` plus metadata and per-phase policies.
+- ✅ Update `plugin_manager.rs` so `get_plugin` returns `PluginHandle::Ffi` or `PluginHandle::Messaging` enum.
+- ✅ Create `transport_handler.rs` with generic `TransportSessionHandler<T: PluginTransport>` for unified session handling.
+- ✅ Create `ffi_transport.rs` implementing `PluginTransport` for FFI path (optional via `NYLON_USE_FFI_TRANSPORT`).
+- ✅ Create `messaging_methods.rs` for method dispatch in messaging transport.
+- ✅ Implement request/reply flow: construct subject `nylon.plugin.{plugin}.{phase}`, setup reply subscription, await responses with timeout.
+- ✅ Handle `ResponseAction::{Next,End,Error}` with retry logic based on `PhasePolicy` (max_attempts, on_error).
+- ✅ Implement dedupe via `request_id` cache in `TransportSessionHandler` (HashSet).
+- [ ] Add graceful shutdown: draining subscriptions and reporting inflight counts.
+- ✅ Surface tracing spans (request_id, trace_id, span_id) and translate messaging errors into `NylonError` variants.
 
-## Milestone 3 - Go SDK Transport
+## Milestone 3 - Go SDK Transport 🚧 IN PROGRESS
 
 `sdk/go/sdk`
-- [ ] Introduce `PluginTransport` interface and refactor the current FFI implementation into `transport_ffi.go`.
-- [ ] Implement `transport_nats.go` using `github.com/nats-io/nats.go` with connection pooling, queue subscriptions, and concurrency/timeout controls.
-- [ ] Add `nats_plugin.go` that exposes `NewNatsPlugin(config)` returning a struct satisfying the existing plugin API and surfacing idempotency info (`ctx.IdempotencyKey()`).
+- 🚧 Introduce `PluginTransport` interface and refactor the current FFI implementation into `transport_ffi.go`.
+- 🚧 Implement `transport_nats.go` using `github.com/nats-io/nats.go` with connection pooling, queue subscriptions, and concurrency/timeout controls.
+- 🚧 Add `nats_plugin.go` that exposes `NewNatsPlugin(config)` returning a struct satisfying the existing plugin API and surfacing idempotency info (`ctx.IdempotencyKey()`).
 - [ ] Reuse existing `PhaseHandler`, `PhaseRequestFilter`, and related types by translating `PluginRequest` into current structs.
 - [ ] Support synchronous replies: after a user handler calls `ctx.Next`, `ctx.End`, or `ctx.Error`, marshal `PluginResponse` with `version`, `request_id`, and optional headers, then `msg.Respond`.
 - [ ] Provide lifecycle hooks (`Initialize`, `Shutdown`, `Close`) that mirror FFI behaviour, drain subscriptions, and honour `MaxHandlers`.
 - [ ] Add unit tests with a local NATS server using `go test ./sdk/...`.
 
-## Milestone 4 - Configuration and CLI Wiring
+## Milestone 4 - Configuration and CLI Wiring ✅ COMPLETED
 
-- [ ] Update CLI entrypoints to load messaging configs before plugin registration (for example `crates/nylon/src/main.rs`).
+- ✅ Config loader parses `messaging:` blocks and registers plugins in `KEY_MESSAGING_PLUGINS`.
+- ✅ `PluginManager::get_plugin` returns FFI or messaging handle; messaging pulled from the store.
 - [ ] Support overriding NATS servers via environment variables such as `NYLON_NATS_URLS` for container deployments.
-- [ ] Validate at startup that every `type: messaging` plugin references an existing messaging config and queue group.
-- [ ] Emit clear diagnostics when NATS connection fails, including actionable hints in error messages.
+- ✅ Validate at startup that every `type: messaging` plugin references an existing messaging config and queue group.
+- ✅ Emit clear diagnostics when NATS connection fails via `map_messaging_error`.
 
 ## Milestone 5 - Validation, Testing, and Observability
 
@@ -198,24 +218,67 @@ plugins:
         on_error: continue
 ```
 
-## Open Questions
+## Implementation Notes
+
+### Transport Architecture
+The implementation uses a trait-based approach:
+- `PluginTransport` trait defines `send_event`, `try_recv_invoke`, and `trace_meta`
+- `FfiTransport` wraps existing FFI `SessionStream` for compatibility
+- `MessagingTransport` implements NATS pub/sub with buffering and reply subscriptions
+- `TransportSessionHandler<T>` provides unified session handling with deduplication
+
+### Subject Naming Convention
+- Request subject: `nylon.plugin.{plugin_name}.{phase_fragment}`
+- Reply subject: `nylon.plugin.{plugin_name}.reply.{session_id}`
+- Phase fragments: `zero`, `request_filter`, `response_filter`, `response_body_filter`, `logging`
+
+### Method Support Matrix
+**Messaging Transport (Currently Supported):**
+- ✅ Control: `NEXT`, `END`
+- ✅ Response Write: `SET_RESPONSE_HEADER`, `REMOVE_RESPONSE_HEADER`, `SET_RESPONSE_STATUS`, `SET_RESPONSE_FULL_BODY`, `SET_RESPONSE_STREAM_*`
+- ⏳ Read Methods: Require response data flow back through NATS (TODO)
+- ❌ WebSocket: Not supported (requires persistent connection)
+
+### Retry Behavior
+Retry logic follows `PhasePolicy.retry` and `on_error`:
+- `on_error: continue` → Log error, continue processing
+- `on_error: end` → Fail immediately
+- `on_error: retry` → Retry up to `max_attempts` with exponential backoff
+
+### Open Questions
 
 - Should multiple Nylon instances share the same NATS subjects, or should we namespace per environment?
+  - **Current**: Subject prefix configurable per messaging config
 - Do we require authentication (NKEY or JWT) in the initial release, or is anonymous `nats://` enough for dev and staging?
+  - **Current**: Auth config exists but not yet enforced; TLS optional
 - What back-pressure strategy do we enforce when workers are slower than Nylon (timeout, retry, drop)?
+  - **Current**: Configurable via `overflow_policy: queue | reject | shed` with `max_inflight` semaphore
 
 ## Success Criteria
 
-- ✅ Functional parity: all four plugin phases supported with identical semantics to FFI.
-- ✅ Performance: p99 latency <= 8 ms and >= 30k req/s with 10 Go workers on a single Nylon node.
-- ✅ Reliability: automatic reconnect within 5 seconds, no message loss under worker crash or NATS restart.
-- ✅ Developer experience: existing plugin code compiles with only the constructor or config change (<10 LOC diff) while surfacing idempotency helpers.
-- ✅ Observability: metrics and logs allow operators to pinpoint slow or failing workers quickly, with alerting on retries/timeouts.
+- 🚧 **Functional parity**: Write methods supported; read methods and WebSocket pending
+- ⏳ **Performance**: p99 latency <= 8 ms and >= 30k req/s (benchmark pending)
+- 🚧 **Reliability**: async-nats handles reconnect automatically; dedupe via request_id implemented
+- 🚧 **Developer experience**: Config-based switching works; Go SDK transport in progress
+- 🚧 **Observability**: Tracing metadata propagated; metrics hooks pending
 
 ## Rollout Checklist
 
-- [ ] Land messaging crate and runtime integration behind the feature flag.
+- ✅ Land messaging crate and runtime integration behind the feature flag.
+- ✅ Implement transport abstraction and unified session handler.
+- 🚧 Complete Go SDK transport implementation.
 - [ ] Enable the flag in staging, run existing regression suites plus new NATS integration tests.
 - [ ] Execute load test comparing FFI versus NATS; record baseline numbers in docs.
+- [ ] Implement read methods for messaging transport.
+- [ ] Add metrics, health checks, and graceful shutdown.
 - [ ] Update customer-facing docs and sample repositories.
 - [ ] Promote the feature flag to production defaults once confidence targets are met.
+
+## Next Immediate Steps
+
+1. **Complete Go SDK NATS Transport** - Implement `transport_nats.go` with queue subscriptions
+2. **Implement Read Methods** - Add response data flow for `GET_PAYLOAD`, `READ_REQUEST_*`, `READ_RESPONSE_*`
+3. **Integration Tests** - E2E tests with actual NATS broker
+4. **Metrics & Observability** - Export prometheus metrics for retries, timeouts, latency
+5. **Load Testing** - Benchmark throughput and latency vs FFI baseline
+6. **Documentation** - Update examples and quick start guides
