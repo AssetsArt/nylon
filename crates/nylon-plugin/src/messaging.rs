@@ -356,7 +356,14 @@ async fn send_initialize_message(
     let payload = encode_request(&request_with_method)
         .map_err(|e| NylonError::RuntimeError(format!("Failed to encode request: {}", e)))?;
 
-    // Publish to all phases (workers subscribe to these)
+    // 1) Broadcast lifecycle initialize (no queue group) so all workers can pre-warm
+    let lifecycle_subject = format!("nylon.plugin.{}.lifecycle", plugin.plugin_name());
+    debug!(plugin = %plugin.plugin_name(), subject = %lifecycle_subject, "Publishing lifecycle initialize");
+    if let Err(e) = client.publish(&lifecycle_subject, &payload, None).await {
+        debug!(plugin = %plugin.plugin_name(), subject = %lifecycle_subject, error = %e, "Failed to publish lifecycle initialize");
+    }
+
+    // 2) Also request-reply to the current phase to ensure at least one worker is ready
     let phases = [
         "request_filter",
         "response_filter",
@@ -365,25 +372,8 @@ async fn send_initialize_message(
     ];
     for phase in &phases {
         let subject = format!("nylon.plugin.{}.{}", plugin.plugin_name(), phase);
-
-        debug!(
-            plugin = %plugin.plugin_name(),
-            subject = %subject,
-            "Publishing initialize to subject"
-        );
-
-        if let Err(e) = client
-            .client()
-            .publish(subject.clone(), payload.clone().into())
-            .await
-        {
-            debug!(
-                plugin = %plugin.plugin_name(),
-                subject = %subject,
-                error = %e,
-                "Failed to publish initialize (worker may not be connected yet)"
-            );
-        }
+        debug!(plugin = %plugin.plugin_name(), subject = %subject, "Requesting initialize to subject");
+        let _ = client.request(&subject, &payload, None).await;
     }
 
     Ok(())

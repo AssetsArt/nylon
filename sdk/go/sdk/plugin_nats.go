@@ -203,6 +203,18 @@ func (p *NatsPlugin) Start() error {
 		fmt.Printf("[NatsPlugin] Subscribed to %s with queue group %s\n", subject, p.config.QueueGroup)
 	}
 
+	// Subscribe to lifecycle subject WITHOUT queue group so all workers receive it
+	lifecycleSubject := fmt.Sprintf("%s.%s.lifecycle", p.config.SubjectPrefix, p.config.Name)
+	lifecycleSub, err := p.conn.Subscribe(lifecycleSubject, func(msg *nats.Msg) {
+		p.handleMessage(msg)
+	})
+	if err != nil {
+		p.mu.Unlock()
+		return fmt.Errorf("failed to subscribe to %s: %w", lifecycleSubject, err)
+	}
+	p.subscriptions = append(p.subscriptions, lifecycleSub)
+	fmt.Printf("[NatsPlugin] Subscribed to %s (broadcast)\n", lifecycleSubject)
+
 	p.started = true
 	p.mu.Unlock()
 
