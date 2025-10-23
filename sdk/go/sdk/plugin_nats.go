@@ -190,9 +190,7 @@ func (p *NatsPlugin) Start() error {
 	for _, phase := range phases {
 		subject := fmt.Sprintf("%s.%s.%s", p.config.SubjectPrefix, p.config.Name, phase)
 
-		sub, err := p.conn.QueueSubscribe(subject, p.config.QueueGroup, func(msg *nats.Msg) {
-			p.handleMessage(msg)
-		})
+		sub, err := p.conn.QueueSubscribe(subject, p.config.QueueGroup, p.handleMessage)
 
 		if err != nil {
 			p.mu.Unlock()
