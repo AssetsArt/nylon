@@ -18,15 +18,16 @@ plugins:
       debug: true
   
   # NATS Plugin (distributed, scalable) - uncomment to use
-  # - name: plugin_nats
-  #   messaging: default
-  #   group: my-workers
-  #   config:
-  #     debug: true
-  #   # Optional: per-phase overrides
-  #   # per_phase:
-  #   #   request_filter:
-  #   #     timeout_ms: 8000
+  - name: plugin_nats
+    type: messaging
+    messaging: default
+    group: my-workers
+    config:
+      debug: true
+    # Optional: per-phase overrides
+    # per_phase:
+    #   request_filter:
+    #     timeout_ms: 8000
 
 services:
   # Http service
@@ -71,6 +72,12 @@ services:
     service_type: plugin
     plugin:
       name: plugin_sdk
+      entry: myapp
+
+  - name: plugin_nats
+    service_type: plugin
+    plugin:
+      name: plugin_nats
       entry: myapp
 
 middleware_groups:

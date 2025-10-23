@@ -40,65 +40,40 @@ func main() {
 		fmt.Println("[NatsPlugin] Plugin shutdown")
 	})
 
-	// Register authz phase handler
-	plugin.AddPhaseHandler("authz", func(phase *sdk.PhaseHandler) {
-		fmt.Println("Start Authz[Go-NATS] sessionID", phase.SessionId)
-
-		// Phase request filter
+	plugin.AddPhaseHandler("myapp", func(phase *sdk.PhaseHandler) {
+		// fmt.Println("Start MyApp[Go] sessionID", phase.SessionId)
 		phase.RequestFilter(func(ctx *sdk.PhaseRequestFilter) {
-			fmt.Println("Authz[Go-NATS] RequestFilter sessionID", phase.SessionId)
-
-			payload := ctx.GetPayload()
-			fmt.Println("[Authz][NatsPlugin] Payload", payload)
-
-			response := ctx.Response()
-			response.SetHeader("X-RequestFilter", "authz-nats-1")
-			response.SetHeader("X-Transport", "NATS")
-
-			ctx.Next()
-		})
-
-		phase.ResponseFilter(func(ctx *sdk.PhaseResponseFilter) {
-			fmt.Println("Authz[Go-NATS] ResponseFilter sessionID", phase.SessionId)
-			ctx.SetResponseHeader("X-ResponseFilter", "authz-nats-2")
-
-			// for modify response body
-			ctx.RemoveResponseHeader("Content-Length")
-			ctx.SetResponseHeader("Transfer-Encoding", "chunked")
-			ctx.Next()
-		})
-
-		phase.ResponseBodyFilter(func(ctx *sdk.PhaseResponseBodyFilter) {
-			fmt.Println("Authz[Go-NATS] ResponseBodyFilter sessionID", phase.SessionId)
-
-			// Read response body
-			res := ctx.Response()
-			body := res.ReadBody()
-			fmt.Println("Authz[Go-NATS] ResponseBody length:", len(body))
-
-			// Modify response body
-			modifiedBody := append(body, []byte("\n<!-- Modified by NATS plugin -->")...)
-			res.BodyRaw(modifiedBody)
-
-			ctx.Next()
-		})
-
-		phase.Logging(func(ctx *sdk.PhaseLogging) {
-			fmt.Println("Authz[Go-NATS] Logging sessionID", phase.SessionId)
+			// fmt.Println("MyApp[Go] RequestFilter sessionID", phase.SessionId)
 
 			req := ctx.Request()
+
+			// Test new methods
+			// fmt.Println("MyApp[Go] URL:", req.URL())
+			// fmt.Println("MyApp[Go] Path:", req.Path())
+			// fmt.Println("MyApp[Go] Query:", req.Query())
+			// fmt.Println("MyApp[Go] Params:", req.Params())
+			// fmt.Println("MyApp[Go] Host:", req.Host())
+			// fmt.Println("MyApp[Go] ClientIP:", req.ClientIP())
+			// fmt.Println("MyApp[Go] Headers:", req.Headers())
+
 			res := ctx.Response()
+			// set status and headers
+			res.SetStatus(200)
+			res.SetHeader("Content-Type", "application/json")
+			res.SetHeader("Transfer-Encoding", "chunked")
 
-			fmt.Printf("Authz[Go-NATS] Log: %s %s | Status: %d | ReqBytes: %d | ResBytes: %d | Duration: %dms\n",
-				req.Method(),
-				req.Path(),
-				res.Status(),
-				req.Bytes(),
-				res.Bytes(),
-				res.Duration(),
-			)
+			// Return info as JSON
+			info := map[string]interface{}{
+				"url":       req.URL(),
+				"path":      req.Path(),
+				"query":     req.Query(),
+				"params":    req.Params(),
+				"host":      req.Host(),
+				"client_ip": req.ClientIP(),
+			}
+			res.BodyJSON(info)
 
-			ctx.Next()
+			ctx.End()
 		})
 	})
 

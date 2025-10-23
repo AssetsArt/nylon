@@ -27,6 +27,11 @@ routes:
         service:
           name: myapp-service
       - path:
+          - /my_nats_app
+          - /my_nats_app/{name}
+        service:
+          name: plugin_nats
+      - path:
           - /stream
         methods: [GET, POST, OPTIONS]
         service:
