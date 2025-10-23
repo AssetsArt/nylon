@@ -1,6 +1,7 @@
 package sdk
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -46,18 +47,19 @@ type NatsPluginConfig struct {
 // PluginRequest represents an incoming request from Nylon
 type PluginRequest struct {
 	Version   uint16            `msgpack:"version"`
-	RequestID string            `msgpack:"request_id"`
+	RequestID interface{}       `msgpack:"request_id"` // Can be string or u128
 	SessionID uint32            `msgpack:"session_id"`
 	Phase     uint8             `msgpack:"phase"`
 	Method    string            `msgpack:"method,omitempty"`
 	Data      []byte            `msgpack:"data,omitempty"`
 	Headers   map[string]string `msgpack:"headers,omitempty"`
+	Timestamp uint64            `msgpack:"timestamp,omitempty"`
 }
 
 // PluginResponse represents a response to Nylon
 type PluginResponse struct {
 	Version   uint16            `msgpack:"version"`
-	RequestID string            `msgpack:"request_id"`
+	RequestID interface{}       `msgpack:"request_id"` // Can be string or u128
 	Method    string            `msgpack:"method,omitempty"`
 	Data      []byte            `msgpack:"data,omitempty"`
 	Error     string            `msgpack:"error,omitempty"`
@@ -157,14 +159,15 @@ func (p *NatsPlugin) AddPhaseHandler(phaseName string, handler func(phase *Phase
 // Start begins listening for NATS messages
 func (p *NatsPlugin) Start() error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
 
 	if p.started {
+		p.mu.Unlock()
 		return fmt.Errorf("plugin already started")
 	}
 
 	if p.conn == nil {
 		if err := p.Connect(); err != nil {
+			p.mu.Unlock()
 			return err
 		}
 	}
@@ -180,6 +183,7 @@ func (p *NatsPlugin) Start() error {
 		})
 
 		if err != nil {
+			p.mu.Unlock()
 			return fmt.Errorf("failed to subscribe to %s: %w", subject, err)
 		}
 
@@ -188,6 +192,8 @@ func (p *NatsPlugin) Start() error {
 	}
 
 	p.started = true
+	p.mu.Unlock()
+
 	fmt.Printf("[NatsPlugin] Plugin %s started successfully\n", p.config.Name)
 
 	// Block forever (NATS runs in background)
@@ -199,13 +205,46 @@ func (p *NatsPlugin) handleMessage(msg *nats.Msg) {
 	// Decode request
 	var req PluginRequest
 	if err := msgpack.Unmarshal(msg.Data, &req); err != nil {
-		fmt.Printf("[NatsPlugin] Failed to decode request: %v\n", err)
-		p.respondError(msg, req.RequestID, fmt.Sprintf("decode error: %v", err))
+		fmt.Printf("[NatsPlugin] Failed to decode request: %v (data len: %d)\n", err, len(msg.Data))
+		// Try to respond with error even if decode failed
+		errorResp := PluginResponse{
+			Version: ProtocolVersion,
+			Error:   fmt.Sprintf("decode error: %v", err),
+		}
+		if data, err := msgpack.Marshal(errorResp); err == nil {
+			msg.Respond(data)
+		}
 		return
 	}
 
-	fmt.Printf("[NatsPlugin] Received request: session=%d phase=%d method=%s\n",
-		req.SessionID, req.Phase, req.Method)
+	fmt.Printf("[NatsPlugin] Received request: session=%d phase=%d method=%s headers=%+v\n",
+		req.SessionID, req.Phase, req.Method, req.Headers)
+
+	// Handle special methods from headers
+	if req.Headers != nil {
+		if method, ok := req.Headers["method"]; ok {
+			switch method {
+			case "initialize":
+				p.handleInitialize(msg, &req)
+				return
+			case "shutdown":
+				p.handleShutdown(msg, &req)
+				return
+			}
+		}
+	}
+
+	// Legacy: check Method field
+	if req.Method != "" {
+		switch req.Method {
+		case "initialize":
+			p.handleInitialize(msg, &req)
+			return
+		case "shutdown":
+			p.handleShutdown(msg, &req)
+			return
+		}
+	}
 
 	// Handle phase event
 	switch req.Phase {
@@ -228,6 +267,54 @@ func (p *NatsPlugin) handleMessage(msg *nats.Msg) {
 	default:
 		p.respondError(msg, req.RequestID, fmt.Sprintf("unknown phase: %d", req.Phase))
 	}
+}
+
+// handleInitialize processes initialize request from Nylon
+func (p *NatsPlugin) handleInitialize(msg *nats.Msg, req *PluginRequest) {
+	fmt.Println("[NatsPlugin] Received Initialize request")
+
+	// Call initialize handler if registered
+	if handler := p.initHandler.Load(); handler != nil {
+		if fn, ok := handler.(func(map[string]interface{})); ok {
+			// Decode config from request data (sent as JSON bytes)
+			var config map[string]interface{}
+			if len(req.Data) > 0 {
+				// Try JSON first (sent by Rust)
+				if err := json.Unmarshal(req.Data, &config); err != nil {
+					fmt.Printf("[NatsPlugin] Failed to decode config as JSON: %v\n", err)
+					// Try MessagePack as fallback
+					if err := msgpack.Unmarshal(req.Data, &config); err != nil {
+						fmt.Printf("[NatsPlugin] Failed to decode config as MessagePack: %v\n", err)
+						config = make(map[string]interface{})
+					}
+				}
+			} else {
+				config = make(map[string]interface{})
+			}
+
+			fmt.Println("[NatsPlugin] Calling initialize handler")
+			fmt.Printf("[NatsPlugin] Config: %+v\n", config)
+			fn(config)
+		}
+	}
+
+	fmt.Println("[NatsPlugin] Sending OK response")
+	p.respondOK(msg, req.RequestID)
+}
+
+// handleShutdown processes shutdown request from Nylon
+func (p *NatsPlugin) handleShutdown(msg *nats.Msg, req *PluginRequest) {
+	fmt.Println("[NatsPlugin] Received Shutdown request")
+
+	// Call shutdown handler if registered
+	if handler := p.shutdownHandler.Load(); handler != nil {
+		if fn, ok := handler.(func()); ok {
+			fmt.Println("[NatsPlugin] Calling shutdown handler")
+			fn()
+		}
+	}
+
+	p.respondOK(msg, req.RequestID)
 }
 
 // handleRequestFilterPhase handles RequestFilter phase
@@ -355,7 +442,7 @@ func (p *NatsPlugin) setupPhaseHandler(req *PluginRequest) (*NylonHttpPluginCtx,
 }
 
 // respondOK sends a success response
-func (p *NatsPlugin) respondOK(msg *nats.Msg, requestID string) {
+func (p *NatsPlugin) respondOK(msg *nats.Msg, requestID interface{}) {
 	resp := PluginResponse{
 		Version:   ProtocolVersion,
 		RequestID: requestID,
@@ -364,7 +451,7 @@ func (p *NatsPlugin) respondOK(msg *nats.Msg, requestID string) {
 }
 
 // respondError sends an error response
-func (p *NatsPlugin) respondError(msg *nats.Msg, requestID string, errMsg string) {
+func (p *NatsPlugin) respondError(msg *nats.Msg, requestID interface{}, errMsg string) {
 	resp := PluginResponse{
 		Version:   ProtocolVersion,
 		RequestID: requestID,
@@ -391,9 +478,12 @@ func (p *NatsPlugin) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	fmt.Println("[NatsPlugin] Shutting down...")
+
 	// Call shutdown handler
 	if handler := p.shutdownHandler.Load(); handler != nil {
 		if fn, ok := handler.(func()); ok {
+			fmt.Println("[NatsPlugin] Calling shutdown handler")
 			fn()
 		}
 	}

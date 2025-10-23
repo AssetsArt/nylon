@@ -3,9 +3,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/AssetsArt/nylon/sdk/go/sdk"
 )
@@ -16,8 +13,9 @@ type PluginConfig struct {
 
 func main() {
 	// Create NATS plugin config
+	// IMPORTANT: Name must match plugin name in nylon.yaml
 	config := &sdk.NatsPluginConfig{
-		Name:       "my-nats-plugin",
+		Name:       "plugin_nats", // Must match config!
 		Servers:    []string{"nats://localhost:4222"},
 		QueueGroup: "my-workers",
 		MaxWorkers: 10,
@@ -78,12 +76,12 @@ func main() {
 	})
 
 	// Handle graceful shutdown
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	// sigChan := make(chan os.Signal, 1)
+	// signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 
 	// go func() {
 	// 	<-sigChan
-	// 	fmt.Println("\n[NatsPlugin] Shutting down gracefully...")
+	// 	fmt.Println("\n[NatsPlugin] Received shutdown signal")
 	// 	plugin.Close()
 	// 	os.Exit(0)
 	// }()

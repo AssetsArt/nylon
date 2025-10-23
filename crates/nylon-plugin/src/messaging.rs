@@ -308,6 +308,76 @@ fn phase_subject_fragment(phase: PluginPhase) -> &'static str {
     }
 }
 
+async fn send_initialize_message(
+    client: &Arc<NatsClient>,
+    plugin: Arc<MessagingPlugin>,
+) -> Result<(), NylonError> {
+    use nylon_messaging::{encode_request, PROTOCOL_VERSION};
+    
+    debug!(
+        plugin = %plugin.plugin_name(),
+        "Sending initialize message to workers"
+    );
+    
+    // Encode config as MessagePack
+    let config = serde_json::json!({
+        "debug": true,
+        "plugin_name": plugin.plugin_name(),
+    });
+    // Convert to bytes using serde_json then rmp
+    let config_json = serde_json::to_string(&config)
+        .map_err(|e| NylonError::RuntimeError(format!("Failed to encode config: {}", e)))?;
+    let config_bytes = config_json.into_bytes();
+    
+    // Build headers
+    let mut headers = std::collections::BTreeMap::new();
+    headers.insert("type".to_string(), "lifecycle".to_string());
+    
+    // Create initialize request
+    let request = nylon_messaging::PluginRequest {
+        version: PROTOCOL_VERSION,
+        request_id: new_request_id(),
+        session_id: 0,
+        phase: 0,
+        method: 0,  // Special method code for initialize
+        data: config_bytes,
+        timestamp: now_unix_millis(),
+        headers: Some(headers),
+    };
+    
+    // Add method field to headers
+    let mut request_with_method = request;
+    if let Some(ref mut headers) = request_with_method.headers {
+        headers.insert("method".to_string(), "initialize".to_string());
+    }
+    
+    let payload = encode_request(&request_with_method)
+        .map_err(|e| NylonError::RuntimeError(format!("Failed to encode request: {}", e)))?;
+    
+    // Publish to all phases (workers subscribe to these)
+    let phases = ["request_filter", "response_filter", "response_body_filter", "logging"];
+    for phase in &phases {
+        let subject = format!("nylon.plugin.{}.{}", plugin.plugin_name(), phase);
+        
+        debug!(
+            plugin = %plugin.plugin_name(),
+            subject = %subject,
+            "Publishing initialize to subject"
+        );
+        
+        if let Err(e) = client.client().publish(subject.clone(), payload.clone().into()).await {
+            debug!(
+                plugin = %plugin.plugin_name(),
+                subject = %subject,
+                error = %e,
+                "Failed to publish initialize (worker may not be connected yet)"
+            );
+        }
+    }
+    
+    Ok(())
+}
+
 #[allow(dead_code)]
 fn now_unix_millis() -> u64 {
     SystemTime::now()
@@ -416,7 +486,9 @@ where
         *map.get(&key).unwrap_or(&0)
     };
 
-    if session_id == 0 {
+    let is_new_session = session_id == 0;
+    
+    if is_new_session {
         session_id = next_session_id();
         ctx.session_ids
             .write()
@@ -428,7 +500,7 @@ where
         .client()
         .await
         .map_err(|err| map_messaging_error(&plugin, err))?;
-
+    
     // Create transport and handler with tracing
     let request_id = new_request_id();
     let trace_id = ctx
@@ -461,6 +533,7 @@ where
         request_subject.clone(),
         session_id,
         plugin.plugin_name().to_string(),
+        entry.to_string(),
     );
     
     // Setup reply subscription
@@ -479,6 +552,17 @@ where
     
     let mut handler = TransportSessionHandler::new(transport);
 
+    // Send Initialize message for new sessions (fire-and-forget)
+    if is_new_session {
+        let client_clone = client.clone();
+        let plugin_clone = plugin.clone();
+        tokio::spawn(async move {
+            if let Err(e) = send_initialize_message(&client_clone, plugin_clone).await {
+                debug!(error = %e, "Failed to send initialize message");
+            }
+        });
+    }
+    
     // Send start phase event
     let phase_code = phase.clone().to_u8();
     handler

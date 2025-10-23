@@ -17,6 +17,7 @@ pub struct MessagingTransport {
     session_id: u32,
     #[allow(dead_code)]
     plugin_name: String,
+    entry_name: String,
 }
 
 impl MessagingTransport {
@@ -26,6 +27,7 @@ impl MessagingTransport {
         request_subject: String,
         session_id: u32,
         plugin_name: String,
+        entry_name: String,
     ) -> Self {
         Self {
             outbox: Vec::new(),
@@ -35,6 +37,7 @@ impl MessagingTransport {
             reply_subscription: Arc::new(Mutex::new(None)),
             session_id,
             plugin_name,
+            entry_name,
         }
     }
     
@@ -61,6 +64,16 @@ impl MessagingTransport {
         let events = std::mem::take(&mut self.outbox);
         
         for event in events {
+            // Build headers with entry name
+            let mut headers = std::collections::BTreeMap::new();
+            headers.insert("entry".to_string(), self.entry_name.clone());
+            if let Some(trace_id) = &self.trace.trace_id {
+                headers.insert("x-trace-id".to_string(), trace_id.clone());
+            }
+            if let Some(span_id) = &self.trace.span_id {
+                headers.insert("x-span-id".to_string(), span_id.clone());
+            }
+            
             // Convert TransportEvent to PluginRequest
             let request = crate::protocol::PluginRequest {
                 version: PROTOCOL_VERSION,
@@ -75,7 +88,7 @@ impl MessagingTransport {
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_millis() as u64,
-                headers: None,
+                headers: Some(headers),
             };
             
             let payload = encode_request(&request)
